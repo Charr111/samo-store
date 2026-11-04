@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   X,
   Check,
@@ -6,6 +6,8 @@ import {
   Zap,
   ChevronDown,
   ChevronUp,
+  ChevronLeft,
+  ChevronRight,
   BellRing,
   Layers,
 } from 'lucide-react';
@@ -67,6 +69,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({
   });
   const [activeImageIndex, setActiveImageIndex] = useState<number>(0);
   const [addedFeedback, setAddedFeedback] = useState<boolean>(false);
+  const galleryScrollRef = useRef<HTMLDivElement | null>(null);
 
   // Preorder form state when an out-of-stock size is selected
   const [preorderContact, setPreorderContact] = useState<string>('');
@@ -122,6 +125,9 @@ export const ProductModal: React.FC<ProductModalProps> = ({
         setSelectedSize(firstAvailableSize);
       }
       setActiveImageIndex(0);
+      if (galleryScrollRef.current) {
+        galleryScrollRef.current.scrollTo({ left: 0, behavior: 'auto' });
+      }
       setAddedFeedback(false);
       setPreorderContact('');
       setPreorderSubmitted(false);
@@ -151,6 +157,9 @@ export const ProductModal: React.FC<ProductModalProps> = ({
   const handleSelectColor = (variant: ProductColorVariant) => {
     setSelectedColor(variant.colorName);
     setActiveImageIndex(0);
+    if (galleryScrollRef.current) {
+      galleryScrollRef.current.scrollTo({ left: 0, behavior: 'smooth' });
+    }
     setAddedFeedback(false);
     setPreorderSubmitted(false);
     setPreorderError('');
@@ -235,6 +244,47 @@ export const ProductModal: React.FC<ProductModalProps> = ({
     ),
   ].slice(0, 4);
 
+  const scrollToGallerySlide = (targetIndex: number) => {
+    if (allImages.length <= 1) return;
+    const clamped = Math.max(0, Math.min(allImages.length - 1, targetIndex));
+    setActiveImageIndex(clamped);
+    const container = galleryScrollRef.current;
+    if (!container) return;
+    const slideEl = container.children[clamped] as HTMLElement | undefined;
+    if (slideEl) {
+      container.scrollTo({
+        left: slideEl.offsetLeft,
+        behavior: 'smooth',
+      });
+    }
+  };
+
+  const handleGalleryScroll = () => {
+    const container = galleryScrollRef.current;
+    if (!container || allImages.length <= 1) return;
+    const maxScroll = container.scrollWidth - container.clientWidth;
+    if (maxScroll <= 4) {
+      if (activeImageIndex !== 0) setActiveImageIndex(0);
+      return;
+    }
+    if (container.scrollLeft >= maxScroll - 12) {
+      const lastIdx = allImages.length - 1;
+      if (activeImageIndex !== lastIdx) setActiveImageIndex(lastIdx);
+      return;
+    }
+    const firstSlide = container.children[0] as HTMLElement | undefined;
+    const slideWidth = firstSlide
+      ? firstSlide.offsetWidth
+      : container.clientWidth * 0.93;
+    const computedIdx = Math.min(
+      allImages.length - 1,
+      Math.max(0, Math.round(container.scrollLeft / Math.max(1, slideWidth)))
+    );
+    if (computedIdx !== activeImageIndex) {
+      setActiveImageIndex(computedIdx);
+    }
+  };
+
   const sizeTypeLabel =
     activeSizeType === 'cm'
       ? 'Centimeter Sizing (cm)'
@@ -313,17 +363,37 @@ export const ProductModal: React.FC<ProductModalProps> = ({
 
         {/* Left Column: Product Gallery Images (Up to 4 Images) (7 cols) */}
         <div className="md:col-span-7 bg-[#EFEFEF] border-b md:border-b-0 md:border-r border-zinc-950 flex flex-col justify-between">
-          <div className="relative aspect-[4/5] w-full">
-            <ProductImage
-              src={allImages[activeImageIndex] || primaryImageForSelection}
-              alt={`${product.name}${
-                activeVariant ? ` - ${activeVariant.colorName}` : ''
-              } - View ${activeImageIndex + 1}`}
-              category={product.category}
-              styleType={product.style}
-              className="h-full w-full"
-            />
-            <div className="absolute top-3.5 left-3.5 flex flex-wrap gap-1.5">
+          <div className="relative aspect-[4/5] w-full overflow-hidden">
+            {/* Swipeable Horizontal Track (93% primary image width so ~7% of image #2 peeks on the right) */}
+            <div
+              ref={galleryScrollRef}
+              onScroll={handleGalleryScroll}
+              className="flex h-full w-full overflow-x-auto snap-x snap-mandatory scroll-smooth no-scrollbar touch-pan-x bg-white"
+            >
+              {allImages.map((imgUrl, idx) => (
+                <div
+                  key={`${imgUrl}-${idx}`}
+                  className={`relative h-full shrink-0 snap-start bg-[#EFEFEF] ${
+                    allImages.length > 1
+                      ? 'w-[93%] border-r-2 border-white last:border-r-0'
+                      : 'w-full'
+                  }`}
+                >
+                  <ProductImage
+                    src={imgUrl}
+                    alt={`${product.name}${
+                      activeVariant ? ` - ${activeVariant.colorName}` : ''
+                    } - View ${idx + 1}`}
+                    category={product.category}
+                    styleType={product.style}
+                    className="h-full w-full"
+                  />
+                </div>
+              ))}
+            </div>
+
+            {/* Top-Left Badges */}
+            <div className="pointer-events-none absolute top-3.5 left-3.5 z-10 flex flex-wrap gap-1.5">
               {isFullSetProduct && (
                 <span className="px-2.5 py-1 bg-zinc-950 text-white text-[10px] font-bold uppercase tracking-[0.14em] flex items-center gap-1">
                   <Layers className="w-3 h-3" />
@@ -341,6 +411,32 @@ export const ProductModal: React.FC<ProductModalProps> = ({
                 </span>
               )}
             </div>
+
+            {/* Desktop Navigation Arrows (Left / Right) */}
+            {allImages.length > 1 && (
+              <>
+                {activeImageIndex > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => scrollToGallerySlide(activeImageIndex - 1)}
+                    aria-label="Previous product image"
+                    className="hidden md:flex absolute left-3 top-1/2 -translate-y-1/2 z-20 w-9 h-9 bg-white/95 hover:bg-zinc-950 text-zinc-950 hover:text-white border border-zinc-950 items-center justify-center shadow-sm transition-colors cursor-pointer"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+                )}
+                {activeImageIndex < allImages.length - 1 && (
+                  <button
+                    type="button"
+                    onClick={() => scrollToGallerySlide(activeImageIndex + 1)}
+                    aria-label="Next product image"
+                    className="hidden md:flex absolute right-3 top-1/2 -translate-y-1/2 z-20 w-9 h-9 bg-white/95 hover:bg-zinc-950 text-zinc-950 hover:text-white border border-zinc-950 items-center justify-center shadow-sm transition-colors cursor-pointer"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                )}
+              </>
+            )}
           </div>
 
           {/* Thumbnail Selector Strip (Up to 4 Images) */}
@@ -350,7 +446,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({
                 <button
                   key={`${imgUrl}-${idx}`}
                   type="button"
-                  onClick={() => setActiveImageIndex(idx)}
+                  onClick={() => scrollToGallerySlide(idx)}
                   aria-label={`View angle ${idx + 1}`}
                   className={`w-16 h-20 border transition-all shrink-0 cursor-pointer ${
                     activeImageIndex === idx
