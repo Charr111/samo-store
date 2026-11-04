@@ -1,0 +1,491 @@
+{
+  "entities": {
+    "Category": {
+      "title": "Category",
+      "description": "Clothing or accessory subcategory under Women or Kids department.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Display name of the subcategory (e.g. Jacket, Trousers, Baby).",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "slug": {
+          "type": "string",
+          "description": "URL-safe identifier slug.",
+          "minLength": 1,
+          "maxLength": 60,
+          "pattern": "^[a-z0-9\\-]+$"
+        },
+        "department": {
+          "type": "string",
+          "description": "Main parent department.",
+          "enum": ["women", "kids"]
+        },
+        "description": {
+          "type": "string",
+          "description": "Short editorial description of the category.",
+          "minLength": 0,
+          "maxLength": 240
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of category creation."
+        }
+      },
+      "required": ["name", "slug", "department", "description", "createdAt"]
+    },
+    "Product": {
+      "title": "Product",
+      "description": "Luxury fashion garment or accessory item in the SAMO catalog.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Product name.",
+          "minLength": 1,
+          "maxLength": 140
+        },
+        "department": {
+          "type": "string",
+          "description": "Target department: women or kids.",
+          "enum": ["women", "kids"]
+        },
+        "category": {
+          "type": "string",
+          "description": "Subcategory name (e.g., Jacket, Trousers, Baby).",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "style": {
+          "type": "string",
+          "description": "Aesthetic classification.",
+          "enum": ["Classic", "Sport Chic", "Fine Leather", "Suede", "Fur", "Accessories"]
+        },
+        "price": {
+          "type": "number",
+          "description": "Unit price in USD."
+        },
+        "quantity": {
+          "type": "number",
+          "description": "Total available inventory stock count across all sizes."
+        },
+        "sizeQuantities": {
+          "type": "object",
+          "description": "Per-size stock counts (defaults to 5 per size when not specified)."
+        },
+        "isNewArrival": {
+          "type": "boolean",
+          "description": "Whether the product appears on the dedicated New Arrivals page."
+        },
+        "discountType": {
+          "type": "string",
+          "description": "Discount mode: none, percentage, or fixed dollar amount.",
+          "enum": ["none", "percentage", "fixed"]
+        },
+        "discountValue": {
+          "type": "number",
+          "description": "Discount percentage or dollar amount."
+        },
+        "imageUrl": {
+          "type": "string",
+          "description": "Primary product image URL (Cloudflare, Cloudinary, or local asset).",
+          "minLength": 1,
+          "maxLength": 600
+        },
+        "galleryUrls": {
+          "type": "array",
+          "description": "Additional angle image URLs (up to 8).",
+          "maxLength": 8
+        },
+        "sizeType": {
+          "type": "string",
+          "description": "Sizing system: letter (XS-XL), numeric (34-44), or cm (80 cm - 150 cm).",
+          "enum": ["letter", "numeric", "cm"]
+        },
+        "sizes": {
+          "type": "array",
+          "description": "Available sizes for this item (up to 16).",
+          "maxLength": 16
+        },
+        "hasColors": {
+          "type": "boolean",
+          "description": "Whether the product has multiple color variants with per-color image URL, sizes, and quantities."
+        },
+        "colorVariants": {
+          "type": "array",
+          "description": "Per-color image URLs, size types, sizes, and per-size quantities (up to 12).",
+          "maxLength": 12
+        },
+        "isFullSet": {
+          "type": "boolean",
+          "description": "Whether the product is a 2-piece Full Set linked to two existing store products."
+        },
+        "setItems": {
+          "type": "array",
+          "description": "Two linked store products with independent size types and synchronized stock.",
+          "maxLength": 4
+        },
+        "materials": {
+          "type": "array",
+          "description": "Selected materials from prebuilt or custom list (up to 12).",
+          "maxLength": 12
+        },
+        "description": {
+          "type": "string",
+          "description": "Editorial construction and silhouette notes.",
+          "minLength": 1,
+          "maxLength": 1000
+        },
+        "inStock": {
+          "type": "boolean",
+          "description": "Whether the item is currently available to order."
+        },
+        "featured": {
+          "type": "boolean",
+          "description": "Whether the item is highlighted in New Arrivals."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of creation."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of last update."
+        }
+      },
+      "required": [
+        "name",
+        "department",
+        "category",
+        "style",
+        "price",
+        "quantity",
+        "sizeQuantities",
+        "isNewArrival",
+        "imageUrl",
+        "galleryUrls",
+        "sizeType",
+        "sizes",
+        "materials",
+        "description",
+        "inStock",
+        "featured",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "PromoCode": {
+      "title": "PromoCode",
+      "description": "Promotional discount code configured in Admin Dashboard with percentage or dollar amount.",
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string",
+          "description": "Uppercase promo code string (e.g., SAMO10, ATELIER200).",
+          "minLength": 2,
+          "maxLength": 40
+        },
+        "discountType": {
+          "type": "string",
+          "description": "Type of promo discount: percentage or fixed dollar amount.",
+          "enum": ["percentage", "fixed"]
+        },
+        "discountValue": {
+          "type": "number",
+          "description": "Discount value in % or USD."
+        },
+        "active": {
+          "type": "boolean",
+          "description": "Whether the promo code is active."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp."
+        }
+      },
+      "required": ["code", "discountType", "discountValue", "active", "createdAt"]
+    },
+    "MaterialOption": {
+      "title": "MaterialOption",
+      "description": "Custom material added by an administrator to supplement prebuilt materials.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Material name (e.g., Shearling, Lambskin, Merino Wool).",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp."
+        }
+      },
+      "required": ["name", "createdAt"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Customer order containing shipping details, itemized summary, and admin approval status.",
+      "type": "object",
+      "properties": {
+        "orderNumber": {
+          "type": "string",
+          "description": "Human-readable order code (e.g. SAMO-9041).",
+          "minLength": 3,
+          "maxLength": 32
+        },
+        "customerName": {
+          "type": "string",
+          "description": "Full name of the buyer.",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "customerEmail": {
+          "type": "string",
+          "description": "Buyer contact email.",
+          "minLength": 3,
+          "maxLength": 160
+        },
+        "customerPhone": {
+          "type": "string",
+          "description": "Buyer phone number.",
+          "minLength": 3,
+          "maxLength": 40
+        },
+        "shippingLocation": {
+          "type": "string",
+          "description": "Full delivery address, city, postal code, and country.",
+          "minLength": 3,
+          "maxLength": 350
+        },
+        "deliveryMethod": {
+          "type": "string",
+          "description": "Selected shipping tier.",
+          "enum": ["Standard Delivery", "Express Courier", "Boutique Pickup"]
+        },
+        "deliveryFee": {
+          "type": "number",
+          "description": "Shipping cost in USD."
+        },
+        "subtotal": {
+          "type": "number",
+          "description": "Items subtotal in USD."
+        },
+        "discountAmount": {
+          "type": "number",
+          "description": "Optional promo code discount in USD."
+        },
+        "promoCode": {
+          "type": "string",
+          "description": "Optional promo code applied to order.",
+          "minLength": 0,
+          "maxLength": 40
+        },
+        "totalPrice": {
+          "type": "number",
+          "description": "Final order price including delivery and promo discount in USD."
+        },
+        "itemsSummary": {
+          "type": "string",
+          "description": "Formatted breakdown of ordered items, sizes, materials, and quantities.",
+          "minLength": 1,
+          "maxLength": 2000
+        },
+        "itemsCount": {
+          "type": "number",
+          "description": "Total number of garment pieces in the order."
+        },
+        "primaryProductName": {
+          "type": "string",
+          "description": "Lead product title for table overview.",
+          "minLength": 1,
+          "maxLength": 140
+        },
+        "primaryProductSize": {
+          "type": "string",
+          "description": "Selected size of lead product.",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "primaryProductImage": {
+          "type": "string",
+          "description": "Lead product image URL.",
+          "minLength": 1,
+          "maxLength": 600
+        },
+        "status": {
+          "type": "string",
+          "description": "Order fulfillment review status.",
+          "enum": ["pending", "accepted", "rejected"]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when order was placed."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when order status was last updated."
+        }
+      },
+      "required": [
+        "orderNumber",
+        "customerName",
+        "customerEmail",
+        "customerPhone",
+        "shippingLocation",
+        "deliveryMethod",
+        "deliveryFee",
+        "subtotal",
+        "totalPrice",
+        "itemsSummary",
+        "itemsCount",
+        "primaryProductName",
+        "primaryProductSize",
+        "primaryProductImage",
+        "status",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "AdminRecord": {
+      "title": "AdminRecord",
+      "description": "Authorized administrator record keyed by lowercase Gmail address.",
+      "type": "object",
+      "properties": {
+        "email": {
+          "type": "string",
+          "description": "Administrator Gmail address.",
+          "minLength": 5,
+          "maxLength": 160,
+          "pattern": "^[a-zA-Z0-9._%+\\-]+@[a-zA-Z0-9.\\-]+\\.[a-zA-Z]{2,}$"
+        },
+        "addedBy": {
+          "type": "string",
+          "description": "Email of the admin who granted access.",
+          "minLength": 3,
+          "maxLength": 160
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp."
+        }
+      },
+      "required": ["email", "addedBy", "createdAt"]
+    },
+    "Preorder": {
+      "title": "Preorder",
+      "description": "Customer preorder / back-in-stock notification request when clicking an out-of-stock size.",
+      "type": "object",
+      "properties": {
+        "productId": {
+          "type": "string",
+          "description": "ID of the requested product.",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "productName": {
+          "type": "string",
+          "description": "Name of the requested product.",
+          "minLength": 1,
+          "maxLength": 140
+        },
+        "productImage": {
+          "type": "string",
+          "description": "Image URL of the requested product.",
+          "minLength": 1,
+          "maxLength": 600
+        },
+        "department": {
+          "type": "string",
+          "description": "Department of the requested product.",
+          "enum": ["women", "kids"]
+        },
+        "category": {
+          "type": "string",
+          "description": "Category of the requested product.",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "selectedSize": {
+          "type": "string",
+          "description": "Out-of-stock size clicked by the customer.",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "selectedColor": {
+          "type": "string",
+          "description": "Optional color selected by the customer.",
+          "minLength": 0,
+          "maxLength": 60
+        },
+        "customerContact": {
+          "type": "string",
+          "description": "Customer email or phone number to notify when back in stock.",
+          "minLength": 3,
+          "maxLength": 160
+        },
+        "status": {
+          "type": "string",
+          "description": "Preorder notification status.",
+          "enum": ["pending", "notified"]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when preorder was submitted."
+        }
+      },
+      "required": [
+        "productId",
+        "productName",
+        "productImage",
+        "department",
+        "category",
+        "selectedSize",
+        "customerContact",
+        "status",
+        "createdAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/categories/{categoryId}": {
+      "schema": { "$ref": "#/entities/Category" },
+      "description": "Publicly readable subcategories under Women and Kids; admin-only writes."
+    },
+    "/products/{productId}": {
+      "schema": { "$ref": "#/entities/Product" },
+      "description": "Publicly readable catalog products; admin-only writes."
+    },
+    "/promo_codes/{promoId}": {
+      "schema": { "$ref": "#/entities/PromoCode" },
+      "description": "Publicly readable promo codes for checkout validation; admin-only writes."
+    },
+    "/materials/{materialId}": {
+      "schema": { "$ref": "#/entities/MaterialOption" },
+      "description": "Publicly readable custom materials; admin-only writes."
+    },
+    "/orders/{orderId}": {
+      "schema": { "$ref": "#/entities/Order" },
+      "description": "Customer orders containing PII; storefront create-only (pending state), admin-only read/update/delete."
+    },
+    "/preorders/{preorderId}": {
+      "schema": { "$ref": "#/entities/Preorder" },
+      "description": "Customer out-of-stock preorder requests; storefront create-only (waiting state), admin-only read/update/delete."
+    },
+    "/admins/{adminId}": {
+      "schema": { "$ref": "#/entities/AdminRecord" },
+      "description": "Authorized admin directory; admin-only read/create/delete."
+    }
+  }
+}

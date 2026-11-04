@@ -1,0 +1,6 @@
+{
+  "name": "SAMO — Women & Kids Luxury House",
+  "description": "Architectural luxury fashion storefront and protected admin atelier for SAMO Women & Kids collections, featuring classic, sport chic, fine leather, suede, fur, bags, and belts.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

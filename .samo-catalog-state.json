@@ -1,0 +1,906 @@
+{
+  "updatedAt": 1793814991574,
+  "products": [
+    {
+      "id": "samo-w-jacket-01",
+      "name": "AVENUE HEAVY COW LEATHER BIKER JACKET",
+      "department": "women",
+      "category": "Jacket",
+      "style": "Fine Leather",
+      "price": 3250,
+      "quantity": 55,
+      "sizeQuantities": {
+        "XS": 15,
+        "S": 15,
+        "M": 15,
+        "L": 10,
+        "XL": 0
+      },
+      "hasColors": true,
+      "colorVariants": [
+        {
+          "colorName": "Black",
+          "imageUrl": "studio://women-jacket-black-leather-biker",
+          "sizeType": "letter",
+          "sizes": [
+            "XS",
+            "S",
+            "M",
+            "L",
+            "XL"
+          ],
+          "sizeQuantities": {
+            "XS": 5,
+            "S": 5,
+            "M": 5,
+            "L": 5,
+            "XL": 0
+          }
+        },
+        {
+          "colorName": "Burgundy",
+          "imageUrl": "studio://women-jacket-burgundy-leather-biker",
+          "sizeType": "letter",
+          "sizes": [
+            "XS",
+            "S",
+            "M",
+            "L",
+            "XL"
+          ],
+          "sizeQuantities": {
+            "XS": 5,
+            "S": 5,
+            "M": 5,
+            "L": 0,
+            "XL": 0
+          }
+        },
+        {
+          "colorName": "Brown",
+          "imageUrl": "studio://women-jacket-brown-leather-biker",
+          "sizeType": "letter",
+          "sizes": [
+            "XS",
+            "S",
+            "M",
+            "L",
+            "XL"
+          ],
+          "sizeQuantities": {
+            "XS": 5,
+            "S": 5,
+            "M": 5,
+            "L": 5,
+            "XL": 0
+          }
+        }
+      ],
+      "isNewArrival": true,
+      "discountType": "none",
+      "discountValue": 0,
+      "imageUrl": "studio://women-jacket-black-leather-biker",
+      "galleryUrls": [
+        "studio://women-jacket-leather-biker-profile",
+        "studio://women-jacket-leather-biker-detail"
+      ],
+      "sizeType": "letter",
+      "sizes": [
+        "XS",
+        "S",
+        "M",
+        "L",
+        "XL"
+      ],
+      "materials": [
+        "Cow Leather",
+        "Silk"
+      ],
+      "description": "Constructed from 1.4mm vegetable-tanned Italian cow leather with articulated boxy shoulders, brushed palladium zip hardware, and a 100% silk twill lining.",
+      "inStock": true,
+      "featured": true
+    },
+    {
+      "id": "samo-w-trench-01",
+      "name": "RODEO OVERSIZED SUEDE TRENCH COAT",
+      "department": "women",
+      "category": "Trench Coat",
+      "style": "Suede",
+      "price": 3890,
+      "quantity": 40,
+      "sizeQuantities": {
+        "34": 10,
+        "36": 10,
+        "38": 0,
+        "40": 10,
+        "42": 10
+      },
+      "hasColors": true,
+      "colorVariants": [
+        {
+          "colorName": "Brown",
+          "imageUrl": "studio://women-trench-brown-suede-coat",
+          "sizeType": "numeric",
+          "sizes": [
+            "34",
+            "36",
+            "38",
+            "40",
+            "42"
+          ],
+          "sizeQuantities": {
+            "34": 5,
+            "36": 5,
+            "38": 0,
+            "40": 5,
+            "42": 5
+          }
+        },
+        {
+          "colorName": "Camel",
+          "imageUrl": "studio://women-trench-camel-suede-coat",
+          "sizeType": "numeric",
+          "sizes": [
+            "34",
+            "36",
+            "38",
+            "40",
+            "42"
+          ],
+          "sizeQuantities": {
+            "34": 5,
+            "36": 5,
+            "38": 0,
+            "40": 5,
+            "42": 5
+          }
+        }
+      ],
+      "isNewArrival": true,
+      "discountType": "none",
+      "discountValue": 0,
+      "imageUrl": "studio://women-trench-brown-suede-coat",
+      "galleryUrls": [
+        "studio://women-trench-suede-coat-profile",
+        "studio://women-trench-suede-coat-detail"
+      ],
+      "sizeType": "numeric",
+      "sizes": [
+        "34",
+        "36",
+        "38",
+        "40",
+        "42"
+      ],
+      "materials": [
+        "Suede",
+        "Silk",
+        "Cotton"
+      ],
+      "description": "Full-length double-breasted trench coat cut from velvety cognac-espresso calf suede with storm flaps, belted cuffs, and an exaggerated storm collar.",
+      "inStock": true,
+      "featured": true
+    },
+    {
+      "id": "samo-w-bags-01",
+      "name": "LE CITY CONCAVE TOP-HANDLE BAG",
+      "department": "women",
+      "category": "Bags",
+      "style": "Accessories",
+      "price": 2450,
+      "quantity": 30,
+      "sizeQuantities": {
+        "S": 15,
+        "M": 15
+      },
+      "hasColors": true,
+      "colorVariants": [
+        {
+          "colorName": "Burgundy",
+          "imageUrl": "studio://women-bags-burgundy-hourglass",
+          "sizeType": "letter",
+          "sizes": [
+            "S",
+            "M"
+          ],
+          "sizeQuantities": {
+            "S": 5,
+            "M": 5
+          }
+        },
+        {
+          "colorName": "Black",
+          "imageUrl": "studio://women-bags-black-hourglass",
+          "sizeType": "letter",
+          "sizes": [
+            "S",
+            "M"
+          ],
+          "sizeQuantities": {
+            "S": 5,
+            "M": 5
+          }
+        },
+        {
+          "colorName": "Ivory",
+          "imageUrl": "studio://women-bags-ivory-hourglass",
+          "sizeType": "letter",
+          "sizes": [
+            "S",
+            "M"
+          ],
+          "sizeQuantities": {
+            "S": 5,
+            "M": 5
+          }
+        }
+      ],
+      "isNewArrival": true,
+      "discountType": "none",
+      "discountValue": 0,
+      "imageUrl": "studio://women-bags-burgundy-hourglass",
+      "galleryUrls": [
+        "studio://women-bags-hourglass-burgundy-profile",
+        "studio://women-bags-hourglass-burgundy-detail"
+      ],
+      "sizeType": "letter",
+      "sizes": [
+        "S",
+        "M"
+      ],
+      "materials": [
+        "Cow Leather",
+        "Suede"
+      ],
+      "description": "Curvilinear sculptural base crafted from high-gloss box cow leather in deep oxblood crimson with aged brass SAMO monogram hardware and removable crossbody strap.",
+      "inStock": true,
+      "featured": true
+    },
+    {
+      "id": "samo-w-fur-01",
+      "name": "WINTER 26 OPERA COCOON FUR COAT",
+      "department": "women",
+      "category": "Fur",
+      "style": "Fur",
+      "price": 4200,
+      "quantity": 20,
+      "sizeQuantities": {
+        "XS": 5,
+        "S": 5,
+        "M": 5,
+        "L": 5
+      },
+      "isNewArrival": true,
+      "discountType": "none",
+      "discountValue": 0,
+      "imageUrl": "studio://women-fur-opera-coat",
+      "galleryUrls": [
+        "studio://women-fur-opera-coat-profile"
+      ],
+      "sizeType": "letter",
+      "sizes": [
+        "XS",
+        "S",
+        "M",
+        "L"
+      ],
+      "materials": [
+        "Cashmere",
+        "Silk",
+        "Wool"
+      ],
+      "description": "High-volume enveloping winter coat featuring dense plush shearling-fur texture, concealed hook closures, and a silk satin interior.",
+      "inStock": true,
+      "featured": true
+    },
+    {
+      "id": "samo-w-trousers-01",
+      "name": "ARCHITECTURAL DOUBLE-PLEAT WOOL TROUSERS",
+      "department": "women",
+      "category": "Trousers",
+      "style": "Classic",
+      "price": 1290,
+      "quantity": 25,
+      "sizeQuantities": {
+        "34": 5,
+        "36": 5,
+        "38": 0,
+        "40": 5,
+        "42": 5,
+        "44": 5
+      },
+      "isNewArrival": false,
+      "discountType": "none",
+      "discountValue": 0,
+      "imageUrl": "studio://women-trousers-wool-pleat",
+      "galleryUrls": [
+        "studio://women-trousers-wool-pleat-profile"
+      ],
+      "sizeType": "numeric",
+      "sizes": [
+        "34",
+        "36",
+        "38",
+        "40",
+        "42",
+        "44"
+      ],
+      "materials": [
+        "Wool",
+        "Silk"
+      ],
+      "description": "Floor-grazing wide-leg tailored trousers in virgin cold-wool cavalry twill with sharp front knife pleats and waist tabs.",
+      "inStock": true,
+      "featured": false
+    },
+    {
+      "id": "samo-w-pants-01",
+      "name": "TRACK MONOLITH PIPED LEATHER PANTS",
+      "department": "women",
+      "category": "Pants",
+      "style": "Sport Chic",
+      "price": 1850,
+      "quantity": 25,
+      "sizeQuantities": {
+        "XS": 5,
+        "S": 5,
+        "M": 5,
+        "L": 5,
+        "XL": 5
+      },
+      "isNewArrival": false,
+      "discountType": "none",
+      "discountValue": 0,
+      "imageUrl": "studio://women-pants-sport-leather",
+      "galleryUrls": [
+        "studio://women-pants-sport-leather-profile"
+      ],
+      "sizeType": "letter",
+      "sizes": [
+        "XS",
+        "S",
+        "M",
+        "L",
+        "XL"
+      ],
+      "materials": [
+        "Cow Leather",
+        "Cotton"
+      ],
+      "description": "Relaxed athletic silhouette reimagined in supple nappa cow leather with contrast ivory side piping and zippered ankle gussets.",
+      "inStock": true,
+      "featured": false
+    },
+    {
+      "id": "samo-w-skirts-01",
+      "name": "ASYMMETRIC DRAPED SUEDE MAXI SKIRT",
+      "department": "women",
+      "category": "Skirts",
+      "style": "Suede",
+      "price": 1580,
+      "quantity": 20,
+      "sizeQuantities": {
+        "34": 5,
+        "36": 5,
+        "38": 5,
+        "40": 5
+      },
+      "isNewArrival": false,
+      "discountType": "none",
+      "discountValue": 0,
+      "imageUrl": "studio://women-skirts-suede-maxi",
+      "galleryUrls": [
+        "studio://women-skirts-suede-maxi-profile"
+      ],
+      "sizeType": "numeric",
+      "sizes": [
+        "34",
+        "36",
+        "38",
+        "40"
+      ],
+      "materials": [
+        "Suede",
+        "Satin"
+      ],
+      "description": "Column maxi skirt featuring an architectural wrap waist, raw-edge laser hemline, and satin-backed interior for fluid movement.",
+      "inStock": true,
+      "featured": false
+    },
+    {
+      "id": "samo-w-denim-01",
+      "name": "COUTURE RING SELVEDGE BAGGY DENIM",
+      "department": "women",
+      "category": "Denim",
+      "style": "Sport Chic",
+      "price": 1150,
+      "quantity": 25,
+      "sizeQuantities": {
+        "34": 5,
+        "36": 5,
+        "38": 5,
+        "40": 5,
+        "42": 5
+      },
+      "isNewArrival": true,
+      "discountType": "none",
+      "discountValue": 0,
+      "imageUrl": "studio://women-denim-selvedge-baggy",
+      "galleryUrls": [
+        "studio://women-denim-selvedge-baggy-profile"
+      ],
+      "sizeType": "numeric",
+      "sizes": [
+        "34",
+        "36",
+        "38",
+        "40",
+        "42"
+      ],
+      "materials": [
+        "Denim",
+        "Cotton",
+        "Cow Leather"
+      ],
+      "description": "15oz Japanese indigo ring-spun denim treated with an artisanal charcoal overwash and embossed cow leather back waist plaque.",
+      "inStock": true,
+      "featured": true
+    },
+    {
+      "id": "samo-w-tops-01",
+      "name": "SCULPTED COWL SATIN & LACE ATELIER TOP",
+      "department": "women",
+      "category": "Tops",
+      "style": "Classic",
+      "price": 940,
+      "quantity": 15,
+      "sizeQuantities": {
+        "XS": 5,
+        "S": 5,
+        "M": 5,
+        "L": 0
+      },
+      "isNewArrival": false,
+      "discountType": "none",
+      "discountValue": 0,
+      "imageUrl": "studio://women-tops-satin-cowl",
+      "galleryUrls": [
+        "studio://women-tops-satin-cowl-profile"
+      ],
+      "sizeType": "letter",
+      "sizes": [
+        "XS",
+        "S",
+        "M",
+        "L"
+      ],
+      "materials": [
+        "Satin",
+        "Silk",
+        "Lace"
+      ],
+      "description": "Bias-cut heavy silk satin blouse bordered with Chantilly lace trim along the asymmetric neckline and elongated cuffs.",
+      "inStock": true,
+      "featured": false
+    },
+    {
+      "id": "samo-w-fullset-01",
+      "name": "MONOLITH SUEDE & CASHMERE FULL SET",
+      "department": "women",
+      "category": "Full Set",
+      "style": "Suede",
+      "price": 2150,
+      "quantity": 15,
+      "sizeQuantities": {
+        "XS": 5,
+        "S": 5,
+        "M": 5,
+        "L": 0
+      },
+      "isFullSet": true,
+      "setItems": [
+        {
+          "productId": "samo-w-tops-01",
+          "productName": "SCULPTED COWL SATIN & LACE ATELIER TOP",
+          "pieceLabel": "Top / Shirt",
+          "sizeType": "letter",
+          "sizes": [
+            "XS",
+            "S",
+            "M",
+            "L"
+          ],
+          "sizeQuantities": {
+            "XS": 5,
+            "S": 5,
+            "M": 5,
+            "L": 0
+          }
+        },
+        {
+          "productId": "samo-w-trousers-01",
+          "productName": "ARCHITECTURAL DOUBLE-PLEAT WOOL TROUSERS",
+          "pieceLabel": "Trousers / Bottom",
+          "sizeType": "numeric",
+          "sizes": [
+            "34",
+            "36",
+            "38",
+            "40",
+            "42",
+            "44"
+          ],
+          "sizeQuantities": {
+            "34": 5,
+            "36": 5,
+            "38": 0,
+            "40": 5,
+            "42": 5,
+            "44": 5
+          }
+        }
+      ],
+      "isNewArrival": true,
+      "discountType": "none",
+      "discountValue": 0,
+      "imageUrl": "studio://women-fullset-suede-monolith",
+      "galleryUrls": [
+        "studio://women-fullset-suede-monolith-profile",
+        "studio://women-tops-satin-cowl",
+        "studio://women-trousers-wool-pleat"
+      ],
+      "sizeType": "letter",
+      "sizes": [
+        "XS",
+        "S",
+        "M",
+        "L"
+      ],
+      "materials": [
+        "Suede",
+        "Cashmere",
+        "Wool",
+        "Silk"
+      ],
+      "description": "Two-piece runway ensemble pairing our Sculpted Cowl Satin & Lace Atelier Top (Letter sizing) with Architectural Double-Pleat Wool Trousers (Numeric sizing). Stock is synchronized with both standalone pieces.",
+      "inStock": true,
+      "featured": true
+    },
+    {
+      "id": "samo-w-belts-01",
+      "name": "ARCHIVES DOUBLE-RING COW LEATHER BELT",
+      "department": "women",
+      "category": "Belts",
+      "style": "Accessories",
+      "price": 590,
+      "quantity": 25,
+      "sizeQuantities": {
+        "34": 5,
+        "36": 5,
+        "38": 5,
+        "40": 5,
+        "42": 5
+      },
+      "isNewArrival": false,
+      "discountType": "none",
+      "discountValue": 0,
+      "imageUrl": "studio://women-belts-double-ring",
+      "galleryUrls": [
+        "studio://women-belts-double-ring-profile"
+      ],
+      "sizeType": "numeric",
+      "sizes": [
+        "34",
+        "36",
+        "38",
+        "40",
+        "42"
+      ],
+      "materials": [
+        "Cow Leather"
+      ],
+      "description": "40mm full-grain bridle cow leather strap finished with sculptural interlocking brushed-gold rings inspired by the house archive.",
+      "inStock": true,
+      "featured": false
+    },
+    {
+      "id": "samo-k-baby-01",
+      "name": "PETIT ATELIER CASHMERE & COTTON KNIT",
+      "department": "kids",
+      "category": "MINIS 1 To 5",
+      "style": "Classic",
+      "price": 540,
+      "quantity": 30,
+      "sizeQuantities": {
+        "80 cm": 10,
+        "90 cm": 10,
+        "100 cm": 10
+      },
+      "hasColors": true,
+      "colorVariants": [
+        {
+          "colorName": "Ivory",
+          "imageUrl": "studio://kids-minis-ivory-cashmere",
+          "sizeType": "cm",
+          "sizes": [
+            "80 cm",
+            "90 cm",
+            "100 cm"
+          ],
+          "sizeQuantities": {
+            "80 cm": 5,
+            "90 cm": 5,
+            "100 cm": 5
+          }
+        },
+        {
+          "colorName": "Camel",
+          "imageUrl": "studio://kids-minis-camel-cashmere",
+          "sizeType": "cm",
+          "sizes": [
+            "80 cm",
+            "90 cm",
+            "100 cm"
+          ],
+          "sizeQuantities": {
+            "80 cm": 5,
+            "90 cm": 5,
+            "100 cm": 5
+          }
+        }
+      ],
+      "isNewArrival": true,
+      "discountType": "none",
+      "discountValue": 0,
+      "imageUrl": "studio://kids-minis-ivory-cashmere",
+      "galleryUrls": [
+        "studio://kids-baby-cashmere-set-profile",
+        "studio://kids-baby-cashmere-set-detail"
+      ],
+      "sizeType": "cm",
+      "sizes": [
+        "80 cm",
+        "90 cm",
+        "100 cm"
+      ],
+      "materials": [
+        "Cashmere",
+        "Cotton"
+      ],
+      "description": "Featherweight knitted cardigan crafted from combed organic cotton and Inner Mongolian cashmere for ages 1 to 5.",
+      "inStock": true,
+      "featured": true,
+      "isFullSet": false
+    },
+    {
+      "id": "samo-k-junior-01",
+      "name": "CHILDREN SPORT CHIC LEATHER & WOOL BOMBER",
+      "department": "kids",
+      "category": "CHILDREN 6+",
+      "style": "Sport Chic",
+      "price": 890,
+      "quantity": 30,
+      "sizeQuantities": {
+        "110 cm": 10,
+        "120 cm": 10,
+        "130 cm": 10,
+        "140 cm": 0
+      },
+      "hasColors": true,
+      "colorVariants": [
+        {
+          "colorName": "Black",
+          "imageUrl": "studio://kids-junior-leather-bomber",
+          "sizeType": "cm",
+          "sizes": [
+            "110 cm",
+            "120 cm",
+            "130 cm",
+            "140 cm"
+          ],
+          "sizeQuantities": {
+            "110 cm": 5,
+            "120 cm": 5,
+            "130 cm": 5,
+            "140 cm": 0
+          }
+        },
+        {
+          "colorName": "Brown",
+          "imageUrl": "studio://kids-junior-brown-leather-bomber",
+          "sizeType": "cm",
+          "sizes": [
+            "110 cm",
+            "120 cm",
+            "130 cm",
+            "140 cm"
+          ],
+          "sizeQuantities": {
+            "110 cm": 5,
+            "120 cm": 5,
+            "130 cm": 5,
+            "140 cm": 0
+          }
+        }
+      ],
+      "isNewArrival": true,
+      "discountType": "none",
+      "discountValue": 0,
+      "imageUrl": "studio://kids-junior-leather-bomber",
+      "galleryUrls": [
+        "studio://kids-junior-leather-bomber-profile",
+        "studio://kids-junior-leather-bomber-detail"
+      ],
+      "sizeType": "cm",
+      "sizes": [
+        "110 cm",
+        "120 cm",
+        "130 cm",
+        "140 cm"
+      ],
+      "materials": [
+        "Cow Leather",
+        "Wool",
+        "Cotton"
+      ],
+      "description": "Varsity-proportioned children 6+ jacket with brushed Melton wool body, supple cow leather sleeves, and ribbed storm cuffs.",
+      "inStock": true,
+      "featured": true,
+      "isFullSet": false
+    },
+    {
+      "id": "samo-k-teen-01",
+      "name": "TEEN RUNWAY SUEDE & SELVEDGE DENIM JEANS",
+      "department": "kids",
+      "category": "Teen 13+",
+      "style": "Sport Chic",
+      "price": 680,
+      "quantity": 40,
+      "sizeQuantities": {
+        "130 cm": 10,
+        "140 cm": 10,
+        "150 cm": 10,
+        "160 cm": 10
+      },
+      "hasColors": true,
+      "colorVariants": [
+        {
+          "colorName": "Black",
+          "imageUrl": "studio://kids-teen-suede-denim-set",
+          "sizeType": "cm",
+          "sizes": [
+            "130 cm",
+            "140 cm",
+            "150 cm",
+            "160 cm"
+          ],
+          "sizeQuantities": {
+            "130 cm": 5,
+            "140 cm": 5,
+            "150 cm": 5,
+            "160 cm": 5
+          }
+        },
+        {
+          "colorName": "Burgundy",
+          "imageUrl": "studio://kids-teen-burgundy-denim",
+          "sizeType": "cm",
+          "sizes": [
+            "130 cm",
+            "140 cm",
+            "150 cm",
+            "160 cm"
+          ],
+          "sizeQuantities": {
+            "130 cm": 5,
+            "140 cm": 5,
+            "150 cm": 5,
+            "160 cm": 5
+          }
+        }
+      ],
+      "isNewArrival": true,
+      "discountType": "none",
+      "discountValue": 0,
+      "imageUrl": "studio://kids-teen-suede-denim-set",
+      "galleryUrls": [
+        "studio://kids-teen-suede-denim-set-profile",
+        "studio://kids-teen-suede-denim-set-detail"
+      ],
+      "sizeType": "cm",
+      "sizes": [
+        "130 cm",
+        "140 cm",
+        "150 cm",
+        "160 cm"
+      ],
+      "materials": [
+        "Suede",
+        "Denim",
+        "Cotton"
+      ],
+      "description": "Architectural teen 13+ silhouette in raw Japanese selvedge denim with suede trim and wide-cut carpenter tailoring.",
+      "inStock": true,
+      "featured": true,
+      "isFullSet": false
+    },
+    {
+      "id": "samo-k-children-02",
+      "name": "ATELIER SHEARLING COLLAR SUEDE JACKET",
+      "department": "kids",
+      "category": "CHILDREN 6+",
+      "style": "Suede",
+      "price": 960,
+      "quantity": 40,
+      "sizeQuantities": {
+        "110 cm": 10,
+        "120 cm": 10,
+        "130 cm": 10,
+        "140 cm": 10
+      },
+      "hasColors": true,
+      "colorVariants": [
+        {
+          "colorName": "Camel",
+          "imageUrl": "studio://kids-children-camel-suede-jacket",
+          "sizeType": "cm",
+          "sizes": [
+            "110 cm",
+            "120 cm",
+            "130 cm",
+            "140 cm"
+          ],
+          "sizeQuantities": {
+            "110 cm": 5,
+            "120 cm": 5,
+            "130 cm": 5,
+            "140 cm": 5
+          }
+        },
+        {
+          "colorName": "Brown",
+          "imageUrl": "studio://kids-children-brown-suede-jacket",
+          "sizeType": "cm",
+          "sizes": [
+            "110 cm",
+            "120 cm",
+            "130 cm",
+            "140 cm"
+          ],
+          "sizeQuantities": {
+            "110 cm": 5,
+            "120 cm": 5,
+            "130 cm": 5,
+            "140 cm": 5
+          }
+        }
+      ],
+      "isNewArrival": true,
+      "discountType": "none",
+      "discountValue": 0,
+      "imageUrl": "studio://kids-children-camel-suede-jacket",
+      "galleryUrls": [
+        "studio://kids-children-camel-suede-jacket-profile",
+        "studio://kids-children-camel-suede-jacket-detail"
+      ],
+      "sizeType": "cm",
+      "sizes": [
+        "110 cm",
+        "120 cm",
+        "130 cm",
+        "140 cm"
+      ],
+      "materials": [
+        "Suede",
+        "Wool",
+        "Cotton"
+      ],
+      "description": "Tailored suede outerwear for children 6+ with plush shearling collar and brushed palladium snap closures.",
+      "inStock": true,
+      "featured": true,
+      "isFullSet": false
+    }
+  ],
+  "deletedProductIds": [],
+  "deletedCategoryIds": []
+}

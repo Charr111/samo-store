@@ -1,0 +1,237 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Pillar 1: Global Default-Deny Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Global Hardened Primitives
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidAdminId(id) {
+      return id is string && id.size() >= 5 && id.size() <= 160 && id.matches('^[a-zA-Z0-9._%+\\-]+@[a-zA-Z0-9.\\-]+\\.[a-zA-Z]{2,}$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null && request.auth.token.email_verified == true;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        request.auth.token.email == 'apolokor@gmail.com' ||
+        request.auth.token.email == 'charbelkorab11123@gmail.com' ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.token.email))
+      );
+    }
+
+    // Validation Blueprints
+    function isValidCategory(data) {
+      return data.keys().hasAll(['name', 'slug', 'department', 'description', 'createdAt']) &&
+        data.keys().hasOnly(['name', 'slug', 'department', 'description', 'createdAt']) &&
+        data.name is string && data.name.size() >= 1 && data.name.size() <= 60 &&
+        data.slug is string && data.slug.size() >= 1 && data.slug.size() <= 60 && data.slug.matches('^[a-z0-9\\-]+$') &&
+        data.department is string && data.department in ['women', 'kids'] &&
+        data.description is string && data.description.size() <= 240 &&
+        data.createdAt is timestamp;
+    }
+
+    function isValidProduct(data) {
+      return data.keys().hasAll([
+          'name', 'department', 'category', 'style', 'price', 'quantity', 'sizeQuantities',
+          'isNewArrival', 'imageUrl', 'galleryUrls', 'sizeType', 'sizes', 'materials',
+          'description', 'inStock', 'featured', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'id', 'name', 'department', 'category', 'style', 'price', 'quantity', 'sizeQuantities',
+          'isNewArrival', 'discountType', 'discountValue', 'imageUrl', 'galleryUrls',
+          'sizeType', 'sizes', 'hasColors', 'colorVariants', 'materials', 'description',
+          'inStock', 'featured', 'createdAt', 'updatedAt'
+        ]) &&
+        (!('id' in data) || (data.id is string && data.id.size() <= 128)) &&
+        data.name is string && data.name.size() >= 1 && data.name.size() <= 140 &&
+        data.department is string && data.department in ['women', 'kids'] &&
+        data.category is string && data.category.size() >= 1 && data.category.size() <= 60 &&
+        data.style is string && data.style in ['Classic', 'Sport Chic', 'Fine Leather', 'Suede', 'Fur', 'Accessories'] &&
+        data.price is number && data.price >= 0 && data.price <= 1000000 &&
+        data.quantity is number && data.quantity >= 0 && data.quantity <= 100000 &&
+        data.sizeQuantities is map && data.sizeQuantities.keys().size() <= 20 &&
+        data.isNewArrival is bool &&
+        (!('discountType' in data) || (data.discountType is string && data.discountType in ['none', 'percentage', 'fixed'])) &&
+        (!('discountValue' in data) || (data.discountValue is number && data.discountValue >= 0 && data.discountValue <= 1000000)) &&
+        data.imageUrl is string && data.imageUrl.size() >= 1 && data.imageUrl.size() <= 600 &&
+        data.galleryUrls is list && data.galleryUrls.size() <= 8 &&
+        (data.galleryUrls.size() == 0 || (data.galleryUrls[0] is string && data.galleryUrls[0].size() <= 600)) &&
+        data.sizeType is string && data.sizeType in ['letter', 'numeric', 'cm'] &&
+        data.sizes is list && data.sizes.size() >= 1 && data.sizes.size() <= 16 &&
+        data.sizes[0] is string && data.sizes[0].size() >= 1 && data.sizes[0].size() <= 40 &&
+        (!('hasColors' in data) || data.hasColors is bool) &&
+        (!('colorVariants' in data) || (data.colorVariants is list && data.colorVariants.size() <= 12)) &&
+        data.materials is list && data.materials.size() >= 1 && data.materials.size() <= 12 &&
+        data.materials[0] is string && data.materials[0].size() >= 1 && data.materials[0].size() <= 60 &&
+        data.description is string && data.description.size() >= 1 && data.description.size() <= 1000 &&
+        data.inStock is bool &&
+        data.featured is bool &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidPromoCode(data) {
+      return data.keys().hasAll(['code', 'discountType', 'discountValue', 'active', 'createdAt']) &&
+        data.keys().hasOnly(['code', 'discountType', 'discountValue', 'active', 'createdAt']) &&
+        data.code is string && data.code.size() >= 2 && data.code.size() <= 40 &&
+        data.discountType is string && data.discountType in ['percentage', 'fixed'] &&
+        data.discountValue is number && data.discountValue > 0 && data.discountValue <= 100000 &&
+        data.active is bool &&
+        data.createdAt is timestamp;
+    }
+
+    function isValidMaterialOption(data) {
+      return data.keys().hasAll(['name', 'createdAt']) &&
+        data.keys().hasOnly(['name', 'createdAt']) &&
+        data.name is string && data.name.size() >= 1 && data.name.size() <= 60 &&
+        data.createdAt is timestamp;
+    }
+
+    function isValidOrder(data) {
+      return data.keys().hasAll([
+          'orderNumber', 'customerName', 'customerEmail', 'customerPhone',
+          'shippingLocation', 'deliveryMethod', 'deliveryFee', 'subtotal',
+          'totalPrice', 'itemsSummary', 'itemsCount', 'primaryProductName',
+          'primaryProductSize', 'primaryProductImage', 'status', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'orderNumber', 'customerName', 'customerEmail', 'customerPhone',
+          'shippingLocation', 'deliveryMethod', 'deliveryFee', 'subtotal',
+          'discountAmount', 'promoCode', 'totalPrice', 'itemsSummary', 'itemsCount',
+          'primaryProductName', 'primaryProductSize', 'primaryProductImage',
+          'orderedItems', 'status', 'createdAt', 'updatedAt'
+        ]) &&
+        data.orderNumber is string && data.orderNumber.size() >= 3 && data.orderNumber.size() <= 32 &&
+        data.customerName is string && data.customerName.size() >= 1 && data.customerName.size() <= 120 &&
+        data.customerEmail is string && data.customerEmail.size() >= 3 && data.customerEmail.size() <= 160 &&
+        data.customerPhone is string && data.customerPhone.size() >= 3 && data.customerPhone.size() <= 40 &&
+        data.shippingLocation is string && data.shippingLocation.size() >= 3 && data.shippingLocation.size() <= 350 &&
+        data.deliveryMethod is string && data.deliveryMethod in ['Standard Delivery', 'Express Courier', 'Boutique Pickup'] &&
+        data.deliveryFee is number && data.deliveryFee >= 0 && data.deliveryFee <= 10000 &&
+        data.subtotal is number && data.subtotal >= 0 && data.subtotal <= 10000000 &&
+        (!('discountAmount' in data) || (data.discountAmount is number && data.discountAmount >= 0 && data.discountAmount <= 10000000)) &&
+        (!('promoCode' in data) || (data.promoCode is string && data.promoCode.size() <= 40)) &&
+        data.totalPrice is number && data.totalPrice >= 0 && data.totalPrice <= 10010000 &&
+        data.itemsSummary is string && data.itemsSummary.size() >= 1 && data.itemsSummary.size() <= 2000 &&
+        data.itemsCount is number && data.itemsCount >= 1 && data.itemsCount <= 100 &&
+        data.primaryProductName is string && data.primaryProductName.size() >= 1 && data.primaryProductName.size() <= 140 &&
+        data.primaryProductSize is string && data.primaryProductSize.size() >= 1 && data.primaryProductSize.size() <= 40 &&
+        data.primaryProductImage is string && data.primaryProductImage.size() >= 1 && data.primaryProductImage.size() <= 600 &&
+        (!('orderedItems' in data) || (data.orderedItems is list && data.orderedItems.size() <= 50)) &&
+        data.status is string && data.status in ['pending', 'accepted', 'rejected'] &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidAdminRecord(data) {
+      return data.keys().hasAll(['email', 'addedBy', 'createdAt']) &&
+        data.keys().hasOnly(['email', 'addedBy', 'createdAt']) &&
+        data.email is string && data.email.size() >= 5 && data.email.size() <= 160 &&
+        data.email.matches('^[a-zA-Z0-9._%+\\-]+@[a-zA-Z0-9.\\-]+\\.[a-zA-Z]{2,}$') &&
+        data.addedBy is string && data.addedBy.size() >= 3 && data.addedBy.size() <= 160 &&
+        data.createdAt is timestamp;
+    }
+
+    // Connection health check endpoint
+    match /test/{docId} {
+      allow get: if isValidId(docId) && resource == null;
+      allow list, write: if false;
+    }
+
+    // 1. Categories Collection
+    match /categories/{categoryId} {
+      allow get: if isValidId(categoryId) && resource.data.department in ['women', 'kids'];
+      allow list: if resource.data.department in ['women', 'kids'];
+      allow create: if isAdmin() && isValidId(categoryId) && isValidCategory(incoming()) && incoming().createdAt == request.time;
+      allow update: if isAdmin() && isValidId(categoryId) && isValidCategory(incoming()) &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['name', 'slug', 'department', 'description']);
+      allow delete: if isAdmin() && isValidId(categoryId);
+    }
+
+    // 2. Products Collection
+    match /products/{productId} {
+      allow get: if isValidId(productId) && resource.data.department in ['women', 'kids'];
+      allow list: if resource.data.department in ['women', 'kids'];
+      allow create: if isAdmin() && isValidId(productId) && isValidProduct(incoming()) &&
+        incoming().createdAt == request.time && incoming().updatedAt == request.time;
+      allow update: if isAdmin() && isValidId(productId) && isValidProduct(incoming()) &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'id', 'name', 'department', 'category', 'style', 'price', 'quantity', 'sizeQuantities',
+          'isNewArrival', 'discountType', 'discountValue', 'imageUrl',
+          'galleryUrls', 'sizeType', 'sizes', 'hasColors', 'colorVariants',
+          'materials', 'description', 'inStock', 'featured', 'updatedAt'
+        ]);
+      allow delete: if isAdmin() && isValidId(productId);
+    }
+
+    // 3. Promo Codes Collection
+    match /promo_codes/{promoId} {
+      allow get: if isValidId(promoId) && resource.data.active in [true, false];
+      allow list: if resource.data.active in [true, false];
+      allow create: if isAdmin() && isValidId(promoId) && isValidPromoCode(incoming()) && incoming().createdAt == request.time;
+      allow update: if isAdmin() && isValidId(promoId) && isValidPromoCode(incoming()) &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['code', 'discountType', 'discountValue', 'active']);
+      allow delete: if isAdmin() && isValidId(promoId);
+    }
+
+    // 4. Custom Materials Collection
+    match /materials/{materialId} {
+      allow get: if isValidId(materialId) && resource.data.name is string && resource.data.name.size() <= 60;
+      allow list: if resource.data.name is string && resource.data.name.size() <= 60;
+      allow create: if isAdmin() && isValidId(materialId) && isValidMaterialOption(incoming()) && incoming().createdAt == request.time;
+      allow update: if false;
+      allow delete: if isAdmin() && isValidId(materialId);
+    }
+
+    // 5. Orders Collection (PII Isolated to Admin; Storefront Create-Only)
+    match /orders/{orderId} {
+      allow get: if isAdmin() && isValidId(orderId);
+      allow list: if isAdmin() && resource.data.status in ['pending', 'accepted', 'rejected'];
+      allow create: if isValidId(orderId) && isValidOrder(incoming()) &&
+        incoming().status == 'pending' &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+      allow update: if isSignedIn() && isValidId(orderId) && isValidOrder(incoming()) &&
+        isAdmin() &&
+        (existing().status == 'pending' || isAdmin()) &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().orderNumber == existing().orderNumber &&
+        incoming().totalPrice == existing().totalPrice &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt']);
+      allow delete: if isAdmin() && isValidId(orderId);
+    }
+
+    // 6. Admins Directory Collection
+    match /admins/{adminId} {
+      allow get: if isAdmin() && isValidAdminId(adminId);
+      allow list: if isAdmin() && resource.data.email is string && resource.data.email.size() <= 160;
+      allow create: if isAdmin() && isValidAdminId(adminId) && isValidAdminRecord(incoming()) &&
+        incoming().email == adminId &&
+        incoming().addedBy == request.auth.token.email &&
+        incoming().createdAt == request.time;
+      allow update: if false;
+      allow delete: if isAdmin() && isValidAdminId(adminId);
+    }
+  }
+}
