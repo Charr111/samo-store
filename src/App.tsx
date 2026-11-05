@@ -112,6 +112,26 @@ function sanitizeFirestorePayload<T extends Record<string, unknown>>(
   return clean;
 }
 
+export function deepCleanFirestorePayload<T>(value: T): T {
+  if (value === undefined || value === null) {
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return value
+      .filter((item) => item !== undefined)
+      .map((item) => deepCleanFirestorePayload(item)) as unknown as T;
+  }
+  if (typeof value === 'object' && !(value instanceof Date)) {
+    const res: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      if (v === undefined) continue;
+      res[k] = deepCleanFirestorePayload(v);
+    }
+    return res as T;
+  }
+  return value;
+}
+
 async function pushServerCatalogPatch(patch: Record<string, unknown>): Promise<void> {
   try {
     await fetch('/api/catalog', {
@@ -504,6 +524,11 @@ export default function App() {
         }
         if (Array.isArray(data.preorders) && data.preorders.length > 0) {
           setPreorders(data.preorders as PreorderItem[]);
+        }
+        if (data.siteBanners && typeof data.siteBanners === 'object') {
+          setSiteBanners((prev) =>
+            mergeSiteBannersConfig({ ...prev, ...data.siteBanners }, INITIAL_CATEGORIES)
+          );
         }
       } catch {}
     };
@@ -1451,14 +1476,25 @@ export default function App() {
   const handleUpdateSiteBanners = async (nextBanners: SiteBannersConfig) => {
     const merged = mergeSiteBannersConfig(nextBanners, categories);
     setSiteBanners(merged);
+    try {
+      localStorage.setItem(STORAGE_KEYS.siteBanners, JSON.stringify(merged));
+    } catch {}
     pushServerCatalogPatch({ siteBanners: merged });
     if (currentUser && isAuthorizedAdminEmail(currentUser.email, admins)) {
       try {
-        await setDoc(doc(db, 'settings', 'site_banners_v2'), {
+        const cleaned = deepCleanFirestorePayload({
           ...merged,
           updatedAt: serverTimestamp(),
         });
-      } catch {}
+        await setDoc(doc(db, 'settings', 'site_banners_v2'), cleaned);
+        console.log('[SAMO Atelier] Synced site_banners_v2 to Firestore successfully');
+      } catch (err) {
+        console.error('[SAMO Atelier] Failed to sync site_banners_v2 to Firestore:', err);
+      }
+    } else {
+      console.warn(
+        '[SAMO Atelier] Banners saved locally & server; sign in via Google Admin to sync to Firestore cloud'
+      );
     }
   };
 

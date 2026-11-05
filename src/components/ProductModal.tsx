@@ -233,16 +233,25 @@ export const ProductModal: React.FC<ProductModalProps> = ({
 
   const pricing = getEffectiveProductPrice(product);
 
-  // Combine up to 4 image URLs (primary + galleryUrls)
+  // Combine up to 4 image URLs for the selected color (or product gallery fallback)
   const primaryImageForSelection =
     (activeVariant?.imageUrl && activeVariant.imageUrl.trim()) || product.imageUrl;
 
-  const allImages = [
-    primaryImageForSelection,
-    ...(product.galleryUrls || []).filter(
-      (u) => u && u !== primaryImageForSelection
-    ),
-  ].slice(0, 4);
+  const variantGalleryUrls = Array.isArray(activeVariant?.galleryUrls)
+    ? activeVariant!.galleryUrls.map((u) => (u || '').trim()).filter(Boolean)
+    : [];
+  const fallbackProductGalleryUrls = Array.isArray(product.galleryUrls)
+    ? product.galleryUrls.map((u) => (u || '').trim()).filter(Boolean)
+    : [];
+  const sourceGallery =
+    variantGalleryUrls.length > 0 ? variantGalleryUrls : fallbackProductGalleryUrls;
+
+  const allImages = Array.from(
+    new Set([
+      primaryImageForSelection,
+      ...sourceGallery.filter((u) => u && u !== primaryImageForSelection),
+    ])
+  ).slice(0, 4);
 
   const scrollToGallerySlide = (targetIndex: number) => {
     if (allImages.length <= 1) return;

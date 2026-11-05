@@ -101,7 +101,7 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  app.use(express.json({ limit: '35mb' }));
+  app.use(express.json({ limit: '50mb' }));
 
   // Cross-Device Catalog Sync Endpoint (Syncs Phone <-> Laptop on preview & production server)
   app.get('/api/catalog', (_req, res) => {
@@ -189,26 +189,45 @@ async function startServer() {
       }
 
       const isVideo =
-        typeof contentType === 'string' && contentType.startsWith('video/');
-      const maxAllowedBytes = isVideo ? 25 * 1024 * 1024 : 5 * 1024 * 1024;
+        (typeof contentType === 'string' && contentType.startsWith('video/')) ||
+        (typeof fileName === 'string' && /\.(mp4|webm|mov|hevc|m4v)$/i.test(fileName));
+      const maxAllowedBytes = isVideo ? 35 * 1024 * 1024 : 10 * 1024 * 1024;
 
       if (buffer.byteLength > maxAllowedBytes) {
         res.status(413).json({
           error: isVideo
-            ? 'Video exceeds the 25 MB maximum upload size.'
-            : 'Compressed image exceeds the 5 MB maximum upload size.',
+            ? 'Video exceeds the 35 MB maximum upload size.'
+            : 'Compressed image exceeds the 10 MB maximum upload size.',
         });
         return;
       }
 
-      const mimeType =
+      let mimeType =
         typeof contentType === 'string' &&
         (contentType.startsWith('image/') || contentType.startsWith('video/'))
           ? contentType
           : 'image/webp';
+
+      const rawExtMatch = typeof fileName === 'string' ? fileName.match(/\.([a-z0-9]+)$/i) : null;
+      const rawExt = rawExtMatch ? rawExtMatch[1].toLowerCase() : '';
+
+      if (rawExt === 'mov') {
+        mimeType = 'video/quicktime';
+      } else if (rawExt === 'hevc' || rawExt === 'm4v') {
+        mimeType = 'video/mp4';
+      } else if (rawExt === 'webm') {
+        mimeType = 'video/webm';
+      } else if (rawExt === 'mp4') {
+        mimeType = 'video/mp4';
+      }
+
       const defaultExt = isVideo
-        ? mimeType.includes('webm')
+        ? rawExt
+          ? `.${rawExt}`
+          : mimeType.includes('webm')
           ? '.webm'
+          : mimeType.includes('quicktime')
+          ? '.mov'
           : '.mp4'
         : mimeType === 'image/jpeg'
         ? '.jpg'
@@ -223,15 +242,11 @@ async function startServer() {
               .replace(/^-+|-+$/g, '')
           : `${Date.now()}-samo-item${defaultExt}`;
 
-      const finalFileName =
-        safeFileName.endsWith('.webp') ||
-        safeFileName.endsWith('.jpg') ||
-        safeFileName.endsWith('.jpeg') ||
-        safeFileName.endsWith('.mp4') ||
-        safeFileName.endsWith('.webm') ||
-        safeFileName.endsWith('.mov')
-          ? safeFileName
-          : `${safeFileName.replace(/\.[^/.]+$/, '')}${defaultExt}`;
+      const isRecognizedExt =
+        /\.(webp|jpg|jpeg|png|gif|mp4|webm|mov|hevc|m4v)$/i.test(safeFileName);
+      const finalFileName = isRecognizedExt
+        ? safeFileName
+        : `${safeFileName.replace(/\.[^/.]+$/, '')}${defaultExt}`;
       const objectKey = isVideo
         ? `banners/${finalFileName}`
         : `products/${finalFileName}`;

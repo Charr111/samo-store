@@ -278,11 +278,8 @@ service cloud.firestore {
 
     // 8. Site Banners & Editorial Settings Collection
     match /settings/{settingId} {
-      allow get: if isValidId(settingId) && (resource == null || resource.data.homeHeroMediaType in ['video', 'image']);
-      allow list: if resource.data.homeHeroMediaType in ['video', 'image'];
-      allow create, update: if isAdmin() && isValidId(settingId) &&
-        incoming().homeHeroMediaType in ['video', 'image'] &&
-        incoming().categoryBanners is map;
+      allow get, list: if isValidId(settingId);
+      allow create, update: if isAdmin() && isValidId(settingId);
       allow delete: if isAdmin() && isValidId(settingId);
     }
   }

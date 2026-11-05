@@ -31,6 +31,8 @@ import {
   EyeOff,
   AlertTriangle,
   ChevronRight,
+  Sun,
+  Moon,
 } from 'lucide-react';
 import {
   AdminRecord,
@@ -134,7 +136,7 @@ export const R2ImageUploadButton: React.FC<R2ImageUploadButtonProps> = ({
       <input
         ref={fileInputRef}
         type="file"
-        accept="image/*"
+        accept="image/*,.heic,.heif,.jpg,.jpeg,.png,.webp"
         onChange={handleFileChange}
         aria-label={`${ariaLabel} File Input`}
         className="hidden"
@@ -208,7 +210,7 @@ const R2VideoUploadButton: React.FC<R2VideoUploadButtonProps> = ({
       <input
         ref={fileInputRef}
         type="file"
-        accept="video/mp4,video/webm,video/quicktime"
+        accept="video/*,.mp4,.webm,.mov,.hevc,.m4v"
         onChange={handleFileChange}
         aria-label={`${ariaLabel} File Input`}
         className="hidden"
@@ -239,12 +241,33 @@ const R2VideoUploadButton: React.FC<R2VideoUploadButtonProps> = ({
 
 interface DraftColorConfig {
   colorName: string;
+  colorHex?: string;
   imageUrl: string;
+  galleryUrls?: string[];
   sizeType: SizeType;
   sizes: string[];
   rawQuantities: Record<string, string>;
   customSizeInput: string;
 }
+
+const LUXURY_PALETTE_SWATCHES: ReadonlyArray<{ name: string; hex: string }> = [
+  { name: 'Black', hex: '#111113' },
+  { name: 'Brown', hex: '#4A2C1D' },
+  { name: 'Burgundy', hex: '#5E131D' },
+  { name: 'Ivory', hex: '#F4F1EA' },
+  { name: 'Camel', hex: '#B88B58' },
+  { name: 'Olive', hex: '#3F4D34' },
+  { name: 'Midnight Navy', hex: '#172554' },
+  { name: 'Warm Taupe', hex: '#8B7D70' },
+  { name: 'Cognac', hex: '#7C3F23' },
+  { name: 'Charcoal', hex: '#27272A' },
+  { name: 'Slate Grey', hex: '#71717A' },
+  { name: 'Blush Pink', hex: '#D8B4BB' },
+  { name: 'Crimson Red', hex: '#991B1B' },
+  { name: 'Emerald Green', hex: '#14532D' },
+  { name: 'Brushed Gold', hex: '#C5A059' },
+  { name: 'Silver', hex: '#A1A1AA' },
+];
 
 type AdminSectionTab =
   | 'dashboard'
@@ -362,6 +385,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<AdminSectionTab>('dashboard');
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [adminTheme, setAdminTheme] = useState<'dark' | 'light'>(() => {
+    try {
+      return localStorage.getItem('samo_admin_theme_v1') === 'light'
+        ? 'light'
+        : 'dark';
+    } catch {
+      return 'dark';
+    }
+  });
+
+  const toggleAdminTheme = () => {
+    setAdminTheme((prev) => {
+      const next = prev === 'dark' ? 'light' : 'dark';
+      try {
+        localStorage.setItem('samo_admin_theme_v1', next);
+      } catch {}
+      return next;
+    });
+  };
 
   // Dashboard & Product List Filtering States
   const [globalSearchQuery, setGlobalSearchQuery] = useState('');
@@ -422,7 +464,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [draftColors, setDraftColors] = useState<DraftColorConfig[]>([
     {
       colorName: 'Black',
+      colorHex: '#111113',
       imageUrl: '',
+      galleryUrls: ['', '', ''],
       sizeType: 'letter',
       sizes: ['XS', 'S', 'M', 'L'],
       rawQuantities: {},
@@ -430,6 +474,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     },
   ]);
   const [newColorInput, setNewColorInput] = useState('');
+  const [newColorHexInput, setNewColorHexInput] = useState('#3F4D34');
+  const [customColorHexMap, setCustomColorHexMap] = useState<
+    Record<string, string>
+  >({});
 
   // Full Set 2-Piece Builder State
   const [setPiece1ProductId, setSetPiece1ProductId] = useState<string>('');
@@ -462,6 +510,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [catalogCustomColorInputs, setCatalogCustomColorInputs] = useState<
     Record<string, string>
   >({});
+  const [catalogCustomColorHexInputs, setCatalogCustomColorHexInputs] =
+    useState<Record<string, string>>({});
   const [catalogCustomSizeInputs, setCatalogCustomSizeInputs] = useState<
     Record<string, string>
   >({});
@@ -566,7 +616,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setCustomSizeInput('');
   };
 
-  const toggleDraftColor = (colorName: string) => {
+  const toggleDraftColor = (colorName: string, explicitHex?: string) => {
     setDraftColors((prev) => {
       const exists = prev.some(
         (c) => c.colorName.toLowerCase() === colorName.toLowerCase()
@@ -577,11 +627,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         );
       }
       const defaultType: SizeType = itemDept === 'kids' ? 'cm' : itemSizeType;
+      const resolvedHex =
+        explicitHex ||
+        customColorHexMap[colorName.toLowerCase()] ||
+        getColorSwatchHex(colorName);
       return [
         ...prev,
         {
           colorName,
+          colorHex: resolvedHex,
           imageUrl: itemUrl.trim(),
+          galleryUrls: ['', '', ''],
           sizeType: defaultType,
           sizes: getDefaultSizesForType(defaultType),
           rawQuantities: {},
@@ -591,10 +647,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     });
   };
 
-  const handleAddAndCheckCustomColor = async () => {
-    const clean = newColorInput.trim();
+  const handleAddAndCheckCustomColor = async (
+    overrideName?: string,
+    overrideHex?: string
+  ) => {
+    const rawName = (overrideName ?? newColorInput).trim();
+    const rawHex = (overrideHex ?? newColorHexInput).trim();
+    const cleanHex = /^#[0-9a-fA-F]{3,6}$/.test(rawHex) ? rawHex : '#3F4D34';
+    const clean = rawName || cleanHex.toUpperCase();
     if (!clean) return;
     await onAddCustomColor(clean);
+    setCustomColorHexMap((prev) => ({
+      ...prev,
+      [clean.toLowerCase()]: cleanHex,
+    }));
     const exists = draftColors.some(
       (c) => c.colorName.toLowerCase() === clean.toLowerCase()
     );
@@ -604,13 +670,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         ...prev,
         {
           colorName: clean,
+          colorHex: cleanHex,
           imageUrl: itemUrl.trim(),
+          galleryUrls: ['', '', ''],
           sizeType: defaultType,
           sizes: getDefaultSizesForType(defaultType),
           rawQuantities: {},
           customSizeInput: '',
         },
       ]);
+    } else {
+      setDraftColors((prev) =>
+        prev.map((c) =>
+          c.colorName.toLowerCase() === clean.toLowerCase()
+            ? { ...c, colorHex: cleanHex }
+            : c
+        )
+      );
     }
     setItemHasColors(true);
     setNewColorInput('');
@@ -825,10 +901,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           dc.imageUrl.trim() ||
           itemUrl.trim() ||
           `${fallbackStudioUri}-${createSafeSlug(dc.colorName)}`;
+        const variantGallery = (dc.galleryUrls || [])
+          .map((u) => (u || '').trim())
+          .filter((u) => Boolean(u) && u !== variantImg)
+          .slice(0, 3);
         builtVariants.push({
           colorName: dc.colorName,
-          colorHex: getColorSwatchHex(dc.colorName),
+          colorHex:
+            dc.colorHex ||
+            customColorHexMap[dc.colorName.toLowerCase()] ||
+            getColorSwatchHex(dc.colorName),
           imageUrl: variantImg,
+          galleryUrls: variantGallery,
           sizeType: dc.sizeType,
           sizes: dc.sizes,
           sizeQuantities: sq,
@@ -837,6 +921,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
       const synced = syncProductFromColorVariants(builtVariants, itemSizeType);
       const mainImg = builtVariants[0]?.imageUrl || primaryImage;
+      const mergedGallery =
+        additionalUrls.length > 0
+          ? additionalUrls
+          : builtVariants[0]?.galleryUrls || [];
 
       await onAddProduct({
         name: cleanName.toUpperCase(),
@@ -853,7 +941,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         discountType: itemDiscountType,
         discountValue: numericDiscountVal,
         imageUrl: mainImg,
-        galleryUrls: additionalUrls,
+        galleryUrls: mergedGallery,
         sizeType: synced.sizeType,
         sizes: synced.sizes,
         materials: selectedMaterials,
@@ -952,7 +1040,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const handleToggleCatalogProductColorItem = async (
     prod: ProductItem,
-    colorName: string
+    colorName: string,
+    explicitHex?: string
   ) => {
     const current = prod.colorVariants || [];
     const exists = current.some(
@@ -965,12 +1054,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       );
     } else {
       const defaultSizes = getDefaultSizesForType(prod.sizeType);
+      const resolvedHex =
+        explicitHex ||
+        customColorHexMap[colorName.toLowerCase()] ||
+        getColorSwatchHex(colorName);
       next = [
         ...current,
         {
           colorName,
-          colorHex: getColorSwatchHex(colorName),
+          colorHex: resolvedHex,
           imageUrl: prod.imageUrl,
+          galleryUrls: [],
           sizeType: prod.sizeType,
           sizes: defaultSizes,
           sizeQuantities: buildSizeQuantitiesMap(defaultSizes, {}),
@@ -992,11 +1086,40 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     await onUpdateProductColorVariants(prod.id, true, next);
   };
 
-  const handleCatalogAddCustomColorToProduct = async (prod: ProductItem) => {
-    const raw = (catalogCustomColorInputs[prod.id] || '').trim();
+  const handleCatalogAddCustomColorToProduct = async (
+    prod: ProductItem,
+    overrideName?: string,
+    overrideHex?: string
+  ) => {
+    const rawName = (
+      overrideName ??
+      catalogCustomColorInputs[prod.id] ??
+      ''
+    ).trim();
+    const rawHex = (
+      overrideHex ??
+      catalogCustomColorHexInputs[prod.id] ??
+      '#3F4D34'
+    ).trim();
+    const cleanHex = /^#[0-9a-fA-F]{3,6}$/.test(rawHex) ? rawHex : '#3F4D34';
+    const raw = rawName || cleanHex.toUpperCase();
     if (!raw) return;
     await onAddCustomColor(raw);
-    await handleToggleCatalogProductColorItem(prod, raw);
+    setCustomColorHexMap((prev) => ({
+      ...prev,
+      [raw.toLowerCase()]: cleanHex,
+    }));
+    const exists = (prod.colorVariants || []).some(
+      (v) => v.colorName.toLowerCase() === raw.toLowerCase()
+    );
+    if (!exists) {
+      await handleToggleCatalogProductColorItem(prod, raw, cleanHex);
+    } else {
+      await handleCatalogVariantChange(prod, raw, (v) => ({
+        ...v,
+        colorHex: cleanHex,
+      }));
+    }
     setCatalogCustomColorInputs((prev) => ({ ...prev, [prod.id]: '' }));
   };
 
@@ -1274,7 +1397,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   // LOCKED GATE IF NOT YET AUTHENTICATED
   if (!isAuthorized) {
     return (
-      <div className="min-h-screen bg-[#0E0E10] text-white flex flex-col justify-between p-6 md:p-12">
+      <div
+        className={`samo-admin-root ${
+          adminTheme === 'light' ? 'samo-admin-light' : 'samo-admin-dark'
+        } min-h-screen bg-[#0E0E10] text-white flex flex-col justify-between p-6 md:p-12`}
+      >
         <div className="flex items-center justify-between border-b border-zinc-800 pb-6">
           <div className="flex items-center gap-3">
             <span className="font-display text-2xl font-extrabold tracking-[0.16em] uppercase">
@@ -1284,14 +1411,38 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               /admin · Restricted Atelier Portal
             </span>
           </div>
-          <button
-            type="button"
-            onClick={() => onNavigateHome('/home')}
-            className="flex items-center gap-2 text-xs uppercase tracking-widest text-zinc-300 hover:text-white cursor-pointer"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            <span>Return to /home</span>
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={toggleAdminTheme}
+              aria-label={
+                adminTheme === 'light'
+                  ? 'Switch Admin to Dark Mode'
+                  : 'Switch Admin to Light Mode'
+              }
+              className="px-3 py-1.5 rounded-lg bg-[#18181C] border border-zinc-800 text-zinc-200 hover:text-white text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 cursor-pointer"
+            >
+              {adminTheme === 'light' ? (
+                <>
+                  <Moon className="w-3.5 h-3.5" />
+                  <span>Dark Mode</span>
+                </>
+              ) : (
+                <>
+                  <Sun className="w-3.5 h-3.5" />
+                  <span>Light Mode</span>
+                </>
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => onNavigateHome('/home')}
+              className="flex items-center gap-2 text-xs uppercase tracking-widest text-zinc-300 hover:text-white cursor-pointer"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              <span>Return to /home</span>
+            </button>
+          </div>
         </div>
 
         <div className="max-w-md w-full mx-auto my-12 p-8 bg-[#18181C] border border-zinc-800 rounded-2xl space-y-6">
@@ -1584,7 +1735,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-[#0E0E10] text-zinc-100 flex flex-col lg:flex-row pb-20 lg:pb-0">
+    <div
+      className={`samo-admin-root ${
+        adminTheme === 'light' ? 'samo-admin-light' : 'samo-admin-dark'
+      } min-h-screen bg-[#0E0E10] text-zinc-100 flex flex-col lg:flex-row pb-20 lg:pb-0 transition-colors duration-200`}
+    >
       {/* MOBILE SLIDE-OVER SIDEBAR DRAWER BACKDROP */}
       {mobileSidebarOpen && (
         <div
@@ -1667,8 +1822,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </nav>
         </div>
 
-        {/* Bottom Storefront & Logout Actions */}
+        {/* Bottom Theme Toggle, Storefront & Logout Actions */}
         <div className="p-4 border-t border-zinc-800/80 space-y-2">
+          <button
+            type="button"
+            onClick={toggleAdminTheme}
+            className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-200 text-xs font-semibold flex items-center justify-between transition-colors cursor-pointer"
+          >
+            <span className="flex items-center gap-2.5">
+              {adminTheme === 'light' ? (
+                <Moon className="w-4 h-4 shrink-0" />
+              ) : (
+                <Sun className="w-4 h-4 shrink-0" />
+              )}
+              <span>
+                {adminTheme === 'light' ? 'Switch to Dark Mode' : 'Switch to Light Mode'}
+              </span>
+            </span>
+            <span className="text-[10px] font-mono-tabular uppercase px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-300">
+              {adminTheme === 'light' ? 'Light' : 'Dark'}
+            </span>
+          </button>
+
           <button
             type="button"
             onClick={() => onNavigateHome('/home')}
@@ -1691,7 +1866,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
       {/* MAIN CONTENT VIEWPORT */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* TOP HEADER BAR (Matches Reference Image: Breadcrumb Left, Search + Bell + Admin Profile Right) */}
+        {/* TOP HEADER BAR (Matches Reference Image: Breadcrumb Left, Search + Theme Toggle + Bell + Admin Profile Right) */}
         <header className="sticky top-0 z-30 bg-[#0E0E10]/95 backdrop-blur-md border-b border-zinc-800/80 px-4 sm:px-6 lg:px-8 py-3.5">
           <div className="max-w-7xl mx-auto flex items-center justify-between gap-3">
             {/* Left: Hamburger (Mobile) + Breadcrumb */}
@@ -1715,9 +1890,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
             </div>
 
-            {/* Right: Search Bar + Notification Bell + Admin Profile */}
-            <div className="flex items-center gap-2.5 sm:gap-4">
-              <div className="relative w-36 sm:w-64">
+            {/* Right: Search Bar + Light/Dark Mode Toggle + Notification Bell + Admin Profile */}
+            <div className="flex items-center gap-2 sm:gap-3">
+              <div className="relative w-32 sm:w-60">
                 <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                 <input
                   type="search"
@@ -1729,12 +1904,42 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 />
               </div>
 
+              {/* Admin Light / Dark Mode Toggle Button */}
+              <button
+                type="button"
+                onClick={toggleAdminTheme}
+                data-testid="admin-theme-toggle"
+                aria-label={
+                  adminTheme === 'light'
+                    ? 'Switch Admin Dashboard to Dark Mode'
+                    : 'Switch Admin Dashboard to Light Mode'
+                }
+                title={
+                  adminTheme === 'light'
+                    ? 'Switch Admin Dashboard to Dark Mode'
+                    : 'Switch Admin Dashboard to Light Mode'
+                }
+                className="px-2.5 py-1.5 rounded-lg bg-[#18181C] border border-zinc-800 text-zinc-200 hover:text-white text-[11px] font-bold uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shrink-0 transition-colors"
+              >
+                {adminTheme === 'light' ? (
+                  <>
+                    <Moon className="w-3.5 h-3.5 shrink-0" />
+                    <span className="hidden sm:inline">Dark Mode</span>
+                  </>
+                ) : (
+                  <>
+                    <Sun className="w-3.5 h-3.5 shrink-0" />
+                    <span className="hidden sm:inline">Light Mode</span>
+                  </>
+                )}
+              </button>
+
               <button
                 type="button"
                 onClick={() => handleSelectNav('orders')}
                 aria-label="View pending orders"
                 title="Client Orders Queue"
-                className="relative p-2 rounded-lg bg-[#18181C] border border-zinc-800 text-zinc-300 hover:text-white cursor-pointer"
+                className="relative p-2 rounded-lg bg-[#18181C] border border-zinc-800 text-zinc-300 hover:text-white cursor-pointer shrink-0"
               >
                 <BellRing className="w-4 h-4" />
                 {pendingOrders.length + pendingPreorders.length > 0 && (
@@ -2129,28 +2334,59 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </h1>
                   <p className="text-xs text-zinc-400 mt-1">
                     Every banner on the Homepage and Showroom page is clearly
-                    numbered and marked below. Upload photos with the automatic
-                    WebP shrinker (~35–60 KB) or paste a direct URL anytime.
+                    numbered and marked below. Upload iPhone videos (.hevc, .mov, .mp4) or
+                    photos with the automatic WebP shrinker (~35–60 KB) or paste a direct URL anytime.
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={async () => {
-                    const defaults = buildDefaultSiteBanners(categories);
-                    await onUpdateSiteBanners({
-                      ...defaults,
-                      categoryBanners: siteBanners.categoryBanners,
-                    });
-                    setBannerFeedback(
-                      '✓ Restored default Homepage & Showroom banners'
-                    );
-                  }}
-                  className="px-3.5 py-2 rounded-xl bg-[#18181C] border border-zinc-700 text-zinc-300 hover:text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer self-start"
-                >
-                  <RotateCcw className="w-3.5 h-3.5" />
-                  <span>Reset Site Banners to Default</span>
-                </button>
+                <div className="flex flex-wrap items-center gap-2.5 self-start">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      await onUpdateSiteBanners(siteBanners);
+                      setBannerFeedback(
+                        '✓ All Banners & Videos Published to Cloud Database & Live Website'
+                      );
+                    }}
+                    className="px-4 py-2 rounded-xl bg-white text-zinc-950 text-xs font-bold uppercase tracking-wider hover:bg-zinc-200 transition-colors flex items-center gap-1.5 cursor-pointer shadow-sm"
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                    <span>Save &amp; Publish All Banners</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const defaults = buildDefaultSiteBanners(categories);
+                      await onUpdateSiteBanners({
+                        ...defaults,
+                        categoryBanners: siteBanners.categoryBanners,
+                      });
+                      setBannerFeedback(
+                        '✓ Restored default Homepage & Showroom banners'
+                      );
+                    }}
+                    className="px-3.5 py-2 rounded-xl bg-[#18181C] border border-zinc-700 text-zinc-300 hover:text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    <span>Reset to Default</span>
+                  </button>
+                </div>
               </div>
+
+              {!currentUser && (
+                <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-amber-300">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold">Cloud Sync Note:</span>
+                    <span>To permanently save banner/video changes to the live website (samoweave.com), sign in with your authorized admin Google account.</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => onGoogleSignIn()}
+                    className="px-3 py-1.5 rounded-lg bg-white text-zinc-950 font-bold hover:bg-zinc-200 transition-colors whitespace-nowrap cursor-pointer shrink-0"
+                  >
+                    Sign In with Google
+                  </button>
+                </div>
+              )}
 
               {/* BANNER #1: HOMEPAGE TOP HERO VIDEO / IMAGE BANNER */}
               <div className="bg-[#18181C] border border-zinc-800 rounded-2xl p-5 sm:p-6 space-y-5">
@@ -3952,12 +4188,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       </div>
                       <div className="flex flex-wrap items-center gap-1.5">
                         {allColors.map((colName) => {
-                          const active = prod.colorVariants!.some(
+                          const existingVar = prod.colorVariants!.find(
                             (v) =>
                               v.colorName.toLowerCase() ===
                               colName.toLowerCase()
                           );
-                          const hex = getColorSwatchHex(colName);
+                          const active = Boolean(existingVar);
+                          const hex =
+                            existingVar?.colorHex ||
+                            customColorHexMap[colName.toLowerCase()] ||
+                            getColorSwatchHex(colName);
                           return (
                             <button
                               key={colName}
@@ -3985,115 +4225,382 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         })}
                       </div>
 
-                      <div className="flex gap-1.5">
-                        <input
-                          type="text"
-                          value={catalogCustomColorInputs[prod.id] || ''}
-                          onChange={(e) =>
-                            setCatalogCustomColorInputs((prev) => ({
-                              ...prev,
-                              [prod.id]: e.target.value,
-                            }))
-                          }
-                          placeholder="Add custom color (e.g. Olive)..."
-                          className="flex-1 px-2.5 py-1.5 text-xs bg-white border border-zinc-300"
-                        />
-                        <button
-                          type="button"
-                          onClick={() =>
-                            handleCatalogAddCustomColorToProduct(prod)
-                          }
-                          className="px-3 py-1.5 bg-zinc-950 text-white text-[10px] font-bold uppercase cursor-pointer"
-                        >
-                          + Color
-                        </button>
+                      {/* Add Custom Color Name, Hex Code, or Pick from Color Palette */}
+                      <div className="p-3 bg-white border border-zinc-300 rounded-lg space-y-2.5">
+                        <span className="block text-[10px] font-bold uppercase tracking-wider text-zinc-800">
+                          Add New Color (Name, Hex Code, or Color Palette):
+                        </span>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <input
+                            type="text"
+                            value={catalogCustomColorInputs[prod.id] || ''}
+                            onChange={(e) =>
+                              setCatalogCustomColorInputs((prev) => ({
+                                ...prev,
+                                [prod.id]: e.target.value,
+                              }))
+                            }
+                            placeholder="Color Name (e.g. Olive, Royal Blue)..."
+                            className="flex-1 min-w-[140px] px-2.5 py-1.5 text-xs bg-white border border-zinc-300"
+                          />
+                          <div className="flex items-center gap-1.5">
+                            <input
+                              type="color"
+                              value={
+                                /^#([0-9A-Fa-f]{6})$/.test(
+                                  catalogCustomColorHexInputs[prod.id] || ''
+                                )
+                                  ? catalogCustomColorHexInputs[prod.id]
+                                  : '#3D4F2F'
+                              }
+                              onChange={(e) =>
+                                setCatalogCustomColorHexInputs((prev) => ({
+                                  ...prev,
+                                  [prod.id]: e.target.value,
+                                }))
+                              }
+                              aria-label="Pick custom color from color wheel"
+                              className="w-8 h-8 p-0.5 bg-white border border-zinc-300 cursor-pointer shrink-0"
+                            />
+                            <input
+                              type="text"
+                              value={
+                                catalogCustomColorHexInputs[prod.id] ||
+                                '#3D4F2F'
+                              }
+                              onChange={(e) =>
+                                setCatalogCustomColorHexInputs((prev) => ({
+                                  ...prev,
+                                  [prod.id]: e.target.value,
+                                }))
+                              }
+                              placeholder="#HEX (e.g. #3D4F2F)"
+                              className="w-28 px-2 py-1.5 text-xs font-mono-tabular bg-white border border-zinc-300"
+                            />
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleCatalogAddCustomColorToProduct(prod)
+                            }
+                            className="px-3 py-1.5 bg-zinc-950 text-white text-[10px] font-bold uppercase cursor-pointer"
+                          >
+                            + Add Color
+                          </button>
+                        </div>
+
+                        {/* Quick Color Palette Swatches */}
+                        <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                          <span className="text-[10px] font-bold uppercase text-zinc-500 mr-1">
+                            Palette:
+                          </span>
+                          {LUXURY_PALETTE_SWATCHES.map((sw) => (
+                            <button
+                              key={sw.hex}
+                              type="button"
+                              title={`${sw.name} (${sw.hex})`}
+                              onClick={() => {
+                                setCatalogCustomColorInputs((prev) => ({
+                                  ...prev,
+                                  [prod.id]: prev[prod.id]?.trim()
+                                    ? prev[prod.id]
+                                    : sw.name,
+                                }));
+                                setCatalogCustomColorHexInputs((prev) => ({
+                                  ...prev,
+                                  [prod.id]: sw.hex,
+                                }));
+                              }}
+                              className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] bg-zinc-50 hover:bg-zinc-100 border border-zinc-300 cursor-pointer"
+                            >
+                              <span
+                                className="w-3 h-3 border border-zinc-400 shrink-0"
+                                style={{ backgroundColor: sw.hex }}
+                              />
+                              <span className="text-zinc-700">{sw.name}</span>
+                            </button>
+                          ))}
+                        </div>
                       </div>
 
-                      <div className="space-y-2.5 pt-2">
+                      <div className="space-y-3 pt-2">
                         {prod.colorVariants.map((variant) => {
                           const hex =
                             variant.colorHex ||
+                            customColorHexMap[
+                              variant.colorName.toLowerCase()
+                            ] ||
                             getColorSwatchHex(variant.colorName);
                           const sizeInputKey = `${prod.id}-${variant.colorName}`;
+                          const presetList =
+                            variant.sizeType === 'letter'
+                              ? LETTER_SIZES
+                              : variant.sizeType === 'numeric'
+                              ? NUMERIC_SIZES
+                              : CM_SIZES;
+                          const gUrls = variant.galleryUrls || [];
                           return (
                             <div
                               key={variant.colorName}
-                              className="p-3 bg-white border border-zinc-300 rounded-lg space-y-2.5"
+                              className="p-3.5 bg-white border border-zinc-300 rounded-lg space-y-3"
                             >
-                              <div className="flex items-center justify-between gap-2">
-                                <div className="flex items-center gap-1.5">
-                                  <span
-                                    className="w-3 h-3 border border-zinc-400 shrink-0"
-                                    style={{ backgroundColor: hex }}
+                              <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-zinc-200">
+                                <div className="flex items-center gap-2">
+                                  <input
+                                    type="color"
+                                    value={
+                                      /^#([0-9A-Fa-f]{6})$/.test(hex)
+                                        ? hex
+                                        : '#09090B'
+                                    }
+                                    onChange={(e) => {
+                                      const nextHex = e.target.value;
+                                      setCustomColorHexMap((prev) => ({
+                                        ...prev,
+                                        [variant.colorName.toLowerCase()]:
+                                          nextHex,
+                                      }));
+                                      handleCatalogVariantChange(
+                                        prod,
+                                        variant.colorName,
+                                        (v) => ({
+                                          ...v,
+                                          colorHex: nextHex,
+                                        })
+                                      );
+                                    }}
+                                    title="Click to adjust color swatch hex"
+                                    className="w-6 h-6 p-0.5 bg-white border border-zinc-400 cursor-pointer shrink-0"
                                   />
-                                  <span className="font-extrabold uppercase text-zinc-950">
+                                  <span className="font-extrabold uppercase text-zinc-950 text-xs">
                                     {variant.colorName}
                                   </span>
+                                  <span className="text-[10px] font-mono-tabular text-zinc-500">
+                                    ({hex})
+                                  </span>
                                 </div>
-                                <select
-                                  value={variant.sizeType}
-                                  onChange={(e) => {
-                                    const nextType = e.target.value as SizeType;
-                                    const nextSizes =
-                                      getDefaultSizesForType(nextType);
-                                    handleCatalogVariantChange(
-                                      prod,
-                                      variant.colorName,
-                                      (v) => ({
-                                        ...v,
-                                        sizeType: nextType,
-                                        sizes: nextSizes,
-                                        sizeQuantities: buildSizeQuantitiesMap(
-                                          nextSizes,
-                                          {}
-                                        ),
-                                      })
+                              </div>
+
+                              {/* 4 Upload Photos for this Color (1st shows on Website Card when color clicked; all 4 show in Item Pop-up) */}
+                              <div className="space-y-2 p-2.5 bg-zinc-50 border border-zinc-200 rounded-lg">
+                                <div className="text-[10px] font-bold uppercase tracking-wider text-zinc-800">
+                                  4 Photos for {variant.colorName} (Photo #1
+                                  shows on website card when color is clicked;
+                                  all 4 appear in item pop-up · Auto-shrinks to
+                                  ~50 KB WebP):
+                                </div>
+                                {/* Photo 1 (Main Color Photo) */}
+                                <div>
+                                  <span className="block text-[10px] font-bold uppercase text-zinc-700 mb-0.5">
+                                    1. Primary Photo (Shown on Website Card &amp; First in Pop-up) *
+                                  </span>
+                                  <div className="flex items-start gap-1.5">
+                                    <input
+                                      type="text"
+                                      value={variant.imageUrl}
+                                      onChange={(e) =>
+                                        handleCatalogVariantChange(
+                                          prod,
+                                          variant.colorName,
+                                          (v) => ({
+                                            ...v,
+                                            imageUrl: e.target.value,
+                                          })
+                                        )
+                                      }
+                                      placeholder={`Photo #1 URL for ${variant.colorName}`}
+                                      className="flex-1 min-w-0 px-2.5 py-1.5 text-xs bg-white border border-zinc-300"
+                                    />
+                                    <R2ImageUploadButton
+                                      compact={true}
+                                      ariaLabel={`Upload Photo 1 for ${prod.name} color ${variant.colorName}`}
+                                      onUploaded={(url) =>
+                                        handleCatalogVariantChange(
+                                          prod,
+                                          variant.colorName,
+                                          (v) => ({
+                                            ...v,
+                                            imageUrl: url,
+                                          })
+                                        )
+                                      }
+                                    />
+                                  </div>
+                                </div>
+
+                                {/* Photos 2, 3, 4 (Pop-up Gallery Photos for this Color) */}
+                                {[0, 1, 2].map((gIdx) => (
+                                  <div key={gIdx}>
+                                    <span className="block text-[10px] font-bold uppercase text-zinc-600 mb-0.5">
+                                      {gIdx + 2}. Color Photo #{gIdx + 2} (Shown in Product Pop-up)
+                                    </span>
+                                    <div className="flex items-start gap-1.5">
+                                      <input
+                                        type="text"
+                                        value={gUrls[gIdx] || ''}
+                                        onChange={(e) => {
+                                          const nextVal = e.target.value;
+                                          handleCatalogVariantChange(
+                                            prod,
+                                            variant.colorName,
+                                            (v) => {
+                                              const nextGallery = [
+                                                ...(v.galleryUrls || [
+                                                  '',
+                                                  '',
+                                                  '',
+                                                ]),
+                                              ];
+                                              while (nextGallery.length < 3) {
+                                                nextGallery.push('');
+                                              }
+                                              nextGallery[gIdx] = nextVal;
+                                              return {
+                                                ...v,
+                                                galleryUrls: nextGallery,
+                                              };
+                                            }
+                                          );
+                                        }}
+                                        placeholder={`Photo #${gIdx + 2} URL for ${variant.colorName} (Optional)`}
+                                        className="flex-1 min-w-0 px-2.5 py-1.5 text-xs bg-white border border-zinc-300"
+                                      />
+                                      <R2ImageUploadButton
+                                        compact={true}
+                                        ariaLabel={`Upload Photo ${gIdx + 2} for ${prod.name} color ${variant.colorName}`}
+                                        onUploaded={(url) =>
+                                          handleCatalogVariantChange(
+                                            prod,
+                                            variant.colorName,
+                                            (v) => {
+                                              const nextGallery = [
+                                                ...(v.galleryUrls || [
+                                                  '',
+                                                  '',
+                                                  '',
+                                                ]),
+                                              ];
+                                              while (nextGallery.length < 3) {
+                                                nextGallery.push('');
+                                              }
+                                              nextGallery[gIdx] = url;
+                                              return {
+                                                ...v,
+                                                galleryUrls: nextGallery,
+                                              };
+                                            }
+                                          )
+                                        }
+                                      />
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+
+                              {/* 3 Size Type Buttons for this Color */}
+                              <div className="space-y-2">
+                                <span className="block text-[10px] font-bold uppercase tracking-wider text-zinc-800">
+                                  Size Type for {variant.colorName} (Choose
+                                  Letter, Number, or Kids CM):
+                                </span>
+                                <div className="grid grid-cols-3 gap-1.5">
+                                  {(
+                                    [
+                                      {
+                                        id: 'letter',
+                                        label: '1. Letter (XS–XL)',
+                                      },
+                                      {
+                                        id: 'numeric',
+                                        label: '2. Number (36, 38...)',
+                                      },
+                                      {
+                                        id: 'cm',
+                                        label: '3. Kids CM (100 cm)',
+                                      },
+                                    ] as { id: SizeType; label: string }[]
+                                  ).map((st) => (
+                                    <button
+                                      key={st.id}
+                                      type="button"
+                                      onClick={() => {
+                                        const nextSizes =
+                                          getDefaultSizesForType(st.id);
+                                        handleCatalogVariantChange(
+                                          prod,
+                                          variant.colorName,
+                                          (v) => ({
+                                            ...v,
+                                            sizeType: st.id,
+                                            sizes: nextSizes,
+                                            sizeQuantities:
+                                              buildSizeQuantitiesMap(
+                                                nextSizes,
+                                                {}
+                                              ),
+                                          })
+                                        );
+                                      }}
+                                      className={`py-1.5 px-2 text-[10px] font-bold uppercase border cursor-pointer ${
+                                        variant.sizeType === st.id
+                                          ? 'bg-zinc-950 text-white border-zinc-950'
+                                          : 'bg-white text-zinc-700 border-zinc-300'
+                                      }`}
+                                    >
+                                      {st.label}
+                                    </button>
+                                  ))}
+                                </div>
+
+                                {/* Preset Sizes Toggle */}
+                                <div className="flex flex-wrap gap-1.5 pt-1">
+                                  {presetList.map((presetSz) => {
+                                    const active =
+                                      variant.sizes.includes(presetSz);
+                                    return (
+                                      <button
+                                        key={presetSz}
+                                        type="button"
+                                        onClick={() =>
+                                          handleCatalogVariantChange(
+                                            prod,
+                                            variant.colorName,
+                                            (v) => {
+                                              const nextSizes = active
+                                                ? v.sizes.filter(
+                                                    (s) => s !== presetSz
+                                                  )
+                                                : [...v.sizes, presetSz];
+                                              return {
+                                                ...v,
+                                                sizes: nextSizes,
+                                                sizeQuantities:
+                                                  buildSizeQuantitiesMap(
+                                                    nextSizes,
+                                                    v.sizeQuantities
+                                                  ),
+                                              };
+                                            }
+                                          )
+                                        }
+                                        className={`px-2 py-1 text-[10px] font-mono-tabular font-semibold border flex items-center gap-1 cursor-pointer ${
+                                          active
+                                            ? 'bg-zinc-950 text-white border-zinc-950'
+                                            : 'bg-white text-zinc-700 border-zinc-300'
+                                        }`}
+                                      >
+                                        {active && (
+                                          <Check className="w-2.5 h-2.5" />
+                                        )}
+                                        <span>{presetSz}</span>
+                                      </button>
                                     );
-                                  }}
-                                  className="px-2 py-1 text-[10px] font-bold uppercase border border-zinc-300 bg-zinc-50"
-                                >
-                                  <option value="letter">Letter (XS–XL)</option>
-                                  <option value="numeric">
-                                    Number (36–44)
-                                  </option>
-                                  <option value="cm">Kids CM (100 cm)</option>
-                                </select>
+                                  })}
+                                </div>
                               </div>
 
-                              <div className="flex items-start gap-1.5">
-                                <input
-                                  type="text"
-                                  value={variant.imageUrl}
-                                  onChange={(e) =>
-                                    handleCatalogVariantChange(
-                                      prod,
-                                      variant.colorName,
-                                      (v) => ({
-                                        ...v,
-                                        imageUrl: e.target.value,
-                                      })
-                                    )
-                                  }
-                                  placeholder={`Image URL for ${variant.colorName}`}
-                                  className="flex-1 min-w-0 px-2.5 py-1.5 text-xs bg-zinc-50 border border-zinc-300"
-                                />
-                                <R2ImageUploadButton
-                                  compact={true}
-                                  ariaLabel={`Upload Photo for ${prod.name} color ${variant.colorName}`}
-                                  onUploaded={(url) =>
-                                    handleCatalogVariantChange(
-                                      prod,
-                                      variant.colorName,
-                                      (v) => ({
-                                        ...v,
-                                        imageUrl: url,
-                                      })
-                                    )
-                                  }
-                                />
-                              </div>
-
-                              <div className="flex flex-wrap items-center gap-1.5">
+                              {/* Per-Size Stock & Custom Size Input */}
+                              <div className="flex flex-wrap items-center gap-1.5 pt-1">
                                 {variant.sizes.map((sz) => {
                                   const q = variant.sizeQuantities?.[sz] ?? 5;
                                   const isZero = q <= 0;
@@ -4167,8 +4674,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                         [sizeInputKey]: e.target.value,
                                       }))
                                     }
-                                    placeholder="+Size"
-                                    className="w-16 px-1.5 py-0.5 text-[10px] border border-zinc-300"
+                                    placeholder="Custom size (e.g. 103 cm, 36, XXL)"
+                                    className="w-40 px-2 py-1 text-[10px] border border-zinc-300"
                                   />
                                   <button
                                     type="button"
@@ -4204,9 +4711,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                         [sizeInputKey]: '',
                                       }));
                                     }}
-                                    className="px-2 py-0.5 bg-zinc-900 text-white text-[10px] font-bold cursor-pointer"
+                                    className="px-2.5 py-1 bg-zinc-900 text-white text-[10px] font-bold uppercase cursor-pointer"
                                   >
-                                    Add
+                                    + Add Size
                                   </button>
                                 </div>
                               </div>
@@ -4736,22 +5243,27 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </div>
 
                   {itemHasColors && (
-                    <div className="space-y-3">
+                    <div className="space-y-4">
+                      {/* Preset & Custom Color Swatch Selector */}
                       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                         {allColors.map((colName) => {
-                          const checked = draftColors.some(
+                          const existingDraft = draftColors.find(
                             (c) =>
                               c.colorName.toLowerCase() ===
                               colName.toLowerCase()
                           );
-                          const hex = getColorSwatchHex(colName);
+                          const checked = Boolean(existingDraft);
+                          const hex =
+                            existingDraft?.colorHex ||
+                            customColorHexMap[colName.toLowerCase()] ||
+                            getColorSwatchHex(colName);
                           return (
                             <button
                               key={colName}
                               type="button"
                               onClick={() => {
                                 setItemHasColors(true);
-                                toggleDraftColor(colName);
+                                toggleDraftColor(colName, hex);
                               }}
                               className={`px-2.5 py-2 text-xs font-medium border text-left flex items-center justify-between transition-colors cursor-pointer ${
                                 checked
@@ -4772,93 +5284,469 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         })}
                       </div>
 
+                      {/* ADD NEW COLOR NAME, HEX CODE, OR PICK FROM COLOR PALETTE */}
+                      <div className="p-3.5 bg-white border border-zinc-300 space-y-2.5">
+                        <span className="block text-[11px] font-bold uppercase tracking-wider text-zinc-900">
+                          Add New Color (Name, Hex Code, or Color Palette):
+                        </span>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <input
+                            type="text"
+                            value={newColorInput}
+                            onChange={(e) => setNewColorInput(e.target.value)}
+                            placeholder="Color Name (e.g. Emerald, Camel, Bordeaux)..."
+                            aria-label="New custom color name"
+                            className="flex-1 min-w-[160px] px-2.5 py-1.5 text-xs bg-white border border-zinc-300"
+                          />
+                          <div className="flex items-center gap-1.5">
+                            <input
+                              type="color"
+                              value={
+                                /^#([0-9A-Fa-f]{6})$/.test(newColorHexInput)
+                                  ? newColorHexInput
+                                  : '#3D4F2F'
+                              }
+                              onChange={(e) =>
+                                setNewColorHexInput(e.target.value)
+                              }
+                              aria-label="Pick color from palette wheel"
+                              title="Click to open Color Palette Picker"
+                              className="w-8 h-8 p-0.5 bg-white border border-zinc-300 cursor-pointer shrink-0"
+                            />
+                            <input
+                              type="text"
+                              value={newColorHexInput}
+                              onChange={(e) =>
+                                setNewColorHexInput(e.target.value)
+                              }
+                              placeholder="#HEX (e.g. #3D4F2F)"
+                              aria-label="New custom color hex code"
+                              className="w-28 px-2.5 py-1.5 text-xs font-mono-tabular bg-white border border-zinc-300"
+                            />
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleAddAndCheckCustomColor()}
+                            className="px-3.5 py-1.5 bg-zinc-950 text-white text-xs font-bold uppercase tracking-wider cursor-pointer hover:bg-zinc-800"
+                          >
+                            + Add Color
+                          </button>
+                        </div>
+
+                        {/* Quick Clickable Color Palette Swatches */}
+                        <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                          <span className="text-[10px] font-bold uppercase text-zinc-500 mr-1">
+                            Color Palette:
+                          </span>
+                          {LUXURY_PALETTE_SWATCHES.map((sw) => (
+                            <button
+                              key={sw.hex}
+                              type="button"
+                              title={`${sw.name} (${sw.hex})`}
+                              onClick={() => {
+                                if (!newColorInput.trim()) {
+                                  setNewColorInput(sw.name);
+                                }
+                                setNewColorHexInput(sw.hex);
+                              }}
+                              className="flex items-center gap-1 px-2 py-0.5 text-[10px] bg-zinc-50 hover:bg-zinc-100 border border-zinc-300 cursor-pointer"
+                            >
+                              <span
+                                className="w-3 h-3 border border-zinc-400 shrink-0"
+                                style={{ backgroundColor: sw.hex }}
+                              />
+                              <span className="text-zinc-800">{sw.name}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* CONFIGURE EACH SELECTED COLOR (4 Photos + 3 Size Types + Custom Size + Quantities) */}
                       {draftColors.map((dc, idx) => {
-                        const hex = getColorSwatchHex(dc.colorName);
+                        const hex =
+                          dc.colorHex ||
+                          customColorHexMap[dc.colorName.toLowerCase()] ||
+                          getColorSwatchHex(dc.colorName);
                         const presetList =
                           dc.sizeType === 'letter'
                             ? LETTER_SIZES
                             : dc.sizeType === 'numeric'
                             ? NUMERIC_SIZES
                             : CM_SIZES;
+                        const gUrls = dc.galleryUrls || ['', '', ''];
 
                         return (
                           <div
                             key={dc.colorName}
-                            className="p-3.5 bg-white border border-zinc-950 space-y-3"
+                            className="p-4 bg-white border-2 border-zinc-950 space-y-4"
                           >
-                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-zinc-200">
+                            {/* Color Header & Swatch Hex Picker */}
+                            <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-zinc-200">
                               <div className="flex items-center gap-2">
-                                <span
-                                  className="w-4 h-4 border border-zinc-500"
-                                  style={{ backgroundColor: hex }}
+                                <input
+                                  type="color"
+                                  value={
+                                    /^#([0-9A-Fa-f]{6})$/.test(hex)
+                                      ? hex
+                                      : '#09090B'
+                                  }
+                                  onChange={(e) => {
+                                    const nextHex = e.target.value;
+                                    setCustomColorHexMap((prev) => ({
+                                      ...prev,
+                                      [dc.colorName.toLowerCase()]: nextHex,
+                                    }));
+                                    updateDraftColorField(
+                                      dc.colorName,
+                                      (prev) => ({
+                                        ...prev,
+                                        colorHex: nextHex,
+                                      })
+                                    );
+                                  }}
+                                  title="Adjust color swatch hex"
+                                  className="w-6 h-6 p-0.5 bg-white border border-zinc-400 cursor-pointer shrink-0"
                                 />
                                 <span className="text-xs font-extrabold uppercase text-zinc-950">
                                   {idx + 1}. {dc.colorName}
                                 </span>
+                                <span className="text-[10px] font-mono-tabular text-zinc-500">
+                                  ({hex})
+                                </span>
                               </div>
-                              <div className="flex-1 sm:max-w-md flex items-start gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => toggleDraftColor(dc.colorName)}
+                                className="text-[10px] font-bold uppercase text-red-600 hover:underline cursor-pointer"
+                              >
+                                Remove Color
+                              </button>
+                            </div>
+
+                            {/* 4 PHOTO UPLOAD SLOTS FOR THIS COLOR */}
+                            <div className="p-3 bg-zinc-50 border border-zinc-200 space-y-2.5">
+                              <div className="text-[10px] font-bold uppercase tracking-wider text-zinc-900">
+                                Upload Up to 4 Photos for {dc.colorName} (Photo
+                                #1 appears on website card when customer clicks
+                                this color; all 4 appear in item pop-up ·
+                                Auto-shrinks to ~50 KB WebP):
+                              </div>
+
+                              {/* Slot 1: Primary Color Image */}
+                              <div>
+                                <span className="block text-[10px] font-bold uppercase text-zinc-700 mb-0.5">
+                                  1. Main Color Photo (Shown on Website Card &amp; First in Pop-up) *
+                                </span>
+                                <div className="flex items-start gap-1.5">
+                                  <input
+                                    type="text"
+                                    value={dc.imageUrl}
+                                    onChange={(e) =>
+                                      updateDraftColorField(
+                                        dc.colorName,
+                                        (prev) => ({
+                                          ...prev,
+                                          imageUrl: e.target.value,
+                                        })
+                                      )
+                                    }
+                                    placeholder={`1st Image URL for ${dc.colorName} (Main Card Photo)`}
+                                    className="flex-1 min-w-0 px-2.5 py-1.5 text-xs bg-white border border-zinc-300"
+                                  />
+                                  <R2ImageUploadButton
+                                    compact={true}
+                                    ariaLabel={`Upload Photo 1 for color ${dc.colorName}`}
+                                    onUploaded={(url) =>
+                                      updateDraftColorField(
+                                        dc.colorName,
+                                        (prev) => ({
+                                          ...prev,
+                                          imageUrl: url,
+                                        })
+                                      )
+                                    }
+                                  />
+                                </div>
+                              </div>
+
+                              {/* Slots 2, 3, 4: Additional Pop-up Photos for this Color */}
+                              {[0, 1, 2].map((gIdx) => (
+                                <div key={gIdx}>
+                                  <span className="block text-[10px] font-bold uppercase text-zinc-600 mb-0.5">
+                                    {gIdx + 2}. Color Photo #{gIdx + 2} (Shown in Item Pop-up Gallery)
+                                  </span>
+                                  <div className="flex items-start gap-1.5">
+                                    <input
+                                      type="text"
+                                      value={gUrls[gIdx] || ''}
+                                      onChange={(e) => {
+                                        const val = e.target.value;
+                                        updateDraftColorField(
+                                          dc.colorName,
+                                          (prev) => {
+                                            const nextG = [
+                                              ...(prev.galleryUrls || [
+                                                '',
+                                                '',
+                                                '',
+                                              ]),
+                                            ];
+                                            while (nextG.length < 3) {
+                                              nextG.push('');
+                                            }
+                                            nextG[gIdx] = val;
+                                            return {
+                                              ...prev,
+                                              galleryUrls: nextG,
+                                            };
+                                          }
+                                        );
+                                      }}
+                                      placeholder={`Photo #${gIdx + 2} URL for ${dc.colorName} (Optional)`}
+                                      className="flex-1 min-w-0 px-2.5 py-1.5 text-xs bg-white border border-zinc-300"
+                                    />
+                                    <R2ImageUploadButton
+                                      compact={true}
+                                      ariaLabel={`Upload Photo ${gIdx + 2} for color ${dc.colorName}`}
+                                      onUploaded={(url) =>
+                                        updateDraftColorField(
+                                          dc.colorName,
+                                          (prev) => {
+                                            const nextG = [
+                                              ...(prev.galleryUrls || [
+                                                '',
+                                                '',
+                                                '',
+                                              ]),
+                                            ];
+                                            while (nextG.length < 3) {
+                                              nextG.push('');
+                                            }
+                                            nextG[gIdx] = url;
+                                            return {
+                                              ...prev,
+                                              galleryUrls: nextG,
+                                            };
+                                          }
+                                        )
+                                      }
+                                    />
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+
+                            {/* 3 SIZE TYPE OPTIONS FOR THIS COLOR (Letter / Number / Kids CM) */}
+                            <div className="space-y-2.5">
+                              <span className="block text-[10px] font-bold uppercase tracking-wider text-zinc-900">
+                                Size Type &amp; Sizes for {dc.colorName} (Choose
+                                Letter, Number, or Kids CM):
+                              </span>
+                              <div className="grid grid-cols-3 gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    updateDraftColorField(
+                                      dc.colorName,
+                                      (prev) => ({
+                                        ...prev,
+                                        sizeType: 'letter',
+                                        sizes: [...LETTER_SIZES],
+                                        rawQuantities: {},
+                                      })
+                                    )
+                                  }
+                                  className={`py-2 px-2 text-[11px] font-bold uppercase border cursor-pointer ${
+                                    dc.sizeType === 'letter'
+                                      ? 'bg-zinc-950 text-white border-zinc-950'
+                                      : 'bg-white text-zinc-700 border-zinc-300'
+                                  }`}
+                                >
+                                  1. Letter (XS–XL)
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    updateDraftColorField(
+                                      dc.colorName,
+                                      (prev) => ({
+                                        ...prev,
+                                        sizeType: 'numeric',
+                                        sizes: [...NUMERIC_SIZES],
+                                        rawQuantities: {},
+                                      })
+                                    )
+                                  }
+                                  className={`py-2 px-2 text-[11px] font-bold uppercase border cursor-pointer ${
+                                    dc.sizeType === 'numeric'
+                                      ? 'bg-zinc-950 text-white border-zinc-950'
+                                      : 'bg-white text-zinc-700 border-zinc-300'
+                                  }`}
+                                >
+                                  2. Number (36, 38...)
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    updateDraftColorField(
+                                      dc.colorName,
+                                      (prev) => ({
+                                        ...prev,
+                                        sizeType: 'cm',
+                                        sizes: [...CM_SIZES],
+                                        rawQuantities: {},
+                                      })
+                                    )
+                                  }
+                                  className={`py-2 px-2 text-[11px] font-bold uppercase border cursor-pointer ${
+                                    dc.sizeType === 'cm'
+                                      ? 'bg-zinc-950 text-white border-zinc-950'
+                                      : 'bg-white text-zinc-700 border-zinc-300'
+                                  }`}
+                                >
+                                  3. Kids CM (100 cm)
+                                </button>
+                              </div>
+
+                              {/* Preset Size Toggles */}
+                              <div className="flex flex-wrap gap-1.5">
+                                {presetList.map((presetSz) => {
+                                  const active = dc.sizes.includes(presetSz);
+                                  return (
+                                    <button
+                                      key={presetSz}
+                                      type="button"
+                                      onClick={() =>
+                                        updateDraftColorField(
+                                          dc.colorName,
+                                          (prev) => {
+                                            const nextSizes = active
+                                              ? prev.sizes.filter(
+                                                  (s) => s !== presetSz
+                                                )
+                                              : [...prev.sizes, presetSz];
+                                            return {
+                                              ...prev,
+                                              sizes: nextSizes,
+                                            };
+                                          }
+                                        )
+                                      }
+                                      className={`px-2.5 py-1 text-[11px] font-mono-tabular font-semibold border flex items-center gap-1 cursor-pointer ${
+                                        active
+                                          ? 'bg-zinc-950 text-white border-zinc-950'
+                                          : 'bg-white text-zinc-700 border-zinc-300'
+                                      }`}
+                                    >
+                                      {active && <Check className="w-3 h-3" />}
+                                      <span>{presetSz}</span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+
+                              {/* Custom Size Input (e.g. 103 cm, 36, XXL) */}
+                              <div className="flex gap-2">
                                 <input
                                   type="text"
-                                  value={dc.imageUrl}
+                                  value={dc.customSizeInput || ''}
                                   onChange={(e) =>
                                     updateDraftColorField(
                                       dc.colorName,
                                       (prev) => ({
                                         ...prev,
-                                        imageUrl: e.target.value,
+                                        customSizeInput: e.target.value,
                                       })
                                     )
                                   }
-                                  placeholder={`Image URL for ${dc.colorName}`}
-                                  className="flex-1 min-w-0 px-2.5 py-1.5 text-xs border border-zinc-300"
+                                  placeholder={
+                                    dc.sizeType === 'cm'
+                                      ? 'Add custom CM size (e.g. 103 cm)'
+                                      : dc.sizeType === 'numeric'
+                                      ? 'Add custom numeric size (e.g. 36, 46)'
+                                      : 'Add custom size (e.g. XXL, One Size)'
+                                  }
+                                  className="flex-1 px-2.5 py-1.5 text-xs bg-white border border-zinc-300"
                                 />
-                                <R2ImageUploadButton
-                                  compact={true}
-                                  ariaLabel={`Upload Photo for color ${dc.colorName}`}
-                                  onUploaded={(url) =>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const raw = (
+                                      dc.customSizeInput || ''
+                                    ).trim();
+                                    if (!raw) return;
+                                    const normalized = normalizeSizeEntry(
+                                      raw,
+                                      dc.sizeType
+                                    );
+                                    if (!normalized) return;
                                     updateDraftColorField(
                                       dc.colorName,
-                                      (prev) => ({
-                                        ...prev,
-                                        imageUrl: url,
-                                      })
-                                    )
-                                  }
-                                />
-                              </div>
-                            </div>
-
-                            <div className="flex flex-wrap gap-1.5">
-                              {presetList.map((presetSz) => {
-                                const active = dc.sizes.includes(presetSz);
-                                return (
-                                  <button
-                                    key={presetSz}
-                                    type="button"
-                                    onClick={() =>
-                                      updateDraftColorField(
-                                        dc.colorName,
-                                        (prev) => ({
+                                      (prev) => {
+                                        const nextSizes = prev.sizes.includes(
+                                          normalized
+                                        )
+                                          ? prev.sizes
+                                          : [...prev.sizes, normalized];
+                                        return {
                                           ...prev,
-                                          sizes: active
-                                            ? prev.sizes.filter(
-                                                (s) => s !== presetSz
-                                              )
-                                            : [...prev.sizes, presetSz],
-                                        })
-                                      )
-                                    }
-                                    className={`px-2 py-1 text-[11px] font-mono-tabular font-semibold border flex items-center gap-1 cursor-pointer ${
-                                      active
-                                        ? 'bg-zinc-950 text-white border-zinc-950'
-                                        : 'bg-white text-zinc-700 border-zinc-300'
-                                    }`}
-                                  >
-                                    {active && <Check className="w-3 h-3" />}
-                                    <span>{presetSz}</span>
-                                  </button>
-                                );
-                              })}
+                                          sizes: nextSizes,
+                                          rawQuantities: {
+                                            ...(prev.rawQuantities || {}),
+                                            [normalized]:
+                                              prev.rawQuantities?.[normalized] ??
+                                              '5',
+                                          },
+                                          customSizeInput: '',
+                                        };
+                                      }
+                                    );
+                                  }}
+                                  className="px-3 py-1.5 bg-zinc-900 text-white text-xs font-bold uppercase cursor-pointer"
+                                >
+                                  + Add Size
+                                </button>
+                              </div>
+
+                              {/* Per-Size Quantity Inputs for this Color */}
+                              {dc.sizes.length > 0 && (
+                                <div className="pt-2 border-t border-zinc-200 space-y-1.5">
+                                  <span className="block text-[10px] font-bold uppercase tracking-wider text-zinc-700">
+                                    Stock Quantity per Size for {dc.colorName}:
+                                  </span>
+                                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                                    {dc.sizes.map((sz) => (
+                                      <div
+                                        key={sz}
+                                        className="flex items-center justify-between gap-1.5 p-1.5 bg-zinc-50 border border-zinc-300"
+                                      >
+                                        <span className="text-xs font-mono-tabular font-bold text-zinc-900 truncate">
+                                          {sz}
+                                        </span>
+                                        <input
+                                          type="number"
+                                          min="0"
+                                          value={dc.rawQuantities?.[sz] ?? '5'}
+                                          onChange={(e) => {
+                                            const val = e.target.value;
+                                            updateDraftColorField(
+                                              dc.colorName,
+                                              (prev) => ({
+                                                ...prev,
+                                                rawQuantities: {
+                                                  ...(prev.rawQuantities || {}),
+                                                  [sz]: val,
+                                                },
+                                              })
+                                            );
+                                          }}
+                                          className="w-16 px-1.5 py-1 text-xs font-mono-tabular text-right bg-white border border-zinc-300"
+                                        />
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           </div>
                         );

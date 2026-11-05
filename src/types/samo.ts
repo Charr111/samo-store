@@ -36,6 +36,7 @@ export interface ProductColorVariant {
   colorName: string;
   colorHex?: string;
   imageUrl: string;
+  galleryUrls?: string[];
   sizeType: SizeType;
   sizes: string[];
   sizeQuantities: Record<string, number>;

@@ -68,11 +68,11 @@ export const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({
         <video
           key={effectiveVideoUrl}
           ref={videoRef}
-          src={effectiveVideoUrl}
           autoPlay
           loop
           muted={isMuted}
           playsInline
+          preload="auto"
           onTimeUpdate={(e) => {
             if (!isDefaultClip) return;
             const vid = e.currentTarget;
@@ -85,17 +85,29 @@ export const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({
               e.currentTarget.currentTime = 0.25;
             }
           }}
-          onError={() => {
-            if (!customVideoFailed && requestedVideoUrl !== DEFAULT_HERO_VIDEO) {
+          onError={(e) => {
+            console.warn('[SAMO Atelier] Hero video playback notice:', e);
+            if (!effectiveVideoUrl || effectiveVideoUrl === '') {
               setCustomVideoFailed(true);
-            } else {
-              setVideoFailed(true);
             }
           }}
           className={`h-full w-full object-cover opacity-90 ${
             isDefaultClip ? 'object-[50%_75%] scale-[1.24] origin-bottom' : 'object-center'
           }`}
-        />
+        >
+          {effectiveVideoUrl.toLowerCase().endsWith('.webm') && (
+            <source src={effectiveVideoUrl} type="video/webm" />
+          )}
+          {effectiveVideoUrl.toLowerCase().endsWith('.mov') && (
+            <source src={effectiveVideoUrl} type="video/quicktime" />
+          )}
+          {(effectiveVideoUrl.toLowerCase().endsWith('.hevc') ||
+            effectiveVideoUrl.toLowerCase().endsWith('.m4v')) && (
+            <source src={effectiveVideoUrl} type='video/mp4; codecs="hevc"' />
+          )}
+          <source src={effectiveVideoUrl} type="video/mp4" />
+          <source src={effectiveVideoUrl} />
+        </video>
       ) : (
         <div className="h-full w-full opacity-90">
           <ProductImage

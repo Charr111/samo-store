@@ -1128,6 +1128,7 @@ export function buildDefaultCategoryBannerForCategory(
     title: `${displayCat.toUpperCase()} EDITORIAL ARCHIVE`,
     enabled: true,
     insertAfterCount: 4,
+    updatedAt: new Date().toISOString(),
   };
 }
 
@@ -1241,7 +1242,10 @@ export function mergeSiteBannersConfig(
             typeof val.insertAfterCount === 'number' && val.insertAfterCount >= 2
               ? val.insertAfterCount
               : fallback?.insertAfterCount ?? 4,
-          updatedAt: val.updatedAt,
+          updatedAt:
+            typeof val.updatedAt === 'string' && val.updatedAt
+              ? val.updatedAt
+              : fallback?.updatedAt || new Date().toISOString(),
         };
       }
     }

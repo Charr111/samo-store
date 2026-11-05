@@ -26,6 +26,7 @@ export const CatalogProductCard: React.FC<CatalogProductCardProps> = ({
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const [activeSlideIndex, setActiveSlideIndex] = useState(0);
   const [selectedColorIndex, setSelectedColorIndex] = useState(0);
+  const [userClickedColorSwatch, setUserClickedColorSwatch] = useState(false);
 
   const hasColorVariants =
     Boolean(product.hasColors) &&
@@ -38,9 +39,21 @@ export const CatalogProductCard: React.FC<CatalogProductCardProps> = ({
       ]
     : null;
 
-  // Build ordered list of scrollable 4:5 images for this card (up to 4 angles)
+  // Build ordered list of scrollable 4:5 images for this card.
+  // When a customer on website view clicks a color swatch (or when color has its own gallery),
+  // only the first image uploaded to that color appears on the card (all color images appear in the item pop-up).
   const slideUrls = useMemo(() => {
-    const primaryUrl = activeVariant?.imageUrl || product.imageUrl;
+    const primaryUrl = (activeVariant?.imageUrl || product.imageUrl || '').trim();
+    if (
+      hasColorVariants &&
+      activeVariant &&
+      (userClickedColorSwatch ||
+        (Array.isArray(activeVariant.galleryUrls) &&
+          activeVariant.galleryUrls.length > 0))
+    ) {
+      return [primaryUrl || 'studio://samo-item'];
+    }
+
     const rawList = [
       primaryUrl,
       ...(Array.isArray(product.galleryUrls) ? product.galleryUrls : []),
@@ -58,7 +71,13 @@ export const CatalogProductCard: React.FC<CatalogProductCardProps> = ({
       deduped.push(`${deduped[0]}-profile`);
     }
     return deduped.length > 0 ? deduped.slice(0, 4) : ['studio://samo-item'];
-  }, [activeVariant, product.imageUrl, product.galleryUrls]);
+  }, [
+    activeVariant,
+    hasColorVariants,
+    userClickedColorSwatch,
+    product.imageUrl,
+    product.galleryUrls,
+  ]);
 
   const totalQty = sumSizeQuantities(product.sizes, product.sizeQuantities);
   const isOutOfStock = totalQty <= 0 || !product.inStock;
@@ -90,6 +109,7 @@ export const CatalogProductCard: React.FC<CatalogProductCardProps> = ({
   const handleSelectColorSwatch = (e: React.MouseEvent, idx: number) => {
     e.stopPropagation();
     setSelectedColorIndex(idx);
+    setUserClickedColorSwatch(true);
     setActiveSlideIndex(0);
     if (scrollContainerRef.current) {
       scrollContainerRef.current.scrollTo({ left: 0, behavior: 'smooth' });

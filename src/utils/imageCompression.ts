@@ -167,13 +167,61 @@ function renderToCanvas(
 /**
  * Compresses an image File in the browser (c_limit 600x750 4:5 studio ratio, adaptive quality).
  * Guarantees 1.2 MB - 5 MB mobile camera photos shrink down to ~30 KB - 60 KB across
- * both iOS Safari/WebKit and Android/Desktop Chrome.
+/**
+ * Converts iPhone HEIC/HEIF photos to a standard JPEG Blob if the browser cannot decode them natively.
+ */
+async function convertHeicToJpegIfNeeded(file: File): Promise<Blob> {
+  const isHeic =
+    file.name.toLowerCase().endsWith('.heic') ||
+    file.name.toLowerCase().endsWith('.heif') ||
+    file.type === 'image/heic' ||
+    file.type === 'image/heif';
+
+  if (!isHeic) {
+    return file;
+  }
+
+  // Check if browser decodes HEIC natively (e.g. Safari on iOS 17+)
+  if (typeof createImageBitmap === 'function') {
+    try {
+      const bmp = await createImageBitmap(file);
+      if (bmp.width > 0 && bmp.height > 0) {
+        bmp.close();
+        return file;
+      }
+    } catch {}
+  }
+
+  try {
+    const heic2anyModule = await import('heic2any');
+    const heic2any = heic2anyModule.default || heic2anyModule;
+    const converted = await heic2any({
+      blob: file,
+      toType: 'image/jpeg',
+      quality: 0.88,
+    });
+    return Array.isArray(converted) ? converted[0] : converted;
+  } catch (err) {
+    console.warn('heic2any conversion fallback:', err);
+    return file;
+  }
+}
+
+/**
+ * Compresses an image File in the browser (c_limit 600x750 4:5 studio ratio, adaptive quality).
+ * Guarantees 1.2 MB - 8 MB mobile camera photos (including iPhone HEIC and JPG) shrink down to
+ * ~30 KB - 60 KB WebP/JPEG across both iOS Safari/WebKit and Android/Desktop Chrome.
  */
 export async function compressImageToWebP(
   file: File,
   options?: ImageCompressionOptions
 ): Promise<CompressedImageResult> {
-  if (!file || !file.type.startsWith('image/')) {
+  const isImageCandidate =
+    Boolean(file) &&
+    ((file.type && file.type.startsWith('image/')) ||
+      /\.(jpe?g|png|webp|heic|heif|gif|avif)$/i.test(file.name || ''));
+
+  if (!isImageCandidate) {
     throw new Error('Please select a valid image file (JPG, PNG, WebP, HEIC).');
   }
 
@@ -182,7 +230,8 @@ export async function compressImageToWebP(
   const initialQuality = options?.quality ?? 0.72;
   const targetMaxBytes = options?.targetMaxBytes ?? 60 * 1024; // 60 KB target budget
 
-  const objectUrl = URL.createObjectURL(file);
+  const decodedBlob = await convertHeicToJpegIfNeeded(file);
+  const objectUrl = URL.createObjectURL(decodedBlob);
 
   try {
     const img = await new Promise<HTMLImageElement>((resolve, reject) => {
@@ -301,25 +350,44 @@ export async function uploadCompressedImageToR2(
 }
 
 /**
- * Uploads a video file (.mp4 / .webm / .mov) to Cloudflare R2 via /api/r2-upload for the Hero Video Banner.
+ * Uploads a video file (.mp4 / .webm / .mov / .hevc / .m4v) to Cloudflare R2 via /api/r2-upload.
+ * Supports iPhone HEVC, QuickTime .mov, and standard MP4/WebM videos up to 35 MB.
  */
 export async function uploadVideoFileToR2(file: File): Promise<{
   url: string;
   sizeKB: number;
 }> {
-  if (!file || !file.type.startsWith('video/')) {
-    throw new Error('Please select a valid video file (.mp4, .webm, .mov).');
+  const isVideoCandidate =
+    Boolean(file) &&
+    ((file.type && file.type.startsWith('video/')) ||
+      /\.(mp4|webm|mov|hevc|m4v|qt|mkv)$/i.test(file.name || ''));
+
+  if (!file || !isVideoCandidate) {
+    throw new Error('Please select a valid video file (.mp4, .mov, .hevc, .webm).');
   }
-  if (file.size > 25 * 1024 * 1024) {
-    throw new Error('Video file exceeds 25 MB limit. Please upload a shorter clip.');
+  if (file.size > 35 * 1024 * 1024) {
+    throw new Error('Video file exceeds 35 MB limit. Please upload a shorter clip.');
   }
 
   const base64Data = await blobToBase64Data(file);
-  const ext = file.type.includes('webm')
-    ? 'webm'
-    : file.type.includes('quicktime')
-    ? 'mov'
-    : 'mp4';
+
+  const isHevc =
+    file.name.toLowerCase().endsWith('.hevc') ||
+    (typeof file.type === 'string' && file.type.includes('hevc'));
+  const isWebm =
+    file.name.toLowerCase().endsWith('.webm') ||
+    (typeof file.type === 'string' && file.type.includes('webm'));
+  const isMov =
+    file.name.toLowerCase().endsWith('.mov') ||
+    (typeof file.type === 'string' && file.type.includes('quicktime'));
+
+  const ext = isHevc ? 'hevc' : isWebm ? 'webm' : isMov ? 'mov' : 'mp4';
+  const resolvedContentType = isWebm
+    ? 'video/webm'
+    : isMov
+    ? 'video/quicktime'
+    : 'video/mp4';
+
   const safeBase = (file.name || 'samo-hero-video')
     .replace(/\.[^/.]+$/, '')
     .toLowerCase()
@@ -335,7 +403,7 @@ export async function uploadVideoFileToR2(file: File): Promise<{
     },
     body: JSON.stringify({
       fileName,
-      contentType: file.type || 'video/mp4',
+      contentType: resolvedContentType,
       base64Data,
     }),
   });

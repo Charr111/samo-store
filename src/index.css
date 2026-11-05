@@ -32,3 +32,95 @@
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
+
+/* Scoped Light Mode Theme for SAMO /admin Dashboard Only */
+.samo-admin-light {
+  background-color: #f4f4f6 !important;
+  color: #111113 !important;
+}
+
+.samo-admin-light aside,
+.samo-admin-light header,
+.samo-admin-light nav[aria-label="Mobile Admin Bottom Bar"] {
+  background-color: #ffffff !important;
+  border-color: #e4e4e7 !important;
+  color: #111113 !important;
+}
+
+.samo-admin-light .bg-\[\#0E0E10\],
+.samo-admin-light .bg-\[\#141417\] {
+  background-color: #f4f4f6 !important;
+}
+
+.samo-admin-light .bg-\[\#18181C\],
+.samo-admin-light .bg-zinc-900,
+.samo-admin-light .bg-zinc-900\/90,
+.samo-admin-light .bg-zinc-900\/80 {
+  background-color: #ffffff !important;
+  color: #111113 !important;
+  border-color: #e4e4e7 !important;
+}
+
+.samo-admin-light .bg-zinc-950:not(button):not([role="switch"]) {
+  background-color: #f8f8fa !important;
+  color: #111113 !important;
+}
+
+.samo-admin-light .border-zinc-800,
+.samo-admin-light .border-zinc-800\/90,
+.samo-admin-light .border-zinc-800\/80,
+.samo-admin-light .border-zinc-700 {
+  border-color: #d4d4d8 !important;
+}
+
+.samo-admin-light .divide-zinc-800\/80 > :not([hidden]) ~ :not([hidden]),
+.samo-admin-light .divide-zinc-800 > :not([hidden]) ~ :not([hidden]) {
+  border-color: #e4e4e7 !important;
+}
+
+.samo-admin-light h1.text-white,
+.samo-admin-light h2.text-white,
+.samo-admin-light h3.text-white,
+.samo-admin-light span.text-white,
+.samo-admin-light div.text-white,
+.samo-admin-light p.text-white {
+  color: #111113 !important;
+}
+
+.samo-admin-light .text-zinc-100,
+.samo-admin-light .text-zinc-200,
+.samo-admin-light .text-zinc-300 {
+  color: #27272a !important;
+}
+
+.samo-admin-light .text-zinc-400,
+.samo-admin-light .text-zinc-500 {
+  color: #52525b !important;
+}
+
+.samo-admin-light input:not([type="checkbox"]):not([type="color"]),
+.samo-admin-light select,
+.samo-admin-light textarea {
+  background-color: #ffffff !important;
+  color: #111113 !important;
+  border-color: #d4d4d8 !important;
+}
+
+.samo-admin-light button.bg-white.text-zinc-950 {
+  background-color: #111113 !important;
+  color: #ffffff !important;
+  border: 1px solid #111113 !important;
+}
+
+.samo-admin-light button.bg-white.text-zinc-950 span {
+  color: #ffffff !important;
+}
+
+.samo-admin-light button[role="switch"].bg-white {
+  background-color: #111113 !important;
+}
+
+.samo-admin-light button[role="switch"].bg-white > span {
+  background-color: #ffffff !important;
+}
+
