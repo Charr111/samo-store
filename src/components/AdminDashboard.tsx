@@ -530,6 +530,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     'L',
   ]);
   const [setPiece1Colors, setSetPiece1Colors] = useState<string[]>([]);
+  const [setPiece1Category, setSetPiece1Category] = useState<string>('');
 
   const [setPiece2ProductId, setSetPiece2ProductId] = useState<string>('');
   const [setPiece2Search, setSetPiece2Search] = useState<string>('');
@@ -545,6 +546,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     '42',
   ]);
   const [setPiece2Colors, setSetPiece2Colors] = useState<string[]>([]);
+  const [setPiece2Category, setSetPiece2Category] = useState<string>('');
 
   // Custom Months & Years Presets Added by Admin
   const [customMonthsSizes, setCustomMonthsSizes] = useState<string[]>([]);
@@ -609,6 +611,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const allStandaloneProducts = products.filter(
     (p) => !p.isFullSet && p.category.trim().toLowerCase() !== 'full set'
   );
+  const womenCategories = getCategoriesByDepartment(categories, 'women').filter(
+    (c) => c.name.trim().toLowerCase() !== 'full set'
+  );
+  const womenStandaloneProducts = products.filter(
+    (p) =>
+      p.department === 'women' &&
+      !p.isFullSet &&
+      p.category.trim().toLowerCase() !== 'full set'
+  );
 
   const getPresetsForSizeType = (st: SizeType): string[] => {
     if (st === 'letter') return [...LETTER_SIZES];
@@ -646,6 +657,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     if (pieceNum === 1) {
       setSetPiece1ProductId(selectedProdId);
       if (found) {
+        setSetPiece1Category(found.category);
         setSetPiece1Label(found.category || 'Piece 1');
         setSetPiece1SizeType(found.sizeType);
         setSetPiece1Sizes([...found.sizes]);
@@ -662,6 +674,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     } else {
       setSetPiece2ProductId(selectedProdId);
       if (found) {
+        setSetPiece2Category(found.category);
         setSetPiece2Label(found.category || 'Piece 2');
         setSetPiece2SizeType(found.sizeType);
         setSetPiece2Sizes([...found.sizes]);
@@ -921,7 +934,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
     // CASE A: 2-PIECE LINKED FULL SET PRODUCT
     if (isFullSetCategorySelected) {
-      const pool = allStandaloneProducts;
+      const pool =
+        womenStandaloneProducts.length > 0
+          ? womenStandaloneProducts
+          : allStandaloneProducts;
       const p1Id = setPiece1ProductId || pool[0]?.id || '';
       const p2Id = setPiece2ProductId || pool[1]?.id || pool[0]?.id || '';
       const prod1 = products.find((p) => p.id === p1Id);
@@ -929,7 +945,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
       if (!prod1 || !prod2) {
         setItemFeedback(
-          'Please select two existing store products from any category to link into this Full Set.'
+          'Please select two existing store products from Women categories to link into this Full Set.'
         );
         return;
       }
@@ -5330,65 +5346,133 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               )}
                             </div>
 
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                              <div>
-                                <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-700 mb-1">
-                                  Select Item from Any Category *
-                                </label>
-                                <select
-                                  value={linkedProd?.id || ''}
-                                  onChange={(e) => {
-                                    const picked = allStandaloneProducts.find(
-                                      (p) => p.id === e.target.value
-                                    );
-                                    if (!picked) return;
-                                    const defaultCols =
-                                      picked.hasColors &&
-                                      picked.colorVariants?.length
-                                        ? [picked.colorVariants[0].colorName]
-                                        : [];
-                                    handleUpdateEditFullSetPiece(
-                                      picked,
-                                      picked.category ||
-                                        `Piece ${pieceIdx + 1}`,
-                                      defaultCols
-                                    );
-                                  }}
-                                  className="w-full px-2.5 py-1.5 text-xs bg-white border border-zinc-300"
-                                >
-                                  {allStandaloneProducts.map((sp) => (
-                                    <option key={sp.id} value={sp.id}>
-                                      [{sp.department.toUpperCase()} ·{' '}
-                                      {sp.category}] {sp.name} (${sp.price})
-                                    </option>
-                                  ))}
-                                </select>
-                              </div>
+                            {(() => {
+                              const editPieceCat =
+                                linkedProd?.category ||
+                                womenCategories[pieceIdx]?.name ||
+                                womenCategories[0]?.name ||
+                                '';
+                              const pieceProdsForCat =
+                                womenStandaloneProducts.filter(
+                                  (p) =>
+                                    p.category.trim().toLowerCase() ===
+                                    editPieceCat.trim().toLowerCase()
+                                );
 
-                              <div>
-                                <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-700 mb-1">
-                                  Piece Label Shown on Website
-                                </label>
-                                <input
-                                  type="text"
-                                  value={piece?.pieceLabel || ''}
-                                  onChange={(e) => {
-                                    if (!linkedProd) return;
-                                    handleUpdateEditFullSetPiece(
-                                      linkedProd,
-                                      e.target.value,
-                                      activeColorNames
-                                    );
-                                  }}
-                                  placeholder={
-                                    pieceIdx === 0
-                                      ? 'e.g. Shirt / Top'
-                                      : 'e.g. Trousers / Pants'
-                                  }
-                                  className="w-full px-2.5 py-1.5 text-xs bg-white border border-zinc-300"
-                                />
-                              </div>
-                            </div>
+                              return (
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                                  <div>
+                                    <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-700 mb-1">
+                                      Category (Women Only) *
+                                    </label>
+                                    <select
+                                      aria-label={`Select Piece ${pieceIdx + 1} Category`}
+                                      value={editPieceCat}
+                                      onChange={(e) => {
+                                        const newCat = e.target.value;
+                                        const matchingProds =
+                                          womenStandaloneProducts.filter(
+                                            (p) =>
+                                              p.category.trim().toLowerCase() ===
+                                              newCat.trim().toLowerCase()
+                                          );
+                                        if (matchingProds.length > 0) {
+                                          const picked = matchingProds[0];
+                                          const defaultCols =
+                                            picked.hasColors &&
+                                            picked.colorVariants?.length
+                                              ? [
+                                                  picked.colorVariants[0]
+                                                    .colorName,
+                                                ]
+                                              : [];
+                                          handleUpdateEditFullSetPiece(
+                                            picked,
+                                            picked.category ||
+                                              `Piece ${pieceIdx + 1}`,
+                                            defaultCols
+                                          );
+                                        }
+                                      }}
+                                      className="w-full px-2.5 py-1.5 text-xs bg-white border border-zinc-300"
+                                    >
+                                      {womenCategories.map((wc) => (
+                                        <option key={wc.id} value={wc.name}>
+                                          {wc.name}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </div>
+
+                                  <div>
+                                    <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-700 mb-1">
+                                      Product in Category *
+                                    </label>
+                                    <select
+                                      aria-label={`Select Piece ${pieceIdx + 1} Product`}
+                                      value={linkedProd?.id || ''}
+                                      onChange={(e) => {
+                                        const picked = products.find(
+                                          (p) => p.id === e.target.value
+                                        );
+                                        if (!picked) return;
+                                        const defaultCols =
+                                          picked.hasColors &&
+                                          picked.colorVariants?.length
+                                            ? [
+                                                picked.colorVariants[0]
+                                                  .colorName,
+                                              ]
+                                            : [];
+                                        handleUpdateEditFullSetPiece(
+                                          picked,
+                                          picked.category ||
+                                            `Piece ${pieceIdx + 1}`,
+                                          defaultCols
+                                        );
+                                      }}
+                                      className="w-full px-2.5 py-1.5 text-xs bg-white border border-zinc-300"
+                                    >
+                                      {pieceProdsForCat.length > 0 ? (
+                                        pieceProdsForCat.map((sp) => (
+                                          <option key={sp.id} value={sp.id}>
+                                            {sp.name} (${sp.price})
+                                          </option>
+                                        ))
+                                      ) : (
+                                        <option value="">
+                                          No products in this category
+                                        </option>
+                                      )}
+                                    </select>
+                                  </div>
+
+                                  <div>
+                                    <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-700 mb-1">
+                                      Piece Label Shown on Website
+                                    </label>
+                                    <input
+                                      type="text"
+                                      value={piece?.pieceLabel || ''}
+                                      onChange={(e) => {
+                                        if (!linkedProd) return;
+                                        handleUpdateEditFullSetPiece(
+                                          linkedProd,
+                                          e.target.value,
+                                          activeColorNames
+                                        );
+                                      }}
+                                      placeholder={
+                                        pieceIdx === 0
+                                          ? 'e.g. Shirt / Top'
+                                          : 'e.g. Trousers / Pants'
+                                      }
+                                      className="w-full px-2.5 py-1.5 text-xs bg-white border border-zinc-300"
+                                    />
+                                  </div>
+                                </div>
+                              );
+                            })()}
 
                             {linkedHasColors && linkedProd?.colorVariants && (
                               <div className="p-2.5 bg-zinc-50 border border-zinc-200 rounded space-y-2">
@@ -6980,22 +7064,42 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <Layers className="w-4 h-4" />
                       <span>
                         2-Piece Full Set Configuration (Select Shirt/Top &amp;
-                        Trousers/Bottom from Any Category)
+                        Trousers/Bottom from Women Categories)
                       </span>
                     </div>
                     <p className="text-[11px] text-zinc-600 mt-1">
-                      Size types, sizes, colors, materials, and live inventory
-                      are automatically inherited from the two selected store
-                      products below. When a customer purchases this Full Set,
-                      stock is deducted from each linked product in its original
-                      category.
+                      Select a Women category first, then choose the specific
+                      product in that category. Size types, sizes, colors,
+                      materials, and live inventory are automatically inherited
+                      from the two selected store products below. When a customer
+                      purchases this Full Set, stock is deducted from each linked
+                      product in its original category.
                     </p>
                   </div>
 
                   {/* PIECE 1 SELECTOR (e.g. Shirt / Top / Jacket) */}
                   {(() => {
+                    const p1Pool =
+                      womenStandaloneProducts.length > 0
+                        ? womenStandaloneProducts
+                        : allStandaloneProducts;
+                    const effectiveP1Cat =
+                      setPiece1Category ||
+                      products.find((p) => p.id === setPiece1ProductId)
+                        ?.category ||
+                      womenCategories[0]?.name ||
+                      p1Pool[0]?.category ||
+                      '';
+                    const p1ProductsForCat = p1Pool.filter(
+                      (p) =>
+                        p.category.trim().toLowerCase() ===
+                        effectiveP1Cat.trim().toLowerCase()
+                    );
                     const p1Id =
-                      setPiece1ProductId || allStandaloneProducts[0]?.id || '';
+                      setPiece1ProductId &&
+                      p1ProductsForCat.some((p) => p.id === setPiece1ProductId)
+                        ? setPiece1ProductId
+                        : p1ProductsForCat[0]?.id || p1Pool[0]?.id || '';
                     const prod1 = products.find((p) => p.id === p1Id);
                     const p1HasColors =
                       Boolean(prod1?.hasColors) &&
@@ -7021,10 +7125,42 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           )}
                         </div>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                           <div>
                             <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-700 mb-1">
-                              Choose Product from Any Category *
+                              Choose Category (Women Only) *
+                            </label>
+                            <select
+                              aria-label="Select Full Set Piece 1 Category"
+                              value={effectiveP1Cat}
+                              onChange={(e) => {
+                                const newCat = e.target.value;
+                                setSetPiece1Category(newCat);
+                                const matchingProds = p1Pool.filter(
+                                  (p) =>
+                                    p.category.trim().toLowerCase() ===
+                                    newCat.trim().toLowerCase()
+                                );
+                                if (matchingProds.length > 0) {
+                                  handleSelectSetPieceProduct(
+                                    1,
+                                    matchingProds[0].id
+                                  );
+                                }
+                              }}
+                              className="w-full px-2.5 py-2 text-xs bg-white border border-zinc-300"
+                            >
+                              {womenCategories.map((wc) => (
+                                <option key={wc.id} value={wc.name}>
+                                  {wc.name}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-700 mb-1">
+                              Choose Product in Category *
                             </label>
                             <select
                               aria-label="Select Full Set Piece 1 Product"
@@ -7034,12 +7170,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               }
                               className="w-full px-2.5 py-2 text-xs bg-white border border-zinc-300"
                             >
-                              {allStandaloneProducts.map((sp) => (
-                                <option key={sp.id} value={sp.id}>
-                                  [{sp.department.toUpperCase()} · {sp.category}
-                                  ] {sp.name} (${sp.price})
+                              {p1ProductsForCat.length > 0 ? (
+                                p1ProductsForCat.map((sp) => (
+                                  <option key={sp.id} value={sp.id}>
+                                    {sp.name} (${sp.price})
+                                  </option>
+                                ))
+                              ) : (
+                                <option value="">
+                                  No products in this category
                                 </option>
-                              ))}
+                              )}
                             </select>
                           </div>
 
@@ -7139,11 +7280,31 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
                   {/* PIECE 2 SELECTOR (e.g. Trousers / Pants / Skirt) */}
                   {(() => {
-                    const p2Id =
-                      setPiece2ProductId ||
-                      allStandaloneProducts[1]?.id ||
-                      allStandaloneProducts[0]?.id ||
+                    const p2Pool =
+                      womenStandaloneProducts.length > 0
+                        ? womenStandaloneProducts
+                        : allStandaloneProducts;
+                    const effectiveP2Cat =
+                      setPiece2Category ||
+                      products.find((p) => p.id === setPiece2ProductId)
+                        ?.category ||
+                      womenCategories[1]?.name ||
+                      womenCategories[0]?.name ||
+                      p2Pool[0]?.category ||
                       '';
+                    const p2ProductsForCat = p2Pool.filter(
+                      (p) =>
+                        p.category.trim().toLowerCase() ===
+                        effectiveP2Cat.trim().toLowerCase()
+                    );
+                    const p2Id =
+                      setPiece2ProductId &&
+                      p2ProductsForCat.some((p) => p.id === setPiece2ProductId)
+                        ? setPiece2ProductId
+                        : p2ProductsForCat[0]?.id ||
+                          p2Pool[1]?.id ||
+                          p2Pool[0]?.id ||
+                          '';
                     const prod2 = products.find((p) => p.id === p2Id);
                     const p2HasColors =
                       Boolean(prod2?.hasColors) &&
@@ -7170,10 +7331,42 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           )}
                         </div>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                           <div>
                             <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-700 mb-1">
-                              Choose Product from Any Category *
+                              Choose Category (Women Only) *
+                            </label>
+                            <select
+                              aria-label="Select Full Set Piece 2 Category"
+                              value={effectiveP2Cat}
+                              onChange={(e) => {
+                                const newCat = e.target.value;
+                                setSetPiece2Category(newCat);
+                                const matchingProds = p2Pool.filter(
+                                  (p) =>
+                                    p.category.trim().toLowerCase() ===
+                                    newCat.trim().toLowerCase()
+                                );
+                                if (matchingProds.length > 0) {
+                                  handleSelectSetPieceProduct(
+                                    2,
+                                    matchingProds[0].id
+                                  );
+                                }
+                              }}
+                              className="w-full px-2.5 py-2 text-xs bg-white border border-zinc-300"
+                            >
+                              {womenCategories.map((wc) => (
+                                <option key={wc.id} value={wc.name}>
+                                  {wc.name}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-700 mb-1">
+                              Choose Product in Category *
                             </label>
                             <select
                               aria-label="Select Full Set Piece 2 Product"
@@ -7183,12 +7376,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               }
                               className="w-full px-2.5 py-2 text-xs bg-white border border-zinc-300"
                             >
-                              {allStandaloneProducts.map((sp) => (
-                                <option key={sp.id} value={sp.id}>
-                                  [{sp.department.toUpperCase()} · {sp.category}
-                                  ] {sp.name} (${sp.price})
+                              {p2ProductsForCat.length > 0 ? (
+                                p2ProductsForCat.map((sp) => (
+                                  <option key={sp.id} value={sp.id}>
+                                    {sp.name} (${sp.price})
+                                  </option>
+                                ))
+                              ) : (
+                                <option value="">
+                                  No products in this category
                                 </option>
-                              ))}
+                              )}
                             </select>
                           </div>
 

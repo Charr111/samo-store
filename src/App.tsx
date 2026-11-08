@@ -2596,16 +2596,6 @@ export default function App() {
 
         <div className="px-6 py-4 flex flex-wrap items-center justify-between gap-4 text-[11px] uppercase tracking-wider text-zinc-800">
           <span>© 2026 SAMO LUXURY HOUSE (EST. 1999) — ALL RIGHTS RESERVED</span>
-          <a
-            href="/admin"
-            onClick={(e) => {
-              e.preventDefault();
-              handleNavigate('/admin');
-            }}
-            className="text-[10px] text-zinc-700 hover:text-zinc-950 underline"
-          >
-            Atelier Admin Portal (/admin)
-          </a>
         </div>
       </footer>
     </div>
