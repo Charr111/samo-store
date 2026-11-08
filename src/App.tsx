@@ -2468,7 +2468,7 @@ export default function App() {
             </div>
             {newsletterSubscribed ? (
               <p className="text-[11px] font-medium text-emerald-900">
-                Subscribed to SAMO Atelier dispatches.
+                Subscribed to SAMO
               </p>
             ) : (
               <form
@@ -2520,7 +2520,7 @@ export default function App() {
           {/* Col 3: Kids Categories */}
           <div className="p-6 space-y-2">
             <div className="font-display font-bold uppercase tracking-[0.14em] mb-2">
-              Kids (CM Sizing)
+              Kids
             </div>
             <ul className="space-y-1.5 text-[11px]">
               {kidsCategories.map((c) => (
@@ -2632,7 +2632,7 @@ export default function App() {
         </div>
 
         <div className="px-6 py-4 flex flex-wrap items-center justify-between gap-4 text-[11px] uppercase tracking-wider text-zinc-800">
-          <span>© 2026 SAMO LUXURY HOUSE (EST. 1999) — ALL RIGHTS RESERVED</span>
+          <span>© 2026 SAMO WEAVE (EST. 1999) — ALL RIGHTS RESERVED</span>
         </div>
       </footer>
     </div>

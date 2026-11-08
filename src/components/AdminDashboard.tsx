@@ -471,6 +471,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
   const [editProdCustomSizeInput, setEditProdCustomSizeInput] = useState('');
   const [editProdNewMaterialInput, setEditProdNewMaterialInput] = useState('');
+  const [editProdPriceInputs, setEditProdPriceInputs] = useState<
+    Record<string, string>
+  >({});
   const [productPendingDelete, setProductPendingDelete] =
     useState<ProductItem | null>(null);
   const [imagePendingDelete, setImagePendingDelete] = useState<{
@@ -1932,7 +1935,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             {/* Edit Item Button */}
             <button
               type="button"
-              onClick={() => setEditingProductId(prod.id)}
+              onClick={() => {
+                setEditProdPriceInputs((prev) => ({
+                  ...prev,
+                  [prod.id]: String(prod.price),
+                }));
+                setEditingProductId(prod.id);
+              }}
               aria-label={`Edit product ${prod.name}`}
               title="Edit Product Details, Sizes & Photos"
               className="p-2 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 border border-transparent hover:border-zinc-700 transition-colors cursor-pointer"
@@ -5023,12 +5032,26 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         <input
                           type="number"
                           min="1"
-                          value={prod.price}
-                          onChange={(e) =>
-                            onUpdateProductMeta(prod.id, {
-                              price: Math.max(1, Number(e.target.value) || 1),
-                            })
+                          value={
+                            editProdPriceInputs[prod.id] !== undefined
+                              ? editProdPriceInputs[prod.id]
+                              : String(prod.price)
                           }
+                          onChange={(e) => {
+                            const rawVal = e.target.value;
+                            setEditProdPriceInputs((prev) => ({
+                              ...prev,
+                              [prod.id]: rawVal,
+                            }));
+                            if (rawVal.trim() !== '') {
+                              const parsed = Number(rawVal);
+                              if (!Number.isNaN(parsed) && parsed > 0) {
+                                onUpdateProductMeta(prod.id, {
+                                  price: parsed,
+                                });
+                              }
+                            }
+                          }}
                           aria-label="Edit Product Price"
                           className="w-full px-2.5 py-1.5 text-xs font-mono-tabular font-bold bg-white border border-zinc-300 focus:border-zinc-950 focus:outline-none"
                         />
