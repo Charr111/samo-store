@@ -173,9 +173,13 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
                   .map((p) => `${p.productName} (${p.selectedSize})`)
                   .join(' + ')} | `
               : '';
+          const materialsPart =
+            Array.isArray(ci.product.materials) && ci.product.materials.length > 0
+              ? ` | Materials: ${ci.product.materials.join(', ')}`
+              : '';
           return `${ci.quantity}x ${ci.product.name} (${colorPart}${setPiecesPart}Size: ${
             ci.selectedSize
-          } | Materials: ${ci.product.materials.join(', ')}) — $${(
+          }${materialsPart}) — $${(
             unitPrice * ci.quantity
           ).toLocaleString()}`;
         })
@@ -319,8 +323,11 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
                                     Color: <strong className="text-zinc-950">{item.selectedColor}</strong> ·{' '}
                                   </>
                                 )}
-                                Size: <strong className="text-zinc-950">{item.selectedSize}</strong> ·{' '}
-                                {item.product.materials.slice(0, 2).join(', ')}
+                                Size: <strong className="text-zinc-950">{item.selectedSize}</strong>
+                                {Array.isArray(item.product.materials) &&
+                                  item.product.materials.length > 0 && (
+                                    <> · {item.product.materials.slice(0, 2).join(', ')}</>
+                                  )}
                               </p>
                             </div>
 
@@ -423,7 +430,10 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
 
                               <div className="flex-1 min-w-0">
                                 <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
-                                  {upsell.department} · {upsell.category} · {upsell.materials[0]}
+                                  {upsell.department} · {upsell.category}
+                                  {Array.isArray(upsell.materials) && upsell.materials[0]
+                                    ? ` · ${upsell.materials[0]}`
+                                    : ''}
                                 </div>
                                 <h4
                                   onClick={() => {

@@ -218,6 +218,7 @@ function normalizeStoredProducts(
     const totalQty = sumSizeQuantities(sizes, sizeQuantities);
     const baseNormalized: ProductItem = {
       ...item,
+      materials: Array.isArray(item.materials) ? item.materials : [],
       sizes,
       sizeQuantities,
       quantity: totalQty,
@@ -246,7 +247,11 @@ function normalizeStoredProducts(
       };
     }
 
-    return baseNormalized;
+    return {
+      ...baseNormalized,
+      hasColors: false,
+      colorVariants: [],
+    };
   });
 
   return syncFullSetsWithCatalog(normalized);
@@ -923,9 +928,12 @@ export default function App() {
     const baseProd: ProductItem = {
       ...prod,
       id,
+      materials: Array.isArray(prod.materials) ? prod.materials : [],
       sizeQuantities,
       quantity: totalQty,
       inStock: totalQty > 0,
+      hasColors: false,
+      colorVariants: [],
     };
     const newProd =
       prod.hasColors &&

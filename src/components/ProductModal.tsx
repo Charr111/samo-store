@@ -567,21 +567,23 @@ export const ProductModal: React.FC<ProductModalProps> = ({
               </div>
             )}
 
-            {/* Materials Section */}
-            <div className="pt-4 border-t border-zinc-200">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-zinc-950">
-                  Materials Composition
-                </span>
-                <span className="text-[11px] text-zinc-500">
-                  {product.materials.length}{' '}
-                  {product.materials.length === 1 ? 'Material' : 'Materials'}
-                </span>
+            {/* Materials Section (Only shown when product has materials added) */}
+            {Array.isArray(product.materials) && product.materials.length > 0 && (
+              <div className="pt-4 border-t border-zinc-200">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-zinc-950">
+                    Materials Composition
+                  </span>
+                  <span className="text-[11px] text-zinc-500">
+                    {product.materials.length}{' '}
+                    {product.materials.length === 1 ? 'Material' : 'Materials'}
+                  </span>
+                </div>
+                <p className="text-xs font-medium text-zinc-800 tracking-wide">
+                  {product.materials.join(' · ')}
+                </p>
               </div>
-              <p className="text-xs font-medium text-zinc-800 tracking-wide">
-                {product.materials.join(' · ')}
-              </p>
-            </div>
+            )}
 
             {/* FULL SET: Minimalistic Drawer-Down Box Selector for Each Piece in the Set */}
             {isFullSetProduct && product.setItems ? (

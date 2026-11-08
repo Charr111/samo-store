@@ -1,5 +1,5 @@
 {
-  "updatedAt": 1794163092900,
+  "updatedAt": 1794164217380,
   "siteBanners": {
     "homeHeroMediaType": "video",
     "homeHeroVideoUrl": "https://images.samoweave.com/banners/1793837590618-copy-0698c90b-a323-4c4f-a4f4-b4cc32d2d791.mp4",
@@ -220,7 +220,7 @@
   "products": [
     {
       "id": "samo-w-jacket-01",
-      "name": "AVENUE HEAVY COW LEATHER BIKER JACKET",
+      "name": "FUCHSIA FUR JACKET",
       "department": "women",
       "category": "Jacket",
       "style": "Fine Leather",
@@ -696,7 +696,26 @@
       ],
       "description": "Light blue fine-knit sweater with a relaxed silhouette, wide round neckline, dropped shoulders, and long sleeves finished with ribbed cuffs. Softly textured fabric with a natural, effortless drape.",
       "inStock": true,
-      "featured": false
+      "featured": false,
+      "hasColors": true,
+      "colorVariants": [
+        {
+          "colorName": "Black",
+          "colorHex": "#111113",
+          "imageUrl": "https://images.samoweave.com/products/1794162524980-img-8294.jpg",
+          "sizeType": "letter",
+          "sizes": [
+            "S",
+            "M",
+            "L"
+          ],
+          "sizeQuantities": {
+            "S": 2,
+            "M": 2,
+            "L": 2
+          }
+        }
+      ]
     },
     {
       "id": "samo-w-fullset-01",

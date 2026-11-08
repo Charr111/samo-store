@@ -504,18 +504,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   // Multi-Color Variant State for New Product
   const [itemHasColors, setItemHasColors] = useState<boolean>(false);
-  const [draftColors, setDraftColors] = useState<DraftColorConfig[]>([
-    {
-      colorName: 'Black',
-      colorHex: '#111113',
-      imageUrl: '',
-      galleryUrls: ['', '', ''],
-      sizeType: 'letter',
-      sizes: ['XS', 'S', 'M', 'L'],
-      rawQuantities: {},
-      customSizeInput: '',
-    },
-  ]);
+  const [draftColors, setDraftColors] = useState<DraftColorConfig[]>([]);
   const [newColorInput, setNewColorInput] = useState('');
   const [newColorHexInput, setNewColorHexInput] = useState('#3F4D34');
   const [customColorHexMap, setCustomColorHexMap] = useState<
@@ -559,6 +548,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     Record<string, string>
   >({});
 
+  const [itemHasMaterials, setItemHasMaterials] = useState<boolean>(false);
   const [selectedMaterials, setSelectedMaterials] = useState<string[]>([
     'Cow Leather',
   ]);
@@ -778,7 +768,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           department: itemDept,
           category: itemCategory,
           style: itemStyle,
-          materials: selectedMaterials,
+          materials: itemHasMaterials ? selectedMaterials : [],
         }),
       });
       const data = await res.json();
@@ -801,10 +791,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       setItemFeedback('Product Name is required.');
       return;
     }
-    if (selectedMaterials.length === 0) {
-      setItemFeedback('Please checkmark at least one Material.');
+    if (itemHasMaterials && selectedMaterials.length === 0) {
+      setItemFeedback(
+        'Please checkmark at least one Material, or uncheck "Add Material to Product".'
+      );
       return;
     }
+
+    const effectiveMaterials = itemHasMaterials ? selectedMaterials : [];
+    const defaultMaterialClause =
+      effectiveMaterials.length > 0
+        ? ` crafted in ${effectiveMaterials.join(', ')}`
+        : '';
 
     const numericPrice = Math.max(1, Number(itemPrice) || 0);
     const numericDiscountVal =
@@ -901,7 +899,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         galleryUrls: autoGallery.slice(0, 3),
         sizeType: setPiece1SizeType,
         sizes: p1Sizes,
-        materials: selectedMaterials,
+        materials: effectiveMaterials,
         description:
           itemDescription.trim() ||
           `${cleanName} — Coordinated 2-piece SAMO Full Set linking ${prod1.name} and ${prod2.name}.`,
@@ -915,6 +913,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       setItemUrl3('');
       setItemUrl4('');
       setItemDescription('');
+      setItemHasColors(false);
+      setDraftColors([]);
+      setItemHasMaterials(false);
       setItemFeedback(
         `Added 2-Piece Full Set "${cleanName.toUpperCase()}" to ${itemDept.toUpperCase()} / Full Set.`
       );
@@ -987,17 +988,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         galleryUrls: mergedGallery,
         sizeType: synced.sizeType,
         sizes: synced.sizes,
-        materials: selectedMaterials,
+        materials: effectiveMaterials,
         description:
           itemDescription.trim() ||
-          `${cleanName} crafted in ${selectedMaterials.join(', ')} for SAMO ${
+          `${cleanName}${defaultMaterialClause} for SAMO ${
             itemDept === 'women' ? 'Women' : 'Kids'
           }.`,
         inStock: synced.inStock,
         featured: itemIsNewArrival,
       });
     } else {
-      // CASE C: STANDARD SINGLE-COLOR PRODUCT
+      // CASE C: STANDARD SINGLE-COLOR PRODUCT (No color variants added)
       if (selectedSizes.length === 0) {
         setItemFeedback('Please select or add at least one Size.');
         return;
@@ -1027,10 +1028,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         galleryUrls: additionalUrls,
         sizeType: itemSizeType,
         sizes: selectedSizes,
-        materials: selectedMaterials,
+        materials: effectiveMaterials,
         description:
           itemDescription.trim() ||
-          `${cleanName} crafted in ${selectedMaterials.join(', ')} for SAMO ${
+          `${cleanName}${defaultMaterialClause} for SAMO ${
             itemDept === 'women' ? 'Women' : 'Kids'
           }.`,
         inStock: totalQuantity > 0,
@@ -1050,6 +1051,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setItemIsNewArrival(true);
     setItemIsFullSet(false);
     setLinkTwoSetPieces(false);
+    setItemHasColors(false);
+    setDraftColors([]);
+    setItemHasMaterials(false);
     setItemFeedback(
       `Published "${cleanName.toUpperCase()}" to ${itemDept.toUpperCase()} / ${itemCategory}.`
     );
@@ -1400,7 +1404,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       }
       if (q) {
         const hay =
-          `${prod.name} ${prod.category} ${prod.department} ${prod.style} ${prod.materials.join(' ')}`.toLowerCase();
+          `${prod.name} ${prod.category} ${prod.department} ${prod.style} ${(prod.materials || []).join(' ')}`.toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
@@ -4721,69 +4725,101 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       />
                     </div>
 
-                    {/* Materials Editor */}
-                    <div className="space-y-2 pt-1 border-t border-zinc-200">
-                      <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-700">
-                        Materials ({(prod.materials || []).length} Selected):
-                      </label>
-                      <div className="flex flex-wrap gap-1.5">
-                        {allMaterials.map((mat) => {
-                          const active = (prod.materials || []).includes(mat);
-                          return (
-                            <button
-                              key={mat}
-                              type="button"
-                              onClick={() => {
-                                const currentMats = prod.materials || [];
-                                const nextMats = active
-                                  ? currentMats.filter((m) => m !== mat)
-                                  : [...currentMats, mat];
-                                if (nextMats.length === 0) return;
+                    {/* Materials Editor (With Checkbox to Add / Hide Material on Website) */}
+                    <div className="space-y-2.5 pt-2 border-t border-zinc-200">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <label className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-zinc-950 cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            checked={(prod.materials || []).length > 0}
+                            onChange={(e) => {
+                              const checked = e.target.checked;
+                              if (checked) {
+                                const defaultMat =
+                                  allMaterials[0] || 'Cow Leather';
                                 onUpdateProductMeta(prod.id, {
-                                  materials: nextMats,
+                                  materials: [defaultMat],
                                 });
+                              } else {
+                                onUpdateProductMeta(prod.id, {
+                                  materials: [],
+                                });
+                              }
+                            }}
+                            className="w-4 h-4 accent-zinc-950 cursor-pointer"
+                          />
+                          <span>Add / Show Material on Website</span>
+                        </label>
+                        {(prod.materials || []).length > 0 && (
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">
+                            {(prod.materials || []).length} Selected
+                          </span>
+                        )}
+                      </div>
+
+                      {(prod.materials || []).length > 0 && (
+                        <>
+                          <div className="flex flex-wrap gap-1.5">
+                            {allMaterials.map((mat) => {
+                              const active = (prod.materials || []).includes(
+                                mat
+                              );
+                              return (
+                                <button
+                                  key={mat}
+                                  type="button"
+                                  onClick={() => {
+                                    const currentMats = prod.materials || [];
+                                    const nextMats = active
+                                      ? currentMats.filter((m) => m !== mat)
+                                      : [...currentMats, mat];
+                                    onUpdateProductMeta(prod.id, {
+                                      materials: nextMats,
+                                    });
+                                  }}
+                                  className={`px-2 py-1 text-[10px] font-semibold border flex items-center gap-1 cursor-pointer ${
+                                    active
+                                      ? 'bg-zinc-950 text-white border-zinc-950'
+                                      : 'bg-white text-zinc-700 border-zinc-300'
+                                  }`}
+                                >
+                                  {active && <Check className="w-2.5 h-2.5" />}
+                                  <span>{mat}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-1.5">
+                            <input
+                              type="text"
+                              value={editProdNewMaterialInput}
+                              onChange={(e) =>
+                                setEditProdNewMaterialInput(e.target.value)
+                              }
+                              placeholder="Add custom material..."
+                              className="w-full sm:flex-1 min-w-0 px-2.5 py-1.5 text-xs bg-white border border-zinc-300"
+                            />
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                const clean = editProdNewMaterialInput.trim();
+                                if (!clean) return;
+                                await onAddCustomMaterial(clean);
+                                const currentMats = prod.materials || [];
+                                if (!currentMats.includes(clean)) {
+                                  await onUpdateProductMeta(prod.id, {
+                                    materials: [...currentMats, clean],
+                                  });
+                                }
+                                setEditProdNewMaterialInput('');
                               }}
-                              className={`px-2 py-1 text-[10px] font-semibold border flex items-center gap-1 cursor-pointer ${
-                                active
-                                  ? 'bg-zinc-950 text-white border-zinc-950'
-                                  : 'bg-white text-zinc-700 border-zinc-300'
-                              }`}
+                              className="px-3 py-1.5 bg-zinc-900 text-white text-[10px] font-bold uppercase cursor-pointer whitespace-nowrap shrink-0"
                             >
-                              {active && <Check className="w-2.5 h-2.5" />}
-                              <span>{mat}</span>
+                              + Add Material
                             </button>
-                          );
-                        })}
-                      </div>
-                      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-1.5">
-                        <input
-                          type="text"
-                          value={editProdNewMaterialInput}
-                          onChange={(e) =>
-                            setEditProdNewMaterialInput(e.target.value)
-                          }
-                          placeholder="Add custom material..."
-                          className="w-full sm:flex-1 min-w-0 px-2.5 py-1.5 text-xs bg-white border border-zinc-300"
-                        />
-                        <button
-                          type="button"
-                          onClick={async () => {
-                            const clean = editProdNewMaterialInput.trim();
-                            if (!clean) return;
-                            await onAddCustomMaterial(clean);
-                            const currentMats = prod.materials || [];
-                            if (!currentMats.includes(clean)) {
-                              await onUpdateProductMeta(prod.id, {
-                                materials: [...currentMats, clean],
-                              });
-                            }
-                            setEditProdNewMaterialInput('');
-                          }}
-                          className="px-3 py-1.5 bg-zinc-900 text-white text-[10px] font-bold uppercase cursor-pointer whitespace-nowrap shrink-0"
-                        >
-                          + Add Material
-                        </button>
-                      </div>
+                          </div>
+                        </>
+                      )}
                     </div>
                   </div>
 
@@ -6967,55 +7003,77 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </div>
                 )}
 
-              {/* MATERIALS CHECKMARK SELECTOR */}
-              <div className="p-4 bg-zinc-50 border border-zinc-200 space-y-3">
-                <div className="flex items-center justify-between">
-                  <label className="block text-[11px] font-bold uppercase tracking-wider text-zinc-950">
-                    Materials Checkmark Selector *
+              {/* MATERIALS CHECKMARK SELECTOR (OPTIONAL VIA CHECKBOX) */}
+              <div className="p-4 bg-zinc-50 border border-zinc-300 space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={itemHasMaterials}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setItemHasMaterials(checked);
+                        if (checked && selectedMaterials.length === 0) {
+                          setSelectedMaterials([
+                            allMaterials[0] || 'Cow Leather',
+                          ]);
+                        }
+                      }}
+                      className="w-4 h-4 accent-zinc-950 cursor-pointer"
+                    />
+                    <span className="text-xs font-extrabold uppercase tracking-wider text-zinc-950">
+                      Add Material to Product (Show Material Type on Website)
+                    </span>
                   </label>
-                  <span className="text-[11px] text-zinc-500">
-                    {selectedMaterials.length} Checkmarked
-                  </span>
+                  {itemHasMaterials && (
+                    <span className="text-[11px] text-zinc-500">
+                      {selectedMaterials.length} Checkmarked
+                    </span>
+                  )}
                 </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                  {allMaterials.map((mat) => {
-                    const checked = selectedMaterials.includes(mat);
-                    return (
+                {itemHasMaterials && (
+                  <div className="space-y-3 pt-2 border-t border-zinc-200">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                      {allMaterials.map((mat) => {
+                        const checked = selectedMaterials.includes(mat);
+                        return (
+                          <button
+                            key={mat}
+                            type="button"
+                            onClick={() => toggleMaterial(mat)}
+                            aria-pressed={checked}
+                            className={`px-2.5 py-2 text-xs font-medium border text-left flex items-center justify-between transition-colors cursor-pointer ${
+                              checked
+                                ? 'bg-zinc-950 text-white border-zinc-950 font-bold'
+                                : 'bg-white text-zinc-800 border-zinc-300'
+                            }`}
+                          >
+                            <span className="truncate">{mat}</span>
+                            {checked && <Check className="w-3 h-3" />}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 pt-1">
+                      <input
+                        type="text"
+                        value={newMaterialInput}
+                        onChange={(e) => setNewMaterialInput(e.target.value)}
+                        placeholder="Add custom material (e.g. Calfskin)..."
+                        className="w-full sm:flex-1 min-w-0 px-3 py-1.5 text-xs bg-white border border-zinc-300"
+                      />
                       <button
-                        key={mat}
                         type="button"
-                        onClick={() => toggleMaterial(mat)}
-                        aria-pressed={checked}
-                        className={`px-2.5 py-2 text-xs font-medium border text-left flex items-center justify-between transition-colors cursor-pointer ${
-                          checked
-                            ? 'bg-zinc-950 text-white border-zinc-950 font-bold'
-                            : 'bg-white text-zinc-800 border-zinc-300'
-                        }`}
+                        onClick={handleAddAndCheckCustomMaterial}
+                        className="px-3 py-1.5 bg-zinc-900 text-white text-xs font-bold uppercase tracking-wider cursor-pointer whitespace-nowrap shrink-0"
                       >
-                        <span className="truncate">{mat}</span>
-                        {checked && <Check className="w-3 h-3" />}
+                        + Add &amp; Check
                       </button>
-                    );
-                  })}
-                </div>
-
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 pt-1">
-                  <input
-                    type="text"
-                    value={newMaterialInput}
-                    onChange={(e) => setNewMaterialInput(e.target.value)}
-                    placeholder="Add custom material (e.g. Calfskin)..."
-                    className="w-full sm:flex-1 min-w-0 px-3 py-1.5 text-xs bg-white border border-zinc-300"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleAddAndCheckCustomMaterial}
-                    className="px-3 py-1.5 bg-zinc-900 text-white text-xs font-bold uppercase tracking-wider cursor-pointer whitespace-nowrap shrink-0"
-                  >
-                    + Add &amp; Check
-                  </button>
-                </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Editorial Notes */}

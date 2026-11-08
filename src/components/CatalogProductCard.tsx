@@ -236,10 +236,10 @@ export const CatalogProductCard: React.FC<CatalogProductCardProps> = ({
           </div>
         </div>
 
-        {/* Color Swatch Circles Row (matching Video 2 & Screenshot 4) */}
-        <div className="mt-2 flex items-center gap-1.5 min-h-[14px]">
-          {hasColorVariants ? (
-            product.colorVariants!.map((variant, cIdx) => {
+        {/* Color Swatch Circles Row (Only shown when product has colors enabled) */}
+        {hasColorVariants && (
+          <div className="mt-2 flex items-center gap-1.5 min-h-[14px]">
+            {product.colorVariants!.map((variant, cIdx) => {
               const hex =
                 variant.colorHex || getColorSwatchHex(variant.colorName);
               const isSelected = cIdx === selectedColorIndex;
@@ -258,23 +258,9 @@ export const CatalogProductCard: React.FC<CatalogProductCardProps> = ({
                   style={{ backgroundColor: hex }}
                 />
               );
-            })
-          ) : (
-            <span
-              className="w-3 h-3 rounded-full border border-zinc-400 inline-block"
-              style={{
-                backgroundColor: getColorSwatchHex(
-                  product.style === 'Suede'
-                    ? 'Brown'
-                    : product.category === 'Bags'
-                    ? 'Burgundy'
-                    : 'Black'
-                ),
-              }}
-              title={product.materials[0] || 'Classic'}
-            />
-          )}
-        </div>
+            })}
+          </div>
+        )}
       </div>
     </article>
   );

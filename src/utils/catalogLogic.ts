@@ -889,7 +889,7 @@ export function filterCatalogProducts(
         item.department,
         item.style,
         item.description,
-        ...item.materials,
+        ...(item.materials || []),
         ...item.sizes,
         ...colorNames,
       ]
