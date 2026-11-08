@@ -1345,7 +1345,7 @@ export default function App() {
     const record: AdminRecord = {
       id: cleanEmail,
       email: cleanEmail,
-      addedBy: currentUser?.email || 'apolokor@gmail.com',
+      addedBy: currentUser?.email || 'Super Admin',
       createdAt: new Date().toISOString(),
     };
     setAdmins((prev) => {

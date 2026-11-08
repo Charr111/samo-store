@@ -139,10 +139,7 @@ async function pushCatalogStateToR2(state: PersistedCatalogState): Promise<void>
   }
 }
 
-const R2_NEWSLETTER_BUCKET_NAME = (
-  process.env.R2_NEWSLETTER_BUCKET_NAME || 'samo-newsletter'
-).trim();
-const R2_NEWSLETTER_OBJECT_KEY = 'subscribers.json';
+const R2_NEWSLETTER_OBJECT_KEY = 'newsletter/subscribers.json';
 
 interface NewsletterSubscriberRecord {
   id: string;
@@ -154,11 +151,10 @@ async function readR2NewsletterSubscribers(): Promise<NewsletterSubscriberRecord
   const r2 = createR2Client();
   if (!r2) return [];
 
-  // 1. Try dedicated newsletter bucket first
   try {
     const resp = await r2.s3.send(
       new GetObjectCommand({
-        Bucket: R2_NEWSLETTER_BUCKET_NAME,
+        Bucket: r2.bucketName,
         Key: R2_NEWSLETTER_OBJECT_KEY,
       })
     );
@@ -168,23 +164,8 @@ async function readR2NewsletterSubscribers(): Promise<NewsletterSubscriberRecord
       if (Array.isArray(parsed)) return parsed;
     }
   } catch {
-    // Dedicated bucket might not be created or accessible yet
+    // File may not exist yet on initial run
   }
-
-  // 2. Fallback to main R2 bucket under newsletter/subscribers.json
-  try {
-    const resp = await r2.s3.send(
-      new GetObjectCommand({
-        Bucket: r2.bucketName,
-        Key: `newsletter/${R2_NEWSLETTER_OBJECT_KEY}`,
-      })
-    );
-    if (resp.Body) {
-      const raw = await resp.Body.transformToString('utf-8');
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) return parsed;
-    }
-  } catch {}
 
   return [];
 }
@@ -197,25 +178,11 @@ async function writeR2NewsletterSubscribers(
 
   const payload = JSON.stringify(subscribers, null, 2);
 
-  // 1. Attempt writing to dedicated bucket
-  try {
-    await r2.s3.send(
-      new PutObjectCommand({
-        Bucket: R2_NEWSLETTER_BUCKET_NAME,
-        Key: R2_NEWSLETTER_OBJECT_KEY,
-        Body: payload,
-        ContentType: 'application/json',
-        CacheControl: 'no-store, no-cache, must-revalidate',
-      })
-    );
-  } catch {}
-
-  // 2. Persist to primary R2 bucket under newsletter/subscribers.json for guarantee
   try {
     await r2.s3.send(
       new PutObjectCommand({
         Bucket: r2.bucketName,
-        Key: `newsletter/${R2_NEWSLETTER_OBJECT_KEY}`,
+        Key: R2_NEWSLETTER_OBJECT_KEY,
         Body: payload,
         ContentType: 'application/json',
         CacheControl: 'no-store, no-cache, must-revalidate',
@@ -223,7 +190,7 @@ async function writeR2NewsletterSubscribers(
     );
   } catch (err) {
     console.warn(
-      '[SAMO R2] Failed to persist newsletter to primary R2 bucket:',
+      '[SAMO R2] Failed to persist newsletter to R2 bucket:',
       err
     );
   }

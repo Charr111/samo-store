@@ -18,6 +18,7 @@ import {
   PREBUILT_COLORS,
   resolveProductQuantity,
   sumSizeQuantities,
+  SUPER_ADMIN_EMAILS,
   syncFullSetsWithCatalog,
   syncProductFromColorVariants,
 } from './catalogLogic';
@@ -56,13 +57,13 @@ test('mergeMaterialsList and mergeColorsList combine 5 prebuilt colors and custo
   assert.equal(merged.includes('Shearling'), true);
 });
 
-test('isAuthorizedAdminEmail grants access to apolokor@gmail.com, joeykorab88@gmail.com, samobougharios@gmail.com, and dynamically added admins', () => {
-  assert.equal(isAuthorizedAdminEmail('apolokor@gmail.com', []), true);
-  assert.equal(isAuthorizedAdminEmail('APOLOKOR@GMAIL.COM', []), true);
-  assert.equal(isAuthorizedAdminEmail('joeykorab88@gmail.com', []), true);
-  assert.equal(isAuthorizedAdminEmail('JOEYKORAB88@GMAIL.COM', []), true);
-  assert.equal(isAuthorizedAdminEmail('samobougharios@gmail.com', []), true);
-  assert.equal(isAuthorizedAdminEmail('SAMOBOUGHARIOS@GMAIL.COM', []), true);
+test('isAuthorizedAdminEmail grants access to super admins and dynamically added admins', () => {
+  assert.equal(isAuthorizedAdminEmail(SUPER_ADMIN_EMAILS[0], []), true);
+  assert.equal(isAuthorizedAdminEmail(SUPER_ADMIN_EMAILS[0].toUpperCase(), []), true);
+  assert.equal(isAuthorizedAdminEmail(SUPER_ADMIN_EMAILS[1], []), true);
+  assert.equal(isAuthorizedAdminEmail(SUPER_ADMIN_EMAILS[1].toUpperCase(), []), true);
+  assert.equal(isAuthorizedAdminEmail(SUPER_ADMIN_EMAILS[2], []), true);
+  assert.equal(isAuthorizedAdminEmail(SUPER_ADMIN_EMAILS[2].toUpperCase(), []), true);
   assert.equal(isAuthorizedAdminEmail('stranger@gmail.com', []), false);
   assert.equal(
     isAuthorizedAdminEmail('partner@gmail.com', [{ email: 'partner@gmail.com' }]),

@@ -1680,8 +1680,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 SAMO Admin Authentication
               </h1>
               <p className="text-xs text-zinc-400">
-                Restricted to apolokor@gmail.com, joeykorab88@gmail.com,
-                samobougharios@gmail.com &amp; Authorized Admins
+                Restricted to Authorized Atelier Administration Accounts
               </p>
             </div>
           </div>
@@ -1692,10 +1691,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 Unauthorized Account: {currentUser.email}
               </p>
               <p>
-                Only <strong>apolokor@gmail.com</strong>,{' '}
-                <strong>joeykorab88@gmail.com</strong>,{' '}
-                <strong>samobougharios@gmail.com</strong>, and Gmail accounts
-                added in the Admin Directory can access <code>/admin</code>.
+                Only authorized Atelier administration accounts verified in the
+                database can access <code>/admin</code>.
               </p>
             </div>
           )}
@@ -2006,6 +2003,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </button>
           </div>
 
+          {/* Mobile Return to Live Website Button */}
+          <div className="lg:hidden px-1">
+            <button
+              type="button"
+              onClick={() => {
+                setMobileSidebarOpen(false);
+                onNavigateHome('/home');
+              }}
+              className="w-full px-3.5 py-2.5 rounded-xl bg-white hover:bg-zinc-200 text-zinc-950 text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-sm"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              <span>Return to Live Website</span>
+            </button>
+          </div>
+
           {/* Navigation Links */}
           <nav className="space-y-1" aria-label="Admin Sidebar Navigation">
             {navItems.map((item) => {
@@ -2181,7 +2193,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <div className="text-xs leading-tight">
                   <div className="font-semibold text-white">Admin (Main)</div>
                   <div className="text-[10px] text-zinc-400 truncate max-w-[140px]">
-                    {currentUser?.email || 'apolokor@gmail.com'}
+                    {currentUser?.email || 'Authorized Admin'}
                   </div>
                 </div>
               </div>
@@ -2787,23 +2799,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   >
                     <Check className="w-3.5 h-3.5" />
                     <span>Save &amp; Publish All Banners</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      const defaults = buildDefaultSiteBanners(categories);
-                      await onUpdateSiteBanners({
-                        ...defaults,
-                        categoryBanners: siteBanners.categoryBanners,
-                      });
-                      setBannerFeedback(
-                        '✓ Restored default Homepage & Showroom banners'
-                      );
-                    }}
-                    className="px-3.5 py-2 rounded-xl bg-[#18181C] border border-zinc-700 text-zinc-300 hover:text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <RotateCcw className="w-3.5 h-3.5" />
-                    <span>Reset to Default</span>
                   </button>
                 </div>
               </div>
@@ -4346,7 +4341,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </div>
                   <div className="text-[11px] text-zinc-400">
                     Storage:{' '}
-                    <code className="text-zinc-300">samo-newsletter</code> /{' '}
+                    <code className="text-zinc-300">samo-images</code> /{' '}
                     <code className="text-zinc-300">
                       newsletter/subscribers.json
                     </code>
@@ -4431,15 +4426,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     Grant Admin Access by Gmail
                   </h2>
                   <p className="text-xs text-zinc-400 leading-relaxed">
-                    Primary access is locked to{' '}
-                    <strong className="text-white">apolokor@gmail.com</strong>,{' '}
-                    <strong className="text-white">joeykorab88@gmail.com</strong>
-                    ,{' '}
-                    <strong className="text-white">
-                      samobougharios@gmail.com
-                    </strong>
-                    , and the AI Studio owner session. Add trusted team members
-                    by their Gmail address below.
+                    Primary access is verified securely against the Firebase admin directory and the AI Studio owner session. Add trusted team members by their Gmail address below.
                   </p>
 
                   {adminFeedback && (

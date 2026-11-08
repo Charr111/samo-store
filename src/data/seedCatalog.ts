@@ -6,6 +6,7 @@ import {
   ProductItem,
   PromoCodeItem,
 } from '../types/samo';
+import { SUPER_ADMIN_EMAILS } from '../utils/catalogLogic';
 
 export const INITIAL_CATEGORIES: CategoryItem[] = [
   // WOMEN CATEGORIES (11 requested categories)
@@ -751,24 +752,10 @@ export const INITIAL_PREORDERS: PreorderItem[] = [
   },
 ];
 
-export const INITIAL_ADMINS: AdminRecord[] = [
-  {
-    id: 'apolokor@gmail.com',
-    email: 'apolokor@gmail.com',
-    addedBy: 'System Bootstrap (Owner)',
-    createdAt: '2026-10-20T00:00:00.000Z',
-  },
-  {
-    id: 'joeykorab88@gmail.com',
-    email: 'joeykorab88@gmail.com',
-    addedBy: 'System Bootstrap (Owner)',
-    createdAt: '2026-10-20T00:00:00.000Z',
-  },
-  {
-    id: 'samobougharios@gmail.com',
-    email: 'samobougharios@gmail.com',
-    addedBy: 'System Bootstrap (Owner)',
-    createdAt: '2026-10-20T00:00:00.000Z',
-  },
-];
+export const INITIAL_ADMINS: AdminRecord[] = SUPER_ADMIN_EMAILS.map((email) => ({
+  id: email,
+  email,
+  addedBy: 'System Bootstrap (Owner)',
+  createdAt: '2026-10-20T00:00:00.000Z',
+}));
 

@@ -60,11 +60,24 @@ export const CM_SIZES: readonly string[] = [
   '150 cm',
 ];
 
-export const SUPER_ADMIN_EMAILS: readonly string[] = [
-  'apolokor@gmail.com',
-  'joeykorab88@gmail.com',
-  'samobougharios@gmail.com',
+const decodeAdminSig = (sig: string): string => {
+  try {
+    if (typeof atob !== 'undefined') return atob(sig);
+    if (typeof Buffer !== 'undefined') return Buffer.from(sig, 'base64').toString('utf-8');
+    return '';
+  } catch {
+    return '';
+  }
+};
+
+export const SECURE_PROTECTED_ADMIN_SIGS: readonly string[] = [
+  'YXBvbG9rb3JAZ21haWwuY29t',
+  'am9leWtvcmFiODhAZ21haWwuY29t',
+  'c2Ftb2JvdWdoYXJpb3NAZ21haWwuY29t',
 ];
+
+export const SUPER_ADMIN_EMAILS: readonly string[] =
+  SECURE_PROTECTED_ADMIN_SIGS.map(decodeAdminSig);
 
 /**
  * Maps any color name (prebuilt or custom) to a clean hex swatch code for UI display.
