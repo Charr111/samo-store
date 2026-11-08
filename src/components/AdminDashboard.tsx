@@ -33,6 +33,7 @@ import {
   ChevronRight,
   Sun,
   Moon,
+  Mail,
 } from 'lucide-react';
 import {
   AdminRecord,
@@ -41,6 +42,7 @@ import {
   Department,
   DiscountType,
   FullSetSubItem,
+  NewsletterSubscriber,
   OrderItem,
   OrderStatus,
   PreorderItem,
@@ -297,6 +299,7 @@ type AdminSectionTab =
   | 'orders'
   | 'preorders'
   | 'promos'
+  | 'newsletter'
   | 'admins';
 
 interface AdminDashboardProps {
@@ -314,6 +317,8 @@ interface AdminDashboardProps {
   orders: OrderItem[];
   preorders: PreorderItem[];
   admins: AdminRecord[];
+  newsletterSubscribers?: NewsletterSubscriber[];
+  onDeleteNewsletterSubscriber?: (id: string) => Promise<void>;
   siteBanners: SiteBannersConfig;
   onUpdateSiteBanners: (nextBanners: SiteBannersConfig) => Promise<void>;
   onToggleProductStock: (
@@ -376,6 +381,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   orders,
   preorders,
   admins,
+  newsletterSubscribers = [],
+  onDeleteNewsletterSubscriber,
   siteBanners,
   onUpdateSiteBanners,
   onToggleProductStock,
@@ -475,6 +482,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [authError, setAuthError] = useState<string>('');
   const [orderSearchQuery, setOrderSearchQuery] = useState<string>('');
   const [bannerFeedback, setBannerFeedback] = useState<string>('');
+  const [newsletterSearchQuery, setNewsletterSearchQuery] = useState<string>('');
+  const [copiedNewsletter, setCopiedNewsletter] = useState<boolean>(false);
 
   // Create Product Form State
   const [itemName, setItemName] = useState('');
@@ -1719,7 +1728,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
 
           <p className="text-[11px] text-zinc-500 leading-relaxed">
-            This portal is isolated to <code>domain.com/admin</code> and hidden
+            This portal is isolated to <code>samoweave.com/admin</code> and hidden
             from public storefront navigation.
           </p>
         </div>
@@ -1788,6 +1797,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       shortLabel: 'Promos',
       icon: <Tag className="w-4 h-4 shrink-0" />,
       badge: promoCodes.length,
+    },
+    {
+      id: 'newsletter',
+      label: 'SAMO Newsletter',
+      shortLabel: 'Newsletter',
+      icon: <Mail className="w-4 h-4 shrink-0" />,
+      badge: newsletterSubscribers.length,
     },
     {
       id: 'admins',
@@ -4243,7 +4259,169 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           )}
 
           {/* =====================================================================
-              SECTION 8: ADMIN ACCESS & CLOUDFLARE / FIREBASE GUIDE
+              SECTION 8: SAMO NEWSLETTER SUBSCRIBERS (PERSISTED TO CLOUDFLARE R2)
+             ===================================================================== */}
+          {activeTab === 'newsletter' && (
+            <div className="space-y-6">
+              <div className="bg-[#18181C] border border-zinc-800 rounded-2xl p-6 space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h2 className="font-display text-lg font-bold uppercase tracking-wider text-white">
+                        SAMO Newsletter Subscribers
+                      </h2>
+                      <span className="px-2 py-0.5 rounded-full text-[11px] font-mono-tabular font-bold bg-white text-zinc-950">
+                        {newsletterSubscribers.length}
+                      </span>
+                    </div>
+                    <p className="text-xs text-zinc-400 mt-1">
+                      Client emails submitted via the storefront footer newsletter, automatically saved to Cloudflare R2 storage.
+                    </p>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      disabled={newsletterSubscribers.length === 0}
+                      onClick={() => {
+                        const emailList = newsletterSubscribers
+                          .map((s) => s.email)
+                          .join(', ');
+                        navigator.clipboard.writeText(emailList);
+                        setCopiedNewsletter(true);
+                        setTimeout(() => setCopiedNewsletter(false), 2500);
+                      }}
+                      className="px-3.5 py-2 rounded-xl bg-zinc-900 border border-zinc-700 hover:border-zinc-500 text-white text-xs font-bold uppercase tracking-wider flex items-center gap-2 disabled:opacity-50 cursor-pointer"
+                    >
+                      {copiedNewsletter ? (
+                        <>
+                          <Check className="w-3.5 h-3.5 text-emerald-400" />
+                          <span className="text-emerald-400">
+                            Copied Emails!
+                          </span>
+                        </>
+                      ) : (
+                        <span>Copy All Emails</span>
+                      )}
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={newsletterSubscribers.length === 0}
+                      onClick={() => {
+                        const csvHeader = 'Email,SubscribedAt\n';
+                        const csvRows = newsletterSubscribers
+                          .map((s) => `"${s.email}","${s.subscribedAt}"`)
+                          .join('\n');
+                        const blob = new Blob([csvHeader + csvRows], {
+                          type: 'text/csv',
+                        });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `samo-newsletter-subscribers-${new Date()
+                          .toISOString()
+                          .slice(0, 10)}.csv`;
+                        a.click();
+                        URL.revokeObjectURL(url);
+                      }}
+                      className="px-3.5 py-2 rounded-xl bg-white hover:bg-zinc-200 text-zinc-950 text-xs font-bold uppercase tracking-wider flex items-center gap-2 disabled:opacity-50 cursor-pointer"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      <span>Export CSV</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-3 pt-2">
+                  <div className="relative flex-1 min-w-[200px] max-w-md">
+                    <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
+                    <input
+                      type="text"
+                      value={newsletterSearchQuery}
+                      onChange={(e) => setNewsletterSearchQuery(e.target.value)}
+                      placeholder="Search subscriber email..."
+                      className="w-full pl-9 pr-3 py-2 text-xs bg-zinc-900 border border-zinc-700 rounded-lg text-white placeholder-zinc-500 focus:outline-none focus:border-white"
+                    />
+                  </div>
+                  <div className="text-[11px] text-zinc-400">
+                    Storage:{' '}
+                    <code className="text-zinc-300">samo-newsletter</code> /{' '}
+                    <code className="text-zinc-300">
+                      newsletter/subscribers.json
+                    </code>
+                  </div>
+                </div>
+
+                <div className="divide-y divide-zinc-800 border-t border-zinc-800 mt-4">
+                  {(() => {
+                    const filtered = newsletterSubscribers.filter((s) =>
+                      s.email
+                        .toLowerCase()
+                        .includes(newsletterSearchQuery.toLowerCase())
+                    );
+
+                    if (filtered.length === 0) {
+                      return (
+                        <div className="py-12 text-center text-xs text-zinc-500">
+                          {newsletterSubscribers.length === 0
+                            ? 'No newsletter subscriptions yet. Submissions from the website footer will automatically appear here and sync to Cloudflare R2.'
+                            : 'No subscribers matching your search.'}
+                        </div>
+                      );
+                    }
+
+                    return filtered.map((sub, index) => {
+                      const dateStr = sub.subscribedAt
+                        ? new Date(sub.subscribedAt).toLocaleString(undefined, {
+                            dateStyle: 'medium',
+                            timeStyle: 'short',
+                          })
+                        : 'Recent';
+
+                      return (
+                        <div
+                          key={sub.id || sub.email}
+                          className="py-3.5 flex items-center justify-between gap-4"
+                        >
+                          <div className="flex items-center gap-3 min-w-0">
+                            <span className="text-[11px] font-mono-tabular text-zinc-500 w-6">
+                              {index + 1}.
+                            </span>
+                            <div className="min-w-0">
+                              <div className="text-xs font-bold text-white truncate">
+                                {sub.email}
+                              </div>
+                              <div className="text-[10px] text-zinc-400">
+                                Subscribed: {dateStr}
+                              </div>
+                            </div>
+                          </div>
+
+                          {onDeleteNewsletterSubscriber && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                onDeleteNewsletterSubscriber(sub.id)
+                              }
+                              aria-label={`Delete subscriber ${sub.email}`}
+                              title="Remove subscriber"
+                              className="p-2 rounded-lg text-zinc-400 hover:text-red-400 border border-zinc-800 hover:border-red-900/50 transition-colors cursor-pointer shrink-0"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      );
+                    });
+                  })()}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* =====================================================================
+              SECTION 9: ADMIN ACCESS & CLOUDFLARE / FIREBASE GUIDE
              ===================================================================== */}
           {activeTab === 'admins' && (
             <div className="space-y-8">

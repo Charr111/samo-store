@@ -32,6 +32,7 @@ interface PersistedCatalogState {
   siteBanners?: Record<string, unknown>;
   autoAcceptOrders?: boolean;
   showLowStockCount?: boolean;
+  newsletterSubscribers?: unknown[];
 }
 
 const R2_CORS_HEADERS: Record<string, string> = {
@@ -135,6 +136,96 @@ async function pushCatalogStateToR2(state: PersistedCatalogState): Promise<void>
     );
   } catch (err) {
     console.warn('[SAMO R2] Failed to persist state/catalog.json to R2:', err);
+  }
+}
+
+const R2_NEWSLETTER_BUCKET_NAME = (
+  process.env.R2_NEWSLETTER_BUCKET_NAME || 'samo-newsletter'
+).trim();
+const R2_NEWSLETTER_OBJECT_KEY = 'subscribers.json';
+
+interface NewsletterSubscriberRecord {
+  id: string;
+  email: string;
+  subscribedAt: string;
+}
+
+async function readR2NewsletterSubscribers(): Promise<NewsletterSubscriberRecord[]> {
+  const r2 = createR2Client();
+  if (!r2) return [];
+
+  // 1. Try dedicated newsletter bucket first
+  try {
+    const resp = await r2.s3.send(
+      new GetObjectCommand({
+        Bucket: R2_NEWSLETTER_BUCKET_NAME,
+        Key: R2_NEWSLETTER_OBJECT_KEY,
+      })
+    );
+    if (resp.Body) {
+      const raw = await resp.Body.transformToString('utf-8');
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch {
+    // Dedicated bucket might not be created or accessible yet
+  }
+
+  // 2. Fallback to main R2 bucket under newsletter/subscribers.json
+  try {
+    const resp = await r2.s3.send(
+      new GetObjectCommand({
+        Bucket: r2.bucketName,
+        Key: `newsletter/${R2_NEWSLETTER_OBJECT_KEY}`,
+      })
+    );
+    if (resp.Body) {
+      const raw = await resp.Body.transformToString('utf-8');
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch {}
+
+  return [];
+}
+
+async function writeR2NewsletterSubscribers(
+  subscribers: NewsletterSubscriberRecord[]
+): Promise<void> {
+  const r2 = createR2Client();
+  if (!r2) return;
+
+  const payload = JSON.stringify(subscribers, null, 2);
+
+  // 1. Attempt writing to dedicated bucket
+  try {
+    await r2.s3.send(
+      new PutObjectCommand({
+        Bucket: R2_NEWSLETTER_BUCKET_NAME,
+        Key: R2_NEWSLETTER_OBJECT_KEY,
+        Body: payload,
+        ContentType: 'application/json',
+        CacheControl: 'no-store, no-cache, must-revalidate',
+      })
+    );
+  } catch {}
+
+  // 2. Persist to primary R2 bucket under newsletter/subscribers.json for guarantee
+  try {
+    await r2.s3.send(
+      new PutObjectCommand({
+        Bucket: r2.bucketName,
+        Key: `newsletter/${R2_NEWSLETTER_OBJECT_KEY}`,
+        Body: payload,
+        ContentType: 'application/json',
+        CacheControl: 'no-store, no-cache, must-revalidate',
+      })
+    );
+  } catch (err) {
+    console.warn(
+      '[SAMO R2] Failed to persist newsletter to primary R2 bucket:',
+      err
+    );
   }
 }
 
@@ -242,6 +333,9 @@ async function startServer() {
         : {}),
       ...(typeof body.showLowStockCount === 'boolean'
         ? { showLowStockCount: body.showLowStockCount }
+        : {}),
+      ...(Array.isArray(body.newsletterSubscribers)
+        ? { newsletterSubscribers: body.newsletterSubscribers }
         : {}),
       deletedProductIds: mergedDeletedProducts,
       deletedCategoryIds: mergedDeletedCategories,
@@ -421,6 +515,135 @@ async function startServer() {
           ? error.message
           : 'Failed to delete media from Cloudflare R2.';
       res.status(500).json({ error: message });
+    }
+  });
+
+  // 0C. Cloudflare R2 Newsletter Subscription Endpoints
+  app.options('/api/newsletter/subscribe', (_req, res) => {
+    res.set(R2_CORS_HEADERS).status(204).end();
+  });
+  app.options('/api/newsletter/subscribers', (_req, res) => {
+    res.set(R2_CORS_HEADERS).status(204).end();
+  });
+  app.options('/api/newsletter/subscribers/:id', (_req, res) => {
+    res.set(R2_CORS_HEADERS).status(204).end();
+  });
+
+  app.get('/api/newsletter/subscribers', async (_req, res) => {
+    res.set(R2_CORS_HEADERS);
+    try {
+      const r2Subs = await readR2NewsletterSubscribers();
+      const localState = await readCatalogState();
+      const localSubs = Array.isArray(localState.newsletterSubscribers)
+        ? (localState.newsletterSubscribers as NewsletterSubscriberRecord[])
+        : [];
+
+      const map = new Map<string, NewsletterSubscriberRecord>();
+      for (const s of localSubs) {
+        if (s && s.email) map.set(s.email.toLowerCase(), s);
+      }
+      for (const s of r2Subs) {
+        if (s && s.email) map.set(s.email.toLowerCase(), s);
+      }
+      const merged = Array.from(map.values()).sort(
+        (a, b) =>
+          new Date(b.subscribedAt || 0).getTime() -
+          new Date(a.subscribedAt || 0).getTime()
+      );
+      res.json({ subscribers: merged });
+    } catch {
+      res
+        .status(500)
+        .json({ error: 'Failed to fetch newsletter subscribers from R2.' });
+    }
+  });
+
+  app.post('/api/newsletter/subscribe', async (req, res) => {
+    res.set(R2_CORS_HEADERS);
+    try {
+      const email =
+        typeof req.body?.email === 'string' ? req.body.email.trim() : '';
+      if (!email || !email.includes('@') || !email.includes('.')) {
+        res
+          .status(400)
+          .json({ error: 'Please provide a valid client email address.' });
+        return;
+      }
+
+      const normalized = email.toLowerCase();
+      const r2Subs = await readR2NewsletterSubscribers();
+      const localState = await readCatalogState();
+      const localSubs = Array.isArray(localState.newsletterSubscribers)
+        ? (localState.newsletterSubscribers as NewsletterSubscriberRecord[])
+        : [];
+
+      const map = new Map<string, NewsletterSubscriberRecord>();
+      for (const s of localSubs) {
+        if (s && s.email) map.set(s.email.toLowerCase(), s);
+      }
+      for (const s of r2Subs) {
+        if (s && s.email) map.set(s.email.toLowerCase(), s);
+      }
+
+      let existing = map.get(normalized);
+      if (!existing) {
+        existing = {
+          id: `sub_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+          email: normalized,
+          subscribedAt: new Date().toISOString(),
+        };
+        map.set(normalized, existing);
+      }
+
+      const all = Array.from(map.values()).sort(
+        (a, b) =>
+          new Date(b.subscribedAt || 0).getTime() -
+          new Date(a.subscribedAt || 0).getTime()
+      );
+
+      await writeR2NewsletterSubscribers(all);
+      await writeCatalogState({ newsletterSubscribers: all });
+
+      res
+        .status(200)
+        .json({ success: true, subscriber: existing, subscribers: all });
+    } catch (err) {
+      const message =
+        err instanceof Error
+          ? err.message
+          : 'Failed to persist newsletter email to R2.';
+      res.status(500).json({ error: message });
+    }
+  });
+
+  app.delete('/api/newsletter/subscribers/:id', async (req, res) => {
+    res.set(R2_CORS_HEADERS);
+    try {
+      const targetId = req.params.id;
+      const r2Subs = await readR2NewsletterSubscribers();
+      const localState = await readCatalogState();
+      const localSubs = Array.isArray(localState.newsletterSubscribers)
+        ? (localState.newsletterSubscribers as NewsletterSubscriberRecord[])
+        : [];
+
+      const map = new Map<string, NewsletterSubscriberRecord>();
+      for (const s of localSubs) {
+        if (s && s.email) map.set(s.email.toLowerCase(), s);
+      }
+      for (const s of r2Subs) {
+        if (s && s.email) map.set(s.email.toLowerCase(), s);
+      }
+
+      const filtered = Array.from(map.values()).filter(
+        (s) => s.id !== targetId
+      );
+
+      await writeR2NewsletterSubscribers(filtered);
+      await writeCatalogState({ newsletterSubscribers: filtered });
+
+      res.status(200).json({ success: true, subscribers: filtered });
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to delete subscriber from R2.' });
     }
   });
 

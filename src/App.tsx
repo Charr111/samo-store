@@ -22,6 +22,7 @@ import {
   OrderStatus,
   PreorderItem,
   PreorderStatus,
+  NewsletterSubscriber,
   ProductColorVariant,
   ProductItem,
   PromoCodeItem,
@@ -362,6 +363,9 @@ export default function App() {
   const [newsletterEmail, setNewsletterEmail] = useState<string>('');
   const [newsletterSubscribed, setNewsletterSubscribed] =
     useState<boolean>(false);
+  const [newsletterSubscribers, setNewsletterSubscribers] = useState<
+    NewsletterSubscriber[]
+  >([]);
 
   // Home Page Section 2 (Categories Switcher: Women | Kids) & New Arrivals Carousel State
   const [homeCategoryDept, setHomeCategoryDept] = useState<Department>('women');
@@ -612,6 +616,11 @@ export default function App() {
         }
         if (typeof data.showLowStockCount === 'boolean') {
           setShowLowStockCount(data.showLowStockCount);
+        }
+        if (Array.isArray(data.newsletterSubscribers)) {
+          setNewsletterSubscribers(
+            data.newsletterSubscribers as NewsletterSubscriber[]
+          );
         }
       } catch {}
     };
@@ -1357,6 +1366,43 @@ export default function App() {
     });
   };
 
+  const handleSubscribeNewsletter = async (email: string) => {
+    const clean = email.trim();
+    if (!clean || !clean.includes('@') || !clean.includes('.')) return;
+    try {
+      const res = await fetch('/api/newsletter/subscribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: clean }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data.subscribers)) {
+          setNewsletterSubscribers(data.subscribers as NewsletterSubscriber[]);
+        }
+      }
+    } catch (err) {
+      console.warn(
+        '[SAMO Newsletter] Failed to persist subscription to R2:',
+        err
+      );
+    }
+    setNewsletterSubscribed(true);
+    setNewsletterEmail('');
+  };
+
+  const handleDeleteNewsletterSubscriber = async (id: string) => {
+    setNewsletterSubscribers((prev) => prev.filter((s) => s.id !== id));
+    try {
+      await fetch(`/api/newsletter/subscribers/${id}`, { method: 'DELETE' });
+    } catch (err) {
+      console.warn(
+        '[SAMO Newsletter] Failed to delete subscriber from R2:',
+        err
+      );
+    }
+  };
+
   // AI Quick Search Filter Handler
   const handleAiQuickSearch = async (query: string) => {
     try {
@@ -1632,6 +1678,8 @@ export default function App() {
         onDeletePreorder={handleDeletePreorder}
         onAddAdminByEmail={handleAddAdminByEmail}
         onRemoveAdminByEmail={handleRemoveAdminByEmail}
+        newsletterSubscribers={newsletterSubscribers}
+        onDeleteNewsletterSubscriber={handleDeleteNewsletterSubscriber}
       />
     );
   }
@@ -2412,7 +2460,7 @@ export default function App() {
 
       {/* BALENCIAGA-INSPIRED ARCHITECTURAL MULTI-COLUMN FOOTER */}
       <footer className="bg-[#D4D4D4] text-zinc-950 border-t border-zinc-950 text-xs">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 divide-y sm:divide-y-0 sm:divide-x divide-zinc-400 border-b border-zinc-400">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 divide-y sm:divide-y-0 sm:divide-x divide-zinc-400 border-b border-zinc-400">
           {/* Col 1: Newsletter */}
           <div className="p-6 space-y-3">
             <div className="font-display font-bold uppercase tracking-[0.14em]">
@@ -2427,8 +2475,7 @@ export default function App() {
                 onSubmit={(e) => {
                   e.preventDefault();
                   if (newsletterEmail.trim()) {
-                    setNewsletterSubscribed(true);
-                    setNewsletterEmail('');
+                    handleSubscribeNewsletter(newsletterEmail);
                   }
                 }}
                 className="space-y-2"
@@ -2526,17 +2573,7 @@ export default function App() {
             </ul>
           </div>
 
-          {/* Col 5: Materials & Craft */}
-          <div className="p-6 space-y-2">
-            <div className="font-display font-bold uppercase tracking-[0.14em] mb-2">
-              Materials &amp; House
-            </div>
-            <p className="text-[11px] leading-relaxed text-zinc-800">
-              Cow Leather · Suede · Fur · Cashmere · Silk · Wool · Linen · Raw Denim · Satin · Chantilly Lace
-            </p>
-          </div>
-
-          {/* Col 6: Contact & Routes */}
+          {/* Col 5: Contact & Routes */}
           <div className="p-6 space-y-2">
             <div className="font-display font-bold uppercase tracking-[0.14em] mb-2">
               Direct Routes
@@ -2551,7 +2588,7 @@ export default function App() {
                   }}
                   className="underline"
                 >
-                  domain.com/home
+                  samoweave.com/home
                 </a>
               </li>
               <li>
@@ -2563,7 +2600,7 @@ export default function App() {
                   }}
                   className="underline"
                 >
-                  domain.com/new-arrivals
+                  samoweave.com/new-arrivals
                 </a>
               </li>
               <li>
@@ -2575,7 +2612,7 @@ export default function App() {
                   }}
                   className="underline"
                 >
-                  domain.com/gifts
+                  samoweave.com/gifts
                 </a>
               </li>
               <li>
@@ -2587,7 +2624,7 @@ export default function App() {
                   }}
                   className="underline"
                 >
-                  domain.com/showroom
+                  samoweave.com/showroom
                 </a>
               </li>
             </ul>

@@ -1,5 +1,5 @@
 {
-  "updatedAt": 1794164217380,
+  "updatedAt": 1794171597981,
   "siteBanners": {
     "homeHeroMediaType": "video",
     "homeHeroVideoUrl": "https://images.samoweave.com/banners/1793837590618-copy-0698c90b-a323-4c4f-a4f4-b4cc32d2d791.mp4",
@@ -219,101 +219,77 @@
   "deletedCategoryIds": [],
   "products": [
     {
-      "id": "samo-w-jacket-01",
-      "name": "FUCHSIA FUR JACKET",
+      "name": "IVORY PLEATED TOP",
       "department": "women",
-      "category": "Jacket",
-      "style": "Fine Leather",
-      "price": 3250,
-      "quantity": 54,
+      "category": "Tops",
+      "style": "Classic",
+      "price": 38,
+      "quantity": 5,
       "sizeQuantities": {
-        "XS": 15,
-        "S": 15,
-        "M": 14,
-        "L": 10,
-        "XL": 0
+        "S": 1,
+        "M": 1,
+        "L": 2,
+        "XL": 1
       },
-      "hasColors": true,
-      "colorVariants": [
-        {
-          "colorName": "Black",
-          "imageUrl": "studio://women-jacket-black-leather-biker",
-          "sizeType": "letter",
-          "sizes": [
-            "XS",
-            "S",
-            "M",
-            "L",
-            "XL"
-          ],
-          "sizeQuantities": {
-            "XS": 5,
-            "S": 5,
-            "M": 4,
-            "L": 5,
-            "XL": 0
-          }
-        },
-        {
-          "colorName": "Burgundy",
-          "imageUrl": "studio://women-jacket-burgundy-leather-biker",
-          "sizeType": "letter",
-          "sizes": [
-            "XS",
-            "S",
-            "M",
-            "L",
-            "XL"
-          ],
-          "sizeQuantities": {
-            "XS": 5,
-            "S": 5,
-            "M": 5,
-            "L": 0,
-            "XL": 0
-          }
-        },
-        {
-          "colorName": "Brown",
-          "imageUrl": "studio://women-jacket-brown-leather-biker",
-          "sizeType": "letter",
-          "sizes": [
-            "XS",
-            "S",
-            "M",
-            "L",
-            "XL"
-          ],
-          "sizeQuantities": {
-            "XS": 5,
-            "S": 5,
-            "M": 5,
-            "L": 5,
-            "XL": 0
-          }
-        }
-      ],
+      "hasColors": false,
+      "colorVariants": [],
+      "isFullSet": false,
       "isNewArrival": true,
       "discountType": "none",
       "discountValue": 0,
-      "imageUrl": "studio://women-jacket-black-leather-biker",
+      "imageUrl": "https://images.samoweave.com/products/1794167204667-img-7958.jpg",
       "galleryUrls": [
-        "studio://women-jacket-leather-biker-profile",
-        "studio://women-jacket-leather-biker-detail"
+        "https://images.samoweave.com/products/1794167215192-img-7960.jpg",
+        "https://images.samoweave.com/products/1794167222771-9109bb29-3683-4ce4-b60f-8dd60d85ddba.png",
+        "https://images.samoweave.com/products/1794167229883-img-7963.jpg"
       ],
       "sizeType": "letter",
       "sizes": [
-        "XS",
         "S",
         "M",
         "L",
         "XL"
       ],
       "materials": [
-        "Cow Leather",
-        "Silk"
+        "Satin"
       ],
-      "description": "Constructed from 1.4mm vegetable-tanned Italian cow leather with articulated boxy shoulders, brushed palladium zip hardware, and a 100% silk twill lining.",
+      "description": "Ivory satin top featuring a pointed collar, dropped shoulders, and long, relaxed sleeves. Defined by structured vertical pleating at the waist, creating a softly cinched silhouette that contrasts with the fluid drape and subtle sheen of the satin fabric. Finished with tonal buttons and a gently flared hem.",
+      "inStock": true,
+      "featured": true,
+      "id": "samo-women-ivory-pleated-top-2575"
+    },
+    {
+      "id": "samo-w-jacket-01",
+      "name": "FUCHSIA MINK JACKET",
+      "department": "women",
+      "category": "Jacket",
+      "style": "Fur",
+      "price": 250,
+      "quantity": 2,
+      "sizeQuantities": {
+        "S": 1,
+        "M": 1
+      },
+      "hasColors": false,
+      "colorVariants": [],
+      "isNewArrival": true,
+      "discountType": "none",
+      "discountValue": 0,
+      "imageUrl": "https://images.samoweave.com/products/1794164421832-img-8185.jpg",
+      "galleryUrls": [
+        "https://images.samoweave.com/products/1794164432206-img-8186.jpg",
+        "https://images.samoweave.com/products/1794164440706-img-8180.jpg",
+        "https://images.samoweave.com/products/1794164451656-img-8187.jpg"
+      ],
+      "sizeType": "letter",
+      "sizes": [
+        "S",
+        "M"
+      ],
+      "materials": [
+        "Mink fur"
+      ],
+      "description": "Fuchsia mink fur jacket featuring a voluminous silhouette, round neckline, and three-quarter-length sleeves. Crafted with a richly textured fur exterior, tonal lining, and concealed front closure. Finished with a cropped length and softly structured shape.",
       "inStock": true,
       "featured": true
     },
@@ -508,7 +484,9 @@
       ],
       "description": "High-volume enveloping winter coat featuring dense plush shearling-fur texture, concealed hook closures, and a silk satin interior.",
       "inStock": true,
-      "featured": true
+      "featured": true,
+      "hasColors": false,
+      "colorVariants": []
     },
     {
       "id": "samo-w-trousers-01",
@@ -548,7 +526,9 @@
       ],
       "description": "Floor-grazing wide-leg tailored trousers in virgin cold-wool cavalry twill with sharp front knife pleats and waist tabs.",
       "inStock": true,
-      "featured": false
+      "featured": false,
+      "hasColors": false,
+      "colorVariants": []
     },
     {
       "id": "samo-w-pants-01",
@@ -586,7 +566,9 @@
       ],
       "description": "Relaxed athletic silhouette reimagined in supple nappa cow leather with contrast ivory side piping and zippered ankle gussets.",
       "inStock": true,
-      "featured": false
+      "featured": false,
+      "hasColors": false,
+      "colorVariants": []
     },
     {
       "id": "samo-w-skirts-01",
@@ -622,7 +604,9 @@
       ],
       "description": "Column maxi skirt featuring an architectural wrap waist, raw-edge laser hemline, and satin-backed interior for fluid movement.",
       "inStock": true,
-      "featured": false
+      "featured": false,
+      "hasColors": false,
+      "colorVariants": []
     },
     {
       "id": "samo-w-denim-01",
@@ -661,7 +645,9 @@
       ],
       "description": "15oz Japanese indigo ring-spun denim treated with an artisanal charcoal overwash and embossed cow leather back waist plaque.",
       "inStock": true,
-      "featured": true
+      "featured": true,
+      "hasColors": false,
+      "colorVariants": []
     },
     {
       "id": "samo-w-tops-01",
@@ -719,11 +705,11 @@
     },
     {
       "id": "samo-w-fullset-01",
-      "name": "MONOLITH SUEDE & CASHMERE FULL SET",
+      "name": "",
       "department": "women",
       "category": "Full Set",
-      "style": "Suede",
-      "price": 2150,
+      "style": "Classic",
+      "price": 45,
       "quantity": 11,
       "sizeQuantities": {
         "XS": 5,
@@ -790,15 +776,12 @@
         "M",
         "L"
       ],
-      "materials": [
-        "Suede",
-        "Cashmere",
-        "Wool",
-        "Silk"
-      ],
+      "materials": [],
       "description": "Two-piece runway ensemble pairing our Sculpted Cowl Satin & Lace Atelier Top (Letter sizing) with Architectural Double-Pleat Wool Trousers (Numeric sizing). Stock is synchronized with both standalone pieces.",
       "inStock": true,
-      "featured": true
+      "featured": true,
+      "hasColors": false,
+      "colorVariants": []
     },
     {
       "id": "samo-w-belts-01",
@@ -835,7 +818,9 @@
       ],
       "description": "40mm full-grain bridle cow leather strap finished with sculptural interlocking brushed-gold rings inspired by the house archive.",
       "inStock": true,
-      "featured": false
+      "featured": false,
+      "hasColors": false,
+      "colorVariants": []
     },
     {
       "id": "samo-k-baby-01",
@@ -1224,5 +1209,6 @@
       "createdAt": "2026-10-19T19:40:00.000Z"
     }
   ],
-  "autoAcceptOrders": false
+  "autoAcceptOrders": false,
+  "newsletterSubscribers": []
 }

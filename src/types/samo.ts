@@ -202,3 +202,10 @@ export interface SiteBannersConfig {
   categoryBanners: Record<string, CategoryBannerConfig>;
 }
 
+export interface NewsletterSubscriber {
+  id: string;
+  email: string;
+  subscribedAt: string;
+}
+
+
