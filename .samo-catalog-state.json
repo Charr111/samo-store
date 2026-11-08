@@ -1,5 +1,222 @@
 {
-  "updatedAt": 1793814991574,
+  "updatedAt": 1794163092900,
+  "siteBanners": {
+    "homeHeroMediaType": "video",
+    "homeHeroVideoUrl": "https://images.samoweave.com/banners/1793837590618-copy-0698c90b-a323-4c4f-a4f4-b4cc32d2d791.mp4",
+    "homeHeroImageUrl": "studio://women-jacket-black-leather-biker",
+    "homeHeroKicker": "SAMO ATELIER · CLASSIC · SPORT CHIC · FINE LEATHER · SUEDE · FUR",
+    "homeHeroTitle": "NEW ARRIVALS",
+    "homeMiddleBannerUrl": "studio://kids-junior-leather-bomber",
+    "homeMiddleKicker": "SAMO KIDS ATELIER · MINIS 1 TO 5 (80–100 CM) · CHILDREN 6+ (100–130 CM) · TEEN 13+ (130–160 CM)",
+    "homeMiddleTitle": "SAMO KIDS COLLECTION",
+    "homeMiddleSubtitle": "Architectural silhouettes in supple cow leather, brushed suede, and combed cashmere graded in precision centimeter sizing.",
+    "homeBottomNewArrivalsUrl": "studio://women-fur-opera-coat",
+    "homeBottomGiftsUrl": "studio://women-bags-hourglass-burgundy",
+    "homeBottomShowroomUrl": "studio://women-trench-suede-coat",
+    "showroomHeroBannerUrl": "studio://women-trench-suede-coat",
+    "categoryBanners": {
+      "women:all": {
+        "categoryKey": "women:all",
+        "department": "women",
+        "categoryName": "All Women",
+        "imageUrl": "studio://women-jacket-black-leather-biker",
+        "kicker": "SAMO ATELIER · ALL WOMEN",
+        "title": "ALL WOMEN EDITORIAL ARCHIVE",
+        "enabled": true,
+        "insertAfterCount": 4,
+        "updatedAt": "2026-11-05T00:09:15.669Z"
+      },
+      "kids:all": {
+        "categoryKey": "kids:all",
+        "department": "kids",
+        "categoryName": "All Kids",
+        "imageUrl": "studio://kids-junior-leather-bomber",
+        "kicker": "SAMO ATELIER · ALL KIDS",
+        "title": "ALL KIDS EDITORIAL ARCHIVE",
+        "enabled": true,
+        "insertAfterCount": 4,
+        "updatedAt": "2026-11-05T00:09:15.669Z"
+      },
+      "collection:new-arrivals": {
+        "categoryKey": "collection:new-arrivals",
+        "department": "collection",
+        "categoryName": "New Arrivals",
+        "imageUrl": "studio://women-fur-opera-coat",
+        "kicker": "SAMO ATELIER · NEW ARRIVALS",
+        "title": "NEW ARRIVALS EDITORIAL ARCHIVE",
+        "enabled": true,
+        "insertAfterCount": 4,
+        "updatedAt": "2026-11-05T00:09:15.669Z"
+      },
+      "collection:gifts": {
+        "categoryKey": "collection:gifts",
+        "department": "collection",
+        "categoryName": "Gifts (Bags & Belts)",
+        "imageUrl": "studio://women-bags-hourglass-burgundy",
+        "kicker": "SAMO ATELIER · GIFTS (BAGS & BELTS)",
+        "title": "GIFTS (BAGS & BELTS) EDITORIAL ARCHIVE",
+        "enabled": true,
+        "insertAfterCount": 4,
+        "updatedAt": "2026-11-05T00:09:15.669Z"
+      },
+      "women:jacket": {
+        "categoryKey": "women:jacket",
+        "department": "women",
+        "categoryName": "Jacket",
+        "imageUrl": "https://images.samoweave.com/products/1793891574407-8a9db4f1-20fa-449c-a2ea-62f3629730a9.jpg",
+        "kicker": "SAMO ATELIER · JACKET",
+        "title": "JACKET EDITORIAL ARCHIVE",
+        "enabled": true,
+        "insertAfterCount": 4,
+        "updatedAt": "2026-11-05T15:12:55.360Z"
+      },
+      "women:trousers": {
+        "categoryKey": "women:trousers",
+        "department": "women",
+        "categoryName": "Trousers",
+        "imageUrl": "studio://women-trousers-wide-leather",
+        "kicker": "SAMO ATELIER · TROUSERS",
+        "title": "TROUSERS EDITORIAL ARCHIVE",
+        "enabled": true,
+        "insertAfterCount": 4,
+        "updatedAt": "2026-11-05T00:09:15.669Z"
+      },
+      "women:pants": {
+        "categoryKey": "women:pants",
+        "department": "women",
+        "categoryName": "Pants",
+        "imageUrl": "studio://women-pants-suede-flare",
+        "kicker": "SAMO ATELIER · PANTS",
+        "title": "PANTS EDITORIAL ARCHIVE",
+        "enabled": true,
+        "insertAfterCount": 4,
+        "updatedAt": "2026-11-05T00:09:15.669Z"
+      },
+      "women:skirts": {
+        "categoryKey": "women:skirts",
+        "department": "women",
+        "categoryName": "Skirts",
+        "imageUrl": "studio://women-skirts-pleated-leather",
+        "kicker": "SAMO ATELIER · SKIRTS",
+        "title": "SKIRTS EDITORIAL ARCHIVE",
+        "enabled": true,
+        "insertAfterCount": 4,
+        "updatedAt": "2026-11-05T00:09:15.669Z"
+      },
+      "women:denim": {
+        "categoryKey": "women:denim",
+        "department": "women",
+        "categoryName": "Denim",
+        "imageUrl": "studio://women-denim-raw-indigo",
+        "kicker": "SAMO ATELIER · DENIM",
+        "title": "DENIM EDITORIAL ARCHIVE",
+        "enabled": true,
+        "insertAfterCount": 4,
+        "updatedAt": "2026-11-05T00:09:15.669Z"
+      },
+      "women:tops": {
+        "categoryKey": "women:tops",
+        "department": "women",
+        "categoryName": "Tops",
+        "imageUrl": "studio://women-tops-silk-drape",
+        "kicker": "SAMO ATELIER · TOPS",
+        "title": "TOPS EDITORIAL ARCHIVE",
+        "enabled": true,
+        "insertAfterCount": 4,
+        "updatedAt": "2026-11-05T00:09:15.669Z"
+      },
+      "women:full-set": {
+        "categoryKey": "women:full-set",
+        "department": "women",
+        "categoryName": "Full Set",
+        "imageUrl": "studio://women-fullset-monolith",
+        "kicker": "SAMO ATELIER · FULL SET",
+        "title": "FULL SET EDITORIAL ARCHIVE",
+        "enabled": true,
+        "insertAfterCount": 4,
+        "updatedAt": "2026-11-05T00:09:15.669Z"
+      },
+      "women:trench-coat": {
+        "categoryKey": "women:trench-coat",
+        "department": "women",
+        "categoryName": "Trench Coat",
+        "imageUrl": "studio://women-trench-suede-coat",
+        "kicker": "SAMO ATELIER · TRENCH COAT",
+        "title": "TRENCH COAT EDITORIAL ARCHIVE",
+        "enabled": true,
+        "insertAfterCount": 4,
+        "updatedAt": "2026-11-05T00:09:15.669Z"
+      },
+      "women:fur": {
+        "categoryKey": "women:fur",
+        "department": "women",
+        "categoryName": "Fur",
+        "imageUrl": "studio://women-fur-opera-coat",
+        "kicker": "SAMO ATELIER · FUR",
+        "title": "FUR EDITORIAL ARCHIVE",
+        "enabled": true,
+        "insertAfterCount": 4,
+        "updatedAt": "2026-11-05T00:09:15.669Z"
+      },
+      "women:bags": {
+        "categoryKey": "women:bags",
+        "department": "women",
+        "categoryName": "Bags",
+        "imageUrl": "studio://women-bags-hourglass-burgundy",
+        "kicker": "SAMO ATELIER · BAGS",
+        "title": "BAGS EDITORIAL ARCHIVE",
+        "enabled": true,
+        "insertAfterCount": 4,
+        "updatedAt": "2026-11-05T00:09:15.669Z"
+      },
+      "women:belts": {
+        "categoryKey": "women:belts",
+        "department": "women",
+        "categoryName": "Belts",
+        "imageUrl": "studio://women-belts-double-buckle",
+        "kicker": "SAMO ATELIER · BELTS",
+        "title": "BELTS EDITORIAL ARCHIVE",
+        "enabled": true,
+        "insertAfterCount": 4,
+        "updatedAt": "2026-11-05T00:09:15.669Z"
+      },
+      "kids:minis-1-to-5": {
+        "categoryKey": "kids:minis-1-to-5",
+        "department": "kids",
+        "categoryName": "MINIS 1 To 5",
+        "imageUrl": "studio://kids-baby-cashmere-knit-set",
+        "kicker": "SAMO ATELIER · MINIS 1 TO 5",
+        "title": "MINIS 1 TO 5 EDITORIAL ARCHIVE",
+        "enabled": true,
+        "insertAfterCount": 4,
+        "updatedAt": "2026-11-05T00:09:15.669Z"
+      },
+      "kids:children-6": {
+        "categoryKey": "kids:children-6",
+        "department": "kids",
+        "categoryName": "CHILDREN 6+",
+        "imageUrl": "studio://kids-junior-leather-bomber",
+        "kicker": "SAMO ATELIER · CHILDREN 6+",
+        "title": "CHILDREN 6+ EDITORIAL ARCHIVE",
+        "enabled": true,
+        "insertAfterCount": 4,
+        "updatedAt": "2026-11-05T00:09:15.670Z"
+      },
+      "kids:teen-13": {
+        "categoryKey": "kids:teen-13",
+        "department": "kids",
+        "categoryName": "Teen 13+",
+        "imageUrl": "studio://kids-teen-suede-varsity",
+        "kicker": "SAMO ATELIER · TEEN 13+",
+        "title": "TEEN 13+ EDITORIAL ARCHIVE",
+        "enabled": true,
+        "insertAfterCount": 4,
+        "updatedAt": "2026-11-05T00:09:15.670Z"
+      }
+    }
+  },
+  "deletedProductIds": [],
+  "deletedCategoryIds": [],
   "products": [
     {
       "id": "samo-w-jacket-01",
@@ -8,11 +225,11 @@
       "category": "Jacket",
       "style": "Fine Leather",
       "price": 3250,
-      "quantity": 55,
+      "quantity": 54,
       "sizeQuantities": {
         "XS": 15,
         "S": 15,
-        "M": 15,
+        "M": 14,
         "L": 10,
         "XL": 0
       },
@@ -32,7 +249,7 @@
           "sizeQuantities": {
             "XS": 5,
             "S": 5,
-            "M": 5,
+            "M": 4,
             "L": 5,
             "XL": 0
           }
@@ -448,38 +665,36 @@
     },
     {
       "id": "samo-w-tops-01",
-      "name": "SCULPTED COWL SATIN & LACE ATELIER TOP",
+      "name": "BLUE KNIT",
       "department": "women",
       "category": "Tops",
-      "style": "Classic",
-      "price": 940,
-      "quantity": 15,
+      "style": "Sport Chic",
+      "price": 33,
+      "quantity": 6,
       "sizeQuantities": {
-        "XS": 5,
-        "S": 5,
-        "M": 5,
-        "L": 0
+        "S": 2,
+        "M": 2,
+        "L": 2
       },
       "isNewArrival": false,
       "discountType": "none",
       "discountValue": 0,
-      "imageUrl": "studio://women-tops-satin-cowl",
+      "imageUrl": "https://images.samoweave.com/products/1794162524980-img-8294.jpg",
       "galleryUrls": [
-        "studio://women-tops-satin-cowl-profile"
+        "https://images.samoweave.com/products/1794162535267-img-8293.jpg",
+        "https://images.samoweave.com/products/1794163018697-img-8295.jpg",
+        "https://images.samoweave.com/products/1794162554874-img-8284.jpg"
       ],
       "sizeType": "letter",
       "sizes": [
-        "XS",
         "S",
         "M",
         "L"
       ],
       "materials": [
-        "Satin",
-        "Silk",
-        "Lace"
+        "Cotton"
       ],
-      "description": "Bias-cut heavy silk satin blouse bordered with Chantilly lace trim along the asymmetric neckline and elongated cuffs.",
+      "description": "Light blue fine-knit sweater with a relaxed silhouette, wide round neckline, dropped shoulders, and long sleeves finished with ribbed cuffs. Softly textured fabric with a natural, effortless drape.",
       "inStock": true,
       "featured": false
     },
@@ -490,12 +705,12 @@
       "category": "Full Set",
       "style": "Suede",
       "price": 2150,
-      "quantity": 15,
+      "quantity": 11,
       "sizeQuantities": {
         "XS": 5,
-        "S": 5,
-        "M": 5,
-        "L": 0
+        "S": 2,
+        "M": 2,
+        "L": 2
       },
       "isFullSet": true,
       "setItems": [
@@ -512,9 +727,9 @@
           ],
           "sizeQuantities": {
             "XS": 5,
-            "S": 5,
-            "M": 5,
-            "L": 0
+            "S": 2,
+            "M": 2,
+            "L": 2
           }
         },
         {
@@ -610,10 +825,10 @@
       "category": "MINIS 1 To 5",
       "style": "Classic",
       "price": 540,
-      "quantity": 30,
+      "quantity": 29,
       "sizeQuantities": {
         "80 cm": 10,
-        "90 cm": 10,
+        "90 cm": 9,
         "100 cm": 10
       },
       "hasColors": true,
@@ -629,7 +844,7 @@
           ],
           "sizeQuantities": {
             "80 cm": 5,
-            "90 cm": 5,
+            "90 cm": 4,
             "100 cm": 5
           }
         },
@@ -679,10 +894,10 @@
       "category": "CHILDREN 6+",
       "style": "Sport Chic",
       "price": 890,
-      "quantity": 30,
+      "quantity": 29,
       "sizeQuantities": {
         "110 cm": 10,
-        "120 cm": 10,
+        "120 cm": 9,
         "130 cm": 10,
         "140 cm": 0
       },
@@ -700,7 +915,7 @@
           ],
           "sizeQuantities": {
             "110 cm": 5,
-            "120 cm": 5,
+            "120 cm": 4,
             "130 cm": 5,
             "140 cm": 0
           }
@@ -901,6 +1116,94 @@
       "isFullSet": false
     }
   ],
-  "deletedProductIds": [],
-  "deletedCategoryIds": []
+  "orders": [
+    {
+      "id": "ord-seed-101",
+      "orderNumber": "SAMO-8491",
+      "customerName": "Céline Moreau",
+      "customerEmail": "celine.moreau@atelier-paris.fr",
+      "customerPhone": "+33 6 18 42 90 11",
+      "shippingLocation": "14 Avenue Montaigne, 75008 Paris, France",
+      "deliveryMethod": "Standard Delivery",
+      "deliveryFee": 0,
+      "subtotal": 3250,
+      "totalPrice": 3250,
+      "itemsSummary": "1x AVENUE HEAVY COW LEATHER BIKER JACKET (Size: M | Materials: Cow Leather, Silk) — $3,250",
+      "itemsCount": 1,
+      "primaryProductName": "AVENUE HEAVY COW LEATHER BIKER JACKET",
+      "primaryProductSize": "M",
+      "primaryProductImage": "studio://women-jacket-leather-biker",
+      "orderedItems": [
+        {
+          "productId": "samo-w-jacket-01",
+          "productName": "AVENUE HEAVY COW LEATHER BIKER JACKET",
+          "selectedSize": "M",
+          "quantity": 1
+        }
+      ],
+      "status": "accepted",
+      "createdAt": "2026-10-20T14:15:00.000Z"
+    },
+    {
+      "id": "ord-seed-102",
+      "orderNumber": "SAMO-8492",
+      "customerName": "Nadia Al-Mansoor",
+      "customerEmail": "nadia.m@dubai-luxury.ae",
+      "customerPhone": "+971 50 392 8410",
+      "shippingLocation": "Villa 22, Jumeirah 1, Dubai, UAE",
+      "deliveryMethod": "Standard Delivery",
+      "deliveryFee": 0,
+      "subtotal": 1430,
+      "totalPrice": 1430,
+      "itemsSummary": "1x JUNIOR SPORT CHIC LEATHER & WOOL BOMBER (Size: 120 cm | Materials: Cow Leather, Wool, Cotton) — $890; 1x PETIT ATELIER CASHMERE & COTTON KNIT SET (Size: 90 cm | Materials: Cashmere, Cotton) — $540",
+      "itemsCount": 2,
+      "primaryProductName": "JUNIOR SPORT CHIC LEATHER & WOOL BOMBER",
+      "primaryProductSize": "120 cm",
+      "primaryProductImage": "studio://kids-junior-leather-bomber",
+      "orderedItems": [
+        {
+          "productId": "samo-k-junior-01",
+          "productName": "JUNIOR SPORT CHIC LEATHER & WOOL BOMBER",
+          "selectedSize": "120 cm",
+          "quantity": 1
+        },
+        {
+          "productId": "samo-k-baby-01",
+          "productName": "PETIT ATELIER CASHMERE & COTTON KNIT SET",
+          "selectedSize": "90 cm",
+          "quantity": 1
+        }
+      ],
+      "status": "accepted",
+      "createdAt": "2026-10-20T15:02:00.000Z"
+    },
+    {
+      "id": "ord-seed-103",
+      "orderNumber": "SAMO-8488",
+      "customerName": "Elena Rostova",
+      "customerEmail": "elena.r@milanostudio.it",
+      "customerPhone": "+39 02 9182 7364",
+      "shippingLocation": "Via Montenapoleone 8, 20121 Milano MI, Italy",
+      "deliveryMethod": "Standard Delivery",
+      "deliveryFee": 0,
+      "subtotal": 2450,
+      "totalPrice": 2450,
+      "itemsSummary": "1x LE CITY CONCAVE TOP-HANDLE BAG (Size: S | Materials: Cow Leather, Suede) — $2,450",
+      "itemsCount": 1,
+      "primaryProductName": "LE CITY CONCAVE TOP-HANDLE BAG",
+      "primaryProductSize": "S",
+      "primaryProductImage": "studio://women-bags-hourglass-burgundy",
+      "orderedItems": [
+        {
+          "productId": "samo-w-bags-01",
+          "productName": "LE CITY CONCAVE TOP-HANDLE BAG",
+          "selectedSize": "S",
+          "quantity": 1
+        }
+      ],
+      "status": "accepted",
+      "createdAt": "2026-10-19T19:40:00.000Z"
+    }
+  ],
+  "autoAcceptOrders": false
 }

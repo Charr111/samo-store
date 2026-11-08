@@ -30,6 +30,7 @@ interface PersistedCatalogState {
   preorders?: unknown[];
   admins?: unknown[];
   siteBanners?: Record<string, unknown>;
+  autoAcceptOrders?: boolean;
 }
 
 const R2_CORS_HEADERS: Record<string, string> = {
@@ -234,6 +235,9 @@ async function startServer() {
       ...(Array.isArray(body.admins) ? { admins: body.admins } : {}),
       ...(body.siteBanners && typeof body.siteBanners === 'object'
         ? { siteBanners: body.siteBanners as Record<string, unknown> }
+        : {}),
+      ...(typeof body.autoAcceptOrders === 'boolean'
+        ? { autoAcceptOrders: body.autoAcceptOrders }
         : {}),
       deletedProductIds: mergedDeletedProducts,
       deletedCategoryIds: mergedDeletedCategories,

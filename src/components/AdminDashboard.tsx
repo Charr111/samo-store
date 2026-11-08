@@ -121,7 +121,7 @@ export const R2ImageUploadButton: React.FC<R2ImageUploadButtonProps> = ({
       onUploaded(result.url);
       if (result.wasShrunk) {
         setStatusMessage(
-          `✓ Shrunk ${result.originalSizeKB} KB → ${result.compressedSizeKB} KB`
+          `✓ Shrunk ${result.reductionPercent}% (${result.originalSizeKB} KB → ${result.compressedSizeKB} KB)`
         );
       } else {
         setStatusMessage(
@@ -346,6 +346,8 @@ interface AdminDashboardProps {
   onAddCustomColor: (colorName: string) => Promise<void>;
   onUpdateOrderStatus: (orderId: string, status: OrderStatus) => Promise<void>;
   onDeleteOrder: (orderId: string) => Promise<void>;
+  autoAcceptOrders: boolean;
+  onToggleAutoAcceptOrders: (nextEnabled: boolean) => Promise<void>;
   onUpdatePreorderStatus: (
     preorderId: string,
     status: PreorderStatus
@@ -387,6 +389,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onAddCustomColor,
   onUpdateOrderStatus,
   onDeleteOrder,
+  autoAcceptOrders,
+  onToggleAutoAcceptOrders,
   onUpdatePreorderStatus,
   onDeletePreorder,
   onAddAdminByEmail,
@@ -425,7 +429,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setShrinkUploadsEnabled(next);
     setItemFeedback(
       next
-        ? 'Auto-Shrink Image Upload turned ON (photos will shrink to ~50 KB WebP).'
+        ? 'Auto-Shrink Image Upload turned ON (photos will shrink by 60%–70%, e.g. 2 MB → 500–800 KB).'
         : 'Auto-Shrink Image Upload turned OFF (photos will upload at original full quality).'
     );
   };
@@ -1255,7 +1259,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'samo-cloudflare-catalog.json';
+    a.download = 'samo-catalog-backup.json';
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -1441,7 +1445,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           adminTheme === 'light' ? 'samo-admin-light' : 'samo-admin-dark'
         } min-h-screen bg-[#0E0E10] text-white flex flex-col justify-between p-6 md:p-12`}
       >
-        <div className="flex items-center justify-between border-b border-zinc-800 pb-6">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-800 pb-6">
           <div className="flex items-center gap-3">
             <span className="font-display text-2xl font-extrabold tracking-[0.16em] uppercase">
               SAMO
@@ -1450,7 +1454,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               /admin · Restricted Atelier Portal
             </span>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <button
               type="button"
               onClick={toggleAdminTheme}
@@ -1484,17 +1488,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
         </div>
 
-        <div className="max-w-md w-full mx-auto my-12 p-8 bg-[#18181C] border border-zinc-800 rounded-2xl space-y-6">
+        <div className="max-w-md w-full mx-auto my-8 sm:my-12 p-5 sm:p-8 bg-[#18181C] border border-zinc-800 rounded-2xl space-y-6">
           <div className="flex items-center gap-3 text-white">
-            <ShieldCheck className="w-6 h-6" />
+            <ShieldCheck className="w-6 h-6 shrink-0" />
             <div>
-              <h1 className="font-display text-lg font-extrabold tracking-[0.12em] uppercase">
+              <h1 className="font-display text-base sm:text-lg font-extrabold tracking-[0.12em] uppercase">
                 SAMO Admin Authentication
               </h1>
               <p className="text-xs text-zinc-400">
-                Protected by Firebase Auth · Restricted to apolokor@gmail.com,
-                joeykorab88@gmail.com, samobougharios@gmail.com &amp; Authorized
-                Admins
+                Restricted to apolokor@gmail.com, joeykorab88@gmail.com,
+                samobougharios@gmail.com &amp; Authorized Admins
               </p>
             </div>
           </div>
@@ -1534,7 +1537,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   );
                 }
               }}
-              className="w-full py-3.5 px-5 bg-white text-zinc-950 rounded-xl text-xs font-bold tracking-[0.14em] uppercase hover:bg-zinc-200 transition-colors cursor-pointer"
+              className="w-full py-3.5 px-4 bg-white text-zinc-950 rounded-xl text-xs font-bold tracking-[0.12em] uppercase hover:bg-zinc-200 transition-colors cursor-pointer"
             >
               Sign In with Google (Authorized Admin)
             </button>
@@ -1542,9 +1545,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <button
               type="button"
               onClick={onUnlockAiAdmin}
-              className="w-full py-3.5 px-5 bg-zinc-800 text-white border border-zinc-700 rounded-xl text-xs font-bold tracking-[0.14em] uppercase hover:bg-zinc-700 transition-colors cursor-pointer"
+              className="w-full py-3.5 px-4 bg-zinc-800 text-white border border-zinc-700 rounded-xl text-xs font-bold tracking-[0.12em] uppercase hover:bg-zinc-700 transition-colors cursor-pointer"
             >
-              Enter as Authorized AI / Owner Session
+              Enter as Authorized Owner Session
             </button>
           </div>
 
@@ -1555,7 +1558,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
 
         <div className="text-center text-[11px] text-zinc-600 uppercase tracking-widest">
-          SAMO Firebase Security Rules Active · Dedicated DB Instance
+          SAMO Atelier Security Active
         </div>
       </div>
     );
@@ -2065,13 +2068,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </div>
               </div>
 
-              {/* Main Dashboard Image Upload Auto-Shrink Toggle & Cloudflare R2 Storage Control Bar */}
+              {/* Main Dashboard Image Upload Auto-Shrink Toggle Bar */}
               <div className="bg-[#18181C] border border-zinc-800/90 rounded-2xl p-4 sm:px-5 sm:py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div className="flex items-start sm:items-center gap-3.5">
                   <div className="w-9 h-9 rounded-xl bg-zinc-900 border border-zinc-700 flex items-center justify-center text-white shrink-0">
                     <Sparkles className="w-4 h-4" />
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="text-xs sm:text-sm font-bold text-white">
                         Auto-Shrink Image Uploads
@@ -2084,18 +2087,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         }`}
                       >
                         {shrinkUploadsEnabled
-                          ? 'ON · Shrinking to ~50 KB WebP'
+                          ? 'ON · Shrinking by 60%–70% (e.g. 2 MB → 500–800 KB)'
                           : 'OFF · Original Full Quality'}
-                      </span>
-                      <span className="px-2 py-0.5 rounded text-[10px] font-mono-tabular uppercase tracking-wider bg-zinc-900 text-zinc-300 border border-zinc-700 flex items-center gap-1">
-                        <Cloud className="w-3 h-3" />
-                        <span>Cloudflare R2 Bucket Active</span>
                       </span>
                     </div>
                     <p className="text-[11px] text-zinc-400 mt-0.5">
                       {shrinkUploadsEnabled
-                        ? 'Uploaded item & banner photos are automatically shrunk to ~35–55 KB for instant loading. Turn off anytime to upload original uncompressed resolution.'
-                        : 'Image shrinking is currently turned OFF. Uploaded item & banner photos will be stored in Cloudflare R2 at their original resolution without shrinking.'}
+                        ? 'Uploaded item & banner photos are automatically shrunk by 60%–70% of their original file size (e.g. a 2 MB photo becomes ~500–800 KB). Turn off anytime to upload original uncompressed resolution.'
+                        : 'Image shrinking is currently turned OFF. Uploaded item & banner photos will be stored at their original resolution without shrinking.'}
                     </p>
                   </div>
                 </div>
@@ -2358,6 +2357,53 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           className="text-xs text-zinc-400 hover:text-white cursor-pointer"
                         >
                           View All ({orders.length})
+                        </button>
+                      </div>
+
+                      {/* Simple Auto-Accept Orders Toggle */}
+                      <div className="bg-[#18181C] border border-zinc-800/90 rounded-2xl p-3.5 flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="text-xs font-bold text-white">
+                              Auto-Accept Orders
+                            </span>
+                            <span
+                              className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${
+                                autoAcceptOrders
+                                  ? 'bg-emerald-950/90 text-emerald-300 border border-emerald-700/70'
+                                  : 'bg-zinc-900 text-zinc-400 border border-zinc-700'
+                              }`}
+                            >
+                              {autoAcceptOrders ? 'ON' : 'OFF'}
+                            </span>
+                          </div>
+                          <p className="text-[10px] text-zinc-400 mt-0.5">
+                            Automatically approve incoming orders &amp; deduct stock.
+                          </p>
+                        </div>
+
+                        <button
+                          type="button"
+                          role="switch"
+                          aria-checked={autoAcceptOrders}
+                          data-testid="dashboard-toggle-auto-accept-orders"
+                          aria-label="Toggle Auto-Accept Orders On or Off"
+                          onClick={() =>
+                            onToggleAutoAcceptOrders(!autoAcceptOrders)
+                          }
+                          className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border transition-colors duration-200 items-center ${
+                            autoAcceptOrders
+                              ? 'bg-white border-white'
+                              : 'bg-zinc-800 border-zinc-700'
+                          }`}
+                        >
+                          <span
+                            className={`inline-block h-4 w-4 transform rounded-full transition-transform duration-200 ${
+                              autoAcceptOrders
+                                ? 'translate-x-5 bg-zinc-950'
+                                : 'translate-x-1 bg-zinc-400'
+                            }`}
+                          />
                         </button>
                       </div>
 
@@ -2682,11 +2728,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         <R2ImageUploadButton
                           ariaLabel="Upload Homepage Hero Image Banner"
                           label="Upload & Shrink Banner"
-                          compressionOptions={{
-                            maxWidth: 960,
-                            maxHeight: 1200,
-                            targetMaxBytes: 75 * 1024,
-                          }}
                           onUploaded={(url) => {
                             onUpdateSiteBanners({
                               ...siteBanners,
@@ -2785,11 +2826,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         <R2ImageUploadButton
                           ariaLabel="Upload Homepage Middle Banner Photo"
                           label="Upload & Shrink Photo"
-                          compressionOptions={{
-                            maxWidth: 960,
-                            maxHeight: 1200,
-                            targetMaxBytes: 75 * 1024,
-                          }}
                           onUploaded={(url) =>
                             updateSiteBannerField(
                               'homeMiddleBannerUrl',
@@ -3086,9 +3122,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         key={cat.id}
                         className="bg-[#18181C] border border-zinc-800 rounded-2xl p-4 sm:p-5 space-y-4"
                       >
-                        <div className="flex items-center justify-between gap-2 border-b border-zinc-800 pb-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800 pb-3">
                           <div>
-                            <div className="text-xs font-bold uppercase text-white flex items-center gap-2">
+                            <div className="text-xs font-bold uppercase text-white flex flex-wrap items-center gap-2">
                               <span>Women · {cat.name}</span>
                               <button
                                 type="button"
@@ -3111,7 +3147,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             </div>
                           </div>
 
-                          <div className="flex items-center gap-2">
+                          <div className="flex flex-wrap items-center gap-2">
                             <button
                               type="button"
                               onClick={() =>
@@ -3234,11 +3270,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                   compact={true}
                                   ariaLabel={`Upload banner photo for ${cat.name}`}
                                   label="Replace Photo"
-                                  compressionOptions={{
-                                    maxWidth: 960,
-                                    maxHeight: 1200,
-                                    targetMaxBytes: 75 * 1024,
-                                  }}
                                   onUploaded={(url) =>
                                     updateCategoryBanner(
                                       bKey,
@@ -3305,9 +3336,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         key={cat.id}
                         className="bg-[#18181C] border border-zinc-800 rounded-2xl p-4 sm:p-5 space-y-4"
                       >
-                        <div className="flex items-center justify-between gap-2 border-b border-zinc-800 pb-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800 pb-3">
                           <div>
-                            <div className="text-xs font-bold uppercase text-white flex items-center gap-2">
+                            <div className="text-xs font-bold uppercase text-white flex flex-wrap items-center gap-2">
                               <span>Kids · {cat.name}</span>
                               <button
                                 type="button"
@@ -3330,7 +3361,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             </div>
                           </div>
 
-                          <div className="flex items-center gap-2">
+                          <div className="flex flex-wrap items-center gap-2">
                             <button
                               type="button"
                               onClick={() =>
@@ -3454,11 +3485,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                   compact={true}
                                   ariaLabel={`Upload banner photo for ${cat.name}`}
                                   label="Replace Photo"
-                                  compressionOptions={{
-                                    maxWidth: 960,
-                                    maxHeight: 1200,
-                                    targetMaxBytes: 75 * 1024,
-                                  }}
                                   onUploaded={(url) =>
                                     updateCategoryBanner(
                                       bKey,
@@ -3521,7 +3547,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     Click Accept (✓) to reduce stock or Reject (✕).
                   </p>
                 </div>
-                <div className="flex items-center gap-5 text-xs font-mono-tabular text-zinc-300">
+                <div className="flex flex-wrap items-center gap-4 sm:gap-5 text-xs font-mono-tabular text-zinc-300">
                   <span>
                     Pending: <strong className="text-white">{pendingOrders.length}</strong>
                   </span>
@@ -3537,6 +3563,65 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       {orders.filter((o) => o.status === 'rejected').length}
                     </strong>
                   </span>
+                </div>
+              </div>
+
+              {/* Simple ON / OFF Toggle for Auto-Accepting Orders */}
+              <div className="bg-[#18181C] border border-zinc-800/90 rounded-2xl p-4 sm:px-5 sm:py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex items-start sm:items-center gap-3.5">
+                  <div className="w-9 h-9 rounded-xl bg-zinc-900 border border-zinc-700 flex items-center justify-center text-white shrink-0">
+                    <ShoppingBag className="w-4 h-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-xs sm:text-sm font-bold text-white">
+                        Auto-Accept Orders
+                      </span>
+                      <span
+                        className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+                          autoAcceptOrders
+                            ? 'bg-emerald-950/90 text-emerald-300 border border-emerald-700/70'
+                            : 'bg-zinc-900 text-zinc-400 border border-zinc-700'
+                        }`}
+                      >
+                        {autoAcceptOrders
+                          ? 'ON · Automatically Accepting Orders'
+                          : 'OFF · Manual Review'}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-zinc-400 mt-0.5">
+                      {autoAcceptOrders
+                        ? 'Auto-Accept is turned ON. All incoming orders are automatically accepted and item stock quantities are updated immediately.'
+                        : 'Turn on to automatically accept incoming customer orders and deduct item stock without manual approval.'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between sm:justify-end gap-3 pt-2 sm:pt-0 border-t sm:border-t-0 border-zinc-800/80 shrink-0">
+                  <span className="text-xs font-semibold text-zinc-300">
+                    {autoAcceptOrders ? 'Auto-Accept ON' : 'Auto-Accept OFF'}
+                  </span>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={autoAcceptOrders}
+                    data-testid="toggle-auto-accept-orders"
+                    aria-label="Toggle Auto-Accept Orders On or Off"
+                    onClick={() => onToggleAutoAcceptOrders(!autoAcceptOrders)}
+                    className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border transition-colors duration-200 items-center ${
+                      autoAcceptOrders
+                        ? 'bg-white border-white'
+                        : 'bg-zinc-800 border-zinc-700'
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full transition-transform duration-200 ${
+                        autoAcceptOrders
+                          ? 'translate-x-5 bg-zinc-950'
+                          : 'translate-x-1 bg-zinc-400'
+                      }`}
+                    />
+                  </button>
                 </div>
               </div>
 
@@ -3636,7 +3721,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         </div>
                       </div>
 
-                      <div className="lg:col-span-3 flex flex-wrap items-center justify-end gap-2 shrink-0">
+                      <div className="lg:col-span-3 flex flex-wrap items-center justify-start lg:justify-end gap-2 pt-2 lg:pt-0 border-t lg:border-t-0 border-zinc-800/80 shrink-0">
                         <button
                           type="button"
                           onClick={() =>
@@ -4006,12 +4091,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </div>
               </div>
 
-              {/* Firebase & Cloudflare Export Card */}
+              {/* Store Catalog Export Card */}
               <div className="bg-[#18181C] border border-zinc-800 rounded-2xl p-6 flex flex-wrap items-center justify-between gap-4">
                 <div>
                   <h3 className="text-sm font-bold text-white uppercase tracking-wider">
-                    Firebase Project (samo-store-ac7dd) &amp; Cloudflare R2
-                    Backup
+                    SAMO Store Catalog Backup
                   </h3>
                   <p className="text-xs text-zinc-400 mt-1">
                     Export a complete JSON snapshot of your catalog, banners,
@@ -4112,7 +4196,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </strong>{' '}
                   ({productPendingDelete.department} ·{' '}
                   {productPendingDelete.category}) from the SAMO storefront and
-                  delete its uploaded images from the Cloudflare R2 bucket.
+                  permanently delete its uploaded images.
                 </p>
               </div>
             </div>
@@ -4146,7 +4230,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
       {/* =========================================================================
           POP-UP MODAL 1B: DELETE SINGLE IMAGE CONFIRMATION ("Are you sure?")
-          Removes the image from the item AND deletes it from Cloudflare R2 bucket
          ========================================================================= */}
       {imagePendingDelete && (
         <div
@@ -4172,8 +4255,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <strong className="text-white">
                     {imagePendingDelete.label}
                   </strong>{' '}
-                  from this item and permanently delete the image file from your
-                  Cloudflare R2 bucket.
+                  from this item and permanently delete the image file.
                 </p>
               </div>
             </div>
@@ -4456,14 +4538,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           role="dialog"
           aria-modal="true"
           aria-labelledby="edit-product-modal-title"
-          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 overflow-y-auto"
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-2.5 sm:p-6 overflow-y-auto"
         >
-          <div className="bg-white text-zinc-950 border border-zinc-300 rounded-2xl max-w-2xl w-full p-5 sm:p-6 space-y-5 shadow-2xl my-auto max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b border-zinc-200 pb-3 sticky top-0 bg-white z-10">
-              <div>
+          <div className="bg-white text-zinc-950 border border-zinc-300 rounded-2xl max-w-2xl w-full p-3.5 sm:p-6 space-y-5 shadow-2xl my-auto max-h-[92vh] overflow-y-auto overflow-x-hidden">
+            <div className="flex items-start sm:items-center justify-between gap-2 border-b border-zinc-200 pb-3 sticky top-0 bg-white z-10">
+              <div className="min-w-0">
                 <h2
                   id="edit-product-modal-title"
-                  className="font-display text-base font-extrabold uppercase tracking-wider text-zinc-950"
+                  className="font-display text-sm sm:text-base font-extrabold uppercase tracking-wider text-zinc-950 break-words"
                 >
                   Edit Product: {editingProduct.name}
                 </h2>
@@ -4476,7 +4558,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 type="button"
                 onClick={() => setEditingProductId(null)}
                 aria-label="Close Edit Product Modal"
-                className="p-2 rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-800 cursor-pointer"
+                className="p-2 rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-800 cursor-pointer shrink-0"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -4673,7 +4755,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           );
                         })}
                       </div>
-                      <div className="flex gap-1.5">
+                      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-1.5">
                         <input
                           type="text"
                           value={editProdNewMaterialInput}
@@ -4681,7 +4763,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             setEditProdNewMaterialInput(e.target.value)
                           }
                           placeholder="Add custom material..."
-                          className="flex-1 px-2.5 py-1 text-xs bg-white border border-zinc-300"
+                          className="w-full sm:flex-1 min-w-0 px-2.5 py-1.5 text-xs bg-white border border-zinc-300"
                         />
                         <button
                           type="button"
@@ -4697,7 +4779,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             }
                             setEditProdNewMaterialInput('');
                           }}
-                          className="px-3 py-1 bg-zinc-900 text-white text-[10px] font-bold uppercase cursor-pointer"
+                          className="px-3 py-1.5 bg-zinc-900 text-white text-[10px] font-bold uppercase cursor-pointer whitespace-nowrap shrink-0"
                         >
                           + Add Material
                         </button>
@@ -4816,7 +4898,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         <span className="block text-[10px] font-bold uppercase tracking-wider text-zinc-800">
                           Add New Color (Name, Hex Code, or Color Palette):
                         </span>
-                        <div className="flex flex-wrap items-center gap-2">
+                        <div className="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-2">
                           <input
                             type="text"
                             value={catalogCustomColorInputs[prod.id] || ''}
@@ -4827,52 +4909,54 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               }))
                             }
                             placeholder="Color Name (e.g. Olive, Royal Blue)..."
-                            className="flex-1 min-w-[140px] px-2.5 py-1.5 text-xs bg-white border border-zinc-300"
+                            className="w-full sm:flex-1 min-w-0 px-2.5 py-1.5 text-xs bg-white border border-zinc-300"
                           />
-                          <div className="flex items-center gap-1.5">
-                            <input
-                              type="color"
-                              value={
-                                /^#([0-9A-Fa-f]{6})$/.test(
-                                  catalogCustomColorHexInputs[prod.id] || ''
-                                )
-                                  ? catalogCustomColorHexInputs[prod.id]
-                                  : '#3D4F2F'
+                          <div className="flex flex-wrap items-center justify-between sm:justify-start gap-1.5">
+                            <div className="flex items-center gap-1.5">
+                              <input
+                                type="color"
+                                value={
+                                  /^#([0-9A-Fa-f]{6})$/.test(
+                                    catalogCustomColorHexInputs[prod.id] || ''
+                                  )
+                                    ? catalogCustomColorHexInputs[prod.id]
+                                    : '#3D4F2F'
+                                }
+                                onChange={(e) =>
+                                  setCatalogCustomColorHexInputs((prev) => ({
+                                    ...prev,
+                                    [prod.id]: e.target.value,
+                                  }))
+                                }
+                                aria-label="Pick custom color from color wheel"
+                                className="w-8 h-8 p-0.5 bg-white border border-zinc-300 cursor-pointer shrink-0"
+                              />
+                              <input
+                                type="text"
+                                value={
+                                  catalogCustomColorHexInputs[prod.id] ||
+                                  '#3D4F2F'
+                                }
+                                onChange={(e) =>
+                                  setCatalogCustomColorHexInputs((prev) => ({
+                                    ...prev,
+                                    [prod.id]: e.target.value,
+                                  }))
+                                }
+                                placeholder="#HEX"
+                                className="w-24 sm:w-28 px-2 py-1.5 text-xs font-mono-tabular bg-white border border-zinc-300"
+                              />
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleCatalogAddCustomColorToProduct(prod)
                               }
-                              onChange={(e) =>
-                                setCatalogCustomColorHexInputs((prev) => ({
-                                  ...prev,
-                                  [prod.id]: e.target.value,
-                                }))
-                              }
-                              aria-label="Pick custom color from color wheel"
-                              className="w-8 h-8 p-0.5 bg-white border border-zinc-300 cursor-pointer shrink-0"
-                            />
-                            <input
-                              type="text"
-                              value={
-                                catalogCustomColorHexInputs[prod.id] ||
-                                '#3D4F2F'
-                              }
-                              onChange={(e) =>
-                                setCatalogCustomColorHexInputs((prev) => ({
-                                  ...prev,
-                                  [prod.id]: e.target.value,
-                                }))
-                              }
-                              placeholder="#HEX (e.g. #3D4F2F)"
-                              className="w-28 px-2 py-1.5 text-xs font-mono-tabular bg-white border border-zinc-300"
-                            />
+                              className="px-3 py-1.5 bg-zinc-950 text-white text-[10px] font-bold uppercase cursor-pointer whitespace-nowrap shrink-0"
+                            >
+                              + Add Color
+                            </button>
                           </div>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              handleCatalogAddCustomColorToProduct(prod)
-                            }
-                            className="px-3 py-1.5 bg-zinc-950 text-white text-[10px] font-bold uppercase cursor-pointer"
-                          >
-                            + Add Color
-                          </button>
                         </div>
 
                         {/* Quick Color Palette Swatches */}
@@ -4979,7 +5063,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                   <span className="block text-[10px] font-bold uppercase text-zinc-700 mb-0.5">
                                     1. Primary Photo (Shown on Website Card &amp; First in Pop-up) *
                                   </span>
-                                  <div className="flex items-start gap-1.5">
+                                  <div className="flex flex-col sm:flex-row sm:items-start gap-1.5">
                                     <input
                                       type="text"
                                       value={variant.imageUrl}
@@ -4994,53 +5078,55 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                         )
                                       }
                                       placeholder={`Photo #1 URL for ${variant.colorName}`}
-                                      className="flex-1 min-w-0 px-2.5 py-1.5 text-xs bg-white border border-zinc-300"
+                                      className="w-full sm:flex-1 min-w-0 px-2.5 py-1.5 text-xs bg-white border border-zinc-300"
                                     />
-                                    <R2ImageUploadButton
-                                      compact={true}
-                                      label={
-                                        variant.imageUrl?.trim()
-                                          ? 'Replace Photo'
-                                          : 'Upload Photo'
-                                      }
-                                      ariaLabel={`Upload Photo 1 for ${prod.name} color ${variant.colorName}`}
-                                      onUploaded={(url) =>
-                                        handleCatalogVariantChange(
-                                          prod,
-                                          variant.colorName,
-                                          (v) => ({
-                                            ...v,
-                                            imageUrl: url,
-                                          })
-                                        )
-                                      }
-                                    />
-                                    {Boolean(variant.imageUrl?.trim()) && (
-                                      <button
-                                        type="button"
-                                        onClick={() =>
-                                          setImagePendingDelete({
-                                            label: `${prod.name} (${variant.colorName} · Photo #1)`,
-                                            imageUrl: variant.imageUrl,
-                                            onConfirm: () =>
-                                              handleCatalogVariantChange(
-                                                prod,
-                                                variant.colorName,
-                                                (v) => ({
-                                                  ...v,
-                                                  imageUrl: '',
-                                                })
-                                              ),
-                                          })
+                                    <div className="flex flex-wrap items-center justify-end gap-1.5 w-full sm:w-auto shrink-0">
+                                      <R2ImageUploadButton
+                                        compact={true}
+                                        label={
+                                          variant.imageUrl?.trim()
+                                            ? 'Replace Photo'
+                                            : 'Upload Photo'
                                         }
-                                        aria-label={`Delete Photo 1 for ${prod.name} color ${variant.colorName}`}
-                                        title="Delete this image from item & R2 bucket"
-                                        className="px-2.5 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 cursor-pointer shrink-0"
-                                      >
-                                        <Trash2 className="w-3 h-3" />
-                                        <span>Delete</span>
-                                      </button>
-                                    )}
+                                        ariaLabel={`Upload Photo 1 for ${prod.name} color ${variant.colorName}`}
+                                        onUploaded={(url) =>
+                                          handleCatalogVariantChange(
+                                            prod,
+                                            variant.colorName,
+                                            (v) => ({
+                                              ...v,
+                                              imageUrl: url,
+                                            })
+                                          )
+                                        }
+                                      />
+                                      {Boolean(variant.imageUrl?.trim()) && (
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            setImagePendingDelete({
+                                              label: `${prod.name} (${variant.colorName} · Photo #1)`,
+                                              imageUrl: variant.imageUrl,
+                                              onConfirm: () =>
+                                                handleCatalogVariantChange(
+                                                  prod,
+                                                  variant.colorName,
+                                                  (v) => ({
+                                                    ...v,
+                                                    imageUrl: '',
+                                                  })
+                                                ),
+                                            })
+                                          }
+                                          aria-label={`Delete Photo 1 for ${prod.name} color ${variant.colorName}`}
+                                          title="Delete this image"
+                                          className="px-2.5 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 cursor-pointer shrink-0"
+                                        >
+                                          <Trash2 className="w-3 h-3" />
+                                          <span>Delete</span>
+                                        </button>
+                                      )}
+                                    </div>
                                   </div>
                                 </div>
 
@@ -5050,7 +5136,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                     <span className="block text-[10px] font-bold uppercase text-zinc-600 mb-0.5">
                                       {gIdx + 2}. Color Photo #{gIdx + 2} (Shown in Product Pop-up)
                                     </span>
-                                    <div className="flex items-start gap-1.5">
+                                    <div className="flex flex-col sm:flex-row sm:items-start gap-1.5">
                                       <input
                                         type="text"
                                         value={gUrls[gIdx] || ''}
@@ -5079,81 +5165,83 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                           );
                                         }}
                                         placeholder={`Photo #${gIdx + 2} URL for ${variant.colorName} (Optional)`}
-                                        className="flex-1 min-w-0 px-2.5 py-1.5 text-xs bg-white border border-zinc-300"
+                                        className="w-full sm:flex-1 min-w-0 px-2.5 py-1.5 text-xs bg-white border border-zinc-300"
                                       />
-                                      <R2ImageUploadButton
-                                        compact={true}
-                                        label={
-                                          gUrls[gIdx]?.trim()
-                                            ? 'Replace Photo'
-                                            : 'Upload Photo'
-                                        }
-                                        ariaLabel={`Upload Photo ${gIdx + 2} for ${prod.name} color ${variant.colorName}`}
-                                        onUploaded={(url) =>
-                                          handleCatalogVariantChange(
-                                            prod,
-                                            variant.colorName,
-                                            (v) => {
-                                              const nextGallery = [
-                                                ...(v.galleryUrls || [
-                                                  '',
-                                                  '',
-                                                  '',
-                                                ]),
-                                              ];
-                                              while (nextGallery.length < 3) {
-                                                nextGallery.push('');
-                                              }
-                                              nextGallery[gIdx] = url;
-                                              return {
-                                                ...v,
-                                                galleryUrls: nextGallery,
-                                              };
-                                            }
-                                          )
-                                        }
-                                      />
-                                      {Boolean(gUrls[gIdx]?.trim()) && (
-                                        <button
-                                          type="button"
-                                          onClick={() =>
-                                            setImagePendingDelete({
-                                              label: `${prod.name} (${variant.colorName} · Photo #${gIdx + 2})`,
-                                              imageUrl: gUrls[gIdx],
-                                              onConfirm: () =>
-                                                handleCatalogVariantChange(
-                                                  prod,
-                                                  variant.colorName,
-                                                  (v) => {
-                                                    const nextGallery = [
-                                                      ...(v.galleryUrls || [
-                                                        '',
-                                                        '',
-                                                        '',
-                                                      ]),
-                                                    ];
-                                                    while (
-                                                      nextGallery.length < 3
-                                                    ) {
-                                                      nextGallery.push('');
-                                                    }
-                                                    nextGallery[gIdx] = '';
-                                                    return {
-                                                      ...v,
-                                                      galleryUrls: nextGallery,
-                                                    };
-                                                  }
-                                                ),
-                                            })
+                                      <div className="flex flex-wrap items-center justify-end gap-1.5 w-full sm:w-auto shrink-0">
+                                        <R2ImageUploadButton
+                                          compact={true}
+                                          label={
+                                            gUrls[gIdx]?.trim()
+                                              ? 'Replace Photo'
+                                              : 'Upload Photo'
                                           }
-                                          aria-label={`Delete Photo ${gIdx + 2} for ${prod.name} color ${variant.colorName}`}
-                                          title="Delete this image from item & R2 bucket"
-                                          className="px-2.5 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 cursor-pointer shrink-0"
-                                        >
-                                          <Trash2 className="w-3 h-3" />
-                                          <span>Delete</span>
-                                        </button>
-                                      )}
+                                          ariaLabel={`Upload Photo ${gIdx + 2} for ${prod.name} color ${variant.colorName}`}
+                                          onUploaded={(url) =>
+                                            handleCatalogVariantChange(
+                                              prod,
+                                              variant.colorName,
+                                              (v) => {
+                                                const nextGallery = [
+                                                  ...(v.galleryUrls || [
+                                                    '',
+                                                    '',
+                                                    '',
+                                                  ]),
+                                                ];
+                                                while (nextGallery.length < 3) {
+                                                  nextGallery.push('');
+                                                }
+                                                nextGallery[gIdx] = url;
+                                                return {
+                                                  ...v,
+                                                  galleryUrls: nextGallery,
+                                                };
+                                              }
+                                            )
+                                          }
+                                        />
+                                        {Boolean(gUrls[gIdx]?.trim()) && (
+                                          <button
+                                            type="button"
+                                            onClick={() =>
+                                              setImagePendingDelete({
+                                                label: `${prod.name} (${variant.colorName} · Photo #${gIdx + 2})`,
+                                                imageUrl: gUrls[gIdx],
+                                                onConfirm: () =>
+                                                  handleCatalogVariantChange(
+                                                    prod,
+                                                    variant.colorName,
+                                                    (v) => {
+                                                      const nextGallery = [
+                                                        ...(v.galleryUrls || [
+                                                          '',
+                                                          '',
+                                                          '',
+                                                        ]),
+                                                      ];
+                                                      while (
+                                                        nextGallery.length < 3
+                                                      ) {
+                                                        nextGallery.push('');
+                                                      }
+                                                      nextGallery[gIdx] = '';
+                                                      return {
+                                                        ...v,
+                                                        galleryUrls: nextGallery,
+                                                      };
+                                                    }
+                                                  ),
+                                              })
+                                            }
+                                            aria-label={`Delete Photo ${gIdx + 2} for ${prod.name} color ${variant.colorName}`}
+                                            title="Delete this image"
+                                            className="px-2.5 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 cursor-pointer shrink-0"
+                                          >
+                                            <Trash2 className="w-3 h-3" />
+                                            <span>Delete</span>
+                                          </button>
+                                        )}
+                                      </div>
                                     </div>
                                   </div>
                                 ))}
@@ -5165,7 +5253,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                   Size Type for {variant.colorName} (Choose
                                   Letter, Number, or Kids CM):
                                 </span>
-                                <div className="grid grid-cols-3 gap-1.5">
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5">
                                   {(
                                     [
                                       {
@@ -5323,7 +5411,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                   );
                                 })}
 
-                                <div className="flex items-center gap-1">
+                                <div className="flex items-center gap-1.5 w-full sm:w-auto pt-1 sm:pt-0">
                                   <input
                                     type="text"
                                     value={
@@ -5337,7 +5425,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                       }))
                                     }
                                     placeholder="Custom size (e.g. 103 cm, 36, XXL)"
-                                    className="w-40 px-2 py-1 text-[10px] border border-zinc-300"
+                                    className="flex-1 sm:w-44 min-w-0 px-2 py-1 text-[10px] border border-zinc-300"
                                   />
                                   <button
                                     type="button"
@@ -5373,7 +5461,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                         [sizeInputKey]: '',
                                       }));
                                     }}
-                                    className="px-2.5 py-1 bg-zinc-900 text-white text-[10px] font-bold uppercase cursor-pointer"
+                                    className="px-2.5 py-1 bg-zinc-900 text-white text-[10px] font-bold uppercase cursor-pointer whitespace-nowrap shrink-0"
                                   >
                                     + Add Size
                                   </button>
@@ -5392,7 +5480,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       </span>
 
                       {/* 3 Size Type Buttons for Single-Color Product */}
-                      <div className="grid grid-cols-3 gap-1.5">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5">
                         {(
                           [
                             { id: 'letter', label: '1. Letter (XS–XL)' },
@@ -5512,7 +5600,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           );
                         })}
 
-                        <div className="flex items-center gap-1">
+                        <div className="flex items-center gap-1.5 w-full sm:w-auto pt-1 sm:pt-0">
                           <input
                             type="text"
                             value={editProdCustomSizeInput}
@@ -5520,7 +5608,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               setEditProdCustomSizeInput(e.target.value)
                             }
                             placeholder="Custom size (e.g. 103 cm, 36, XXL)"
-                            className="w-40 px-2 py-1 text-[10px] bg-white border border-zinc-300"
+                            className="flex-1 sm:w-44 min-w-0 px-2 py-1 text-[10px] bg-white border border-zinc-300"
                           />
                           <button
                             type="button"
@@ -5545,7 +5633,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               });
                               setEditProdCustomSizeInput('');
                             }}
-                            className="px-2.5 py-1 bg-zinc-900 text-white text-[10px] font-bold uppercase cursor-pointer"
+                            className="px-2.5 py-1 bg-zinc-900 text-white text-[10px] font-bold uppercase cursor-pointer whitespace-nowrap shrink-0"
                           >
                             + Add Size
                           </button>
@@ -5594,14 +5682,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     )}
                   </div>
 
-                  {/* Up to 4 Product Image URLs Editor (with Replace & Delete Image + R2 Cleanup) */}
+                  {/* Up to 4 Product Image URLs Editor (with Replace & Delete Image) */}
                   <div className="p-4 bg-zinc-50 border border-zinc-200 rounded-xl space-y-2.5">
                     <div className="font-bold uppercase tracking-wider text-zinc-800">
                       Product Image URLs (Up to 4 Angles — Upload, Replace, or
                       Delete Any Image):
                     </div>
-                    <div className="space-y-2">
-                      <div className="flex items-start gap-2">
+                    <div className="space-y-2.5">
+                      <div className="flex flex-col sm:flex-row sm:items-start gap-1.5">
                         <input
                           type="text"
                           value={prod.imageUrl || ''}
@@ -5611,47 +5699,52 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             })
                           }
                           placeholder="1. Primary Image URL"
-                          className="flex-1 min-w-0 px-2.5 py-1.5 text-xs bg-white border border-zinc-300"
+                          className="w-full sm:flex-1 min-w-0 px-2.5 py-1.5 text-xs bg-white border border-zinc-300"
                         />
-                        <R2ImageUploadButton
-                          compact={true}
-                          label={
-                            prod.imageUrl?.trim()
-                              ? 'Replace Photo'
-                              : 'Upload Photo'
-                          }
-                          ariaLabel={`Upload Primary Photo for ${prod.name}`}
-                          onUploaded={(url) =>
-                            onUpdateProductMeta(prod.id, { imageUrl: url })
-                          }
-                        />
-                        {Boolean(prod.imageUrl?.trim()) && (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setImagePendingDelete({
-                                label: `${prod.name} (Primary Image #1)`,
-                                imageUrl: prod.imageUrl,
-                                onConfirm: () =>
-                                  onUpdateProductMeta(prod.id, {
-                                    imageUrl: '',
-                                  }),
-                              })
+                        <div className="flex flex-wrap items-center justify-end gap-1.5 w-full sm:w-auto shrink-0">
+                          <R2ImageUploadButton
+                            compact={true}
+                            label={
+                              prod.imageUrl?.trim()
+                                ? 'Replace Photo'
+                                : 'Upload Photo'
                             }
-                            aria-label={`Delete Primary Photo for ${prod.name}`}
-                            title="Delete this image from item & R2 bucket"
-                            className="px-2.5 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 cursor-pointer shrink-0"
-                          >
-                            <Trash2 className="w-3 h-3" />
-                            <span>Delete</span>
-                          </button>
-                        )}
+                            ariaLabel={`Upload Primary Photo for ${prod.name}`}
+                            onUploaded={(url) =>
+                              onUpdateProductMeta(prod.id, { imageUrl: url })
+                            }
+                          />
+                          {Boolean(prod.imageUrl?.trim()) && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setImagePendingDelete({
+                                  label: `${prod.name} (Primary Image #1)`,
+                                  imageUrl: prod.imageUrl,
+                                  onConfirm: () =>
+                                    onUpdateProductMeta(prod.id, {
+                                      imageUrl: '',
+                                    }),
+                                })
+                              }
+                              aria-label={`Delete Primary Photo for ${prod.name}`}
+                              title="Delete this image"
+                              className="px-2.5 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 cursor-pointer shrink-0"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                              <span>Delete</span>
+                            </button>
+                          )}
+                        </div>
                       </div>
                       {[0, 1, 2].map((gIdx) => {
                         const currentGalleryUrl =
                           prod.galleryUrls?.[gIdx] || '';
                         return (
-                          <div key={gIdx} className="flex items-start gap-2">
+                          <div
+                            key={gIdx}
+                            className="flex flex-col sm:flex-row sm:items-start gap-1.5"
+                          >
                             <input
                               type="text"
                               value={currentGalleryUrl}
@@ -5671,71 +5764,73 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               placeholder={`${gIdx + 2}. Image URL #${
                                 gIdx + 2
                               } (Optional)`}
-                              className="flex-1 min-w-0 px-2.5 py-1.5 text-xs bg-white border border-zinc-300"
+                              className="w-full sm:flex-1 min-w-0 px-2.5 py-1.5 text-xs bg-white border border-zinc-300"
                             />
-                            <R2ImageUploadButton
-                              compact={true}
-                              label={
-                                currentGalleryUrl.trim()
-                                  ? 'Replace Photo'
-                                  : 'Upload Photo'
-                              }
-                              ariaLabel={`Upload Photo #${gIdx + 2} for ${
-                                prod.name
-                              }`}
-                              onUploaded={(url) => {
-                                const current = [
-                                  prod.galleryUrls?.[0] || '',
-                                  prod.galleryUrls?.[1] || '',
-                                  prod.galleryUrls?.[2] || '',
-                                ];
-                                current[gIdx] = url;
-                                onUpdateProductMeta(prod.id, {
-                                  galleryUrls: current.filter((u) =>
-                                    Boolean(u.trim())
-                                  ),
-                                });
-                              }}
-                            />
-                            {Boolean(currentGalleryUrl.trim()) && (
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setImagePendingDelete({
-                                    label: `${prod.name} (Image #${gIdx + 2})`,
-                                    imageUrl: currentGalleryUrl,
-                                    onConfirm: () => {
-                                      const current = [
-                                        prod.galleryUrls?.[0] || '',
-                                        prod.galleryUrls?.[1] || '',
-                                        prod.galleryUrls?.[2] || '',
-                                      ];
-                                      current[gIdx] = '';
-                                      onUpdateProductMeta(prod.id, {
-                                        galleryUrls: current.filter((u) =>
-                                          Boolean(u.trim())
-                                        ),
-                                      });
-                                    },
-                                  })
+                            <div className="flex flex-wrap items-center justify-end gap-1.5 w-full sm:w-auto shrink-0">
+                              <R2ImageUploadButton
+                                compact={true}
+                                label={
+                                  currentGalleryUrl.trim()
+                                    ? 'Replace Photo'
+                                    : 'Upload Photo'
                                 }
-                                aria-label={`Delete Photo #${gIdx + 2} for ${
+                                ariaLabel={`Upload Photo #${gIdx + 2} for ${
                                   prod.name
                                 }`}
-                                title="Delete this image from item & R2 bucket"
-                                className="px-2.5 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 cursor-pointer shrink-0"
-                              >
-                                <Trash2 className="w-3 h-3" />
-                                <span>Delete</span>
-                              </button>
-                            )}
+                                onUploaded={(url) => {
+                                  const current = [
+                                    prod.galleryUrls?.[0] || '',
+                                    prod.galleryUrls?.[1] || '',
+                                    prod.galleryUrls?.[2] || '',
+                                  ];
+                                  current[gIdx] = url;
+                                  onUpdateProductMeta(prod.id, {
+                                    galleryUrls: current.filter((u) =>
+                                      Boolean(u.trim())
+                                    ),
+                                  });
+                                }}
+                              />
+                              {Boolean(currentGalleryUrl.trim()) && (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setImagePendingDelete({
+                                      label: `${prod.name} (Image #${gIdx + 2})`,
+                                      imageUrl: currentGalleryUrl,
+                                      onConfirm: () => {
+                                        const current = [
+                                          prod.galleryUrls?.[0] || '',
+                                          prod.galleryUrls?.[1] || '',
+                                          prod.galleryUrls?.[2] || '',
+                                        ];
+                                        current[gIdx] = '';
+                                        onUpdateProductMeta(prod.id, {
+                                          galleryUrls: current.filter((u) =>
+                                            Boolean(u.trim())
+                                          ),
+                                        });
+                                      },
+                                    })
+                                  }
+                                  aria-label={`Delete Photo #${gIdx + 2} for ${
+                                    prod.name
+                                  }`}
+                                  title="Delete this image"
+                                  className="px-2.5 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 cursor-pointer shrink-0"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                  <span>Delete</span>
+                                </button>
+                              )}
+                            </div>
                           </div>
                         );
                       })}
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between pt-3 border-t border-zinc-200">
+                  <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-zinc-200">
                     <button
                       type="button"
                       onClick={() => {
@@ -5751,7 +5846,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <button
                       type="button"
                       onClick={() => setEditingProductId(null)}
-                      className="px-6 py-2.5 rounded-xl bg-zinc-950 text-white text-xs font-bold uppercase tracking-wider hover:bg-zinc-800 cursor-pointer"
+                      className="px-5 sm:px-6 py-2.5 rounded-xl bg-zinc-950 text-white text-xs font-bold uppercase tracking-wider hover:bg-zinc-800 cursor-pointer"
                     >
                       Done Editing
                     </button>
@@ -5771,27 +5866,27 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           role="dialog"
           aria-modal="true"
           aria-labelledby="add-product-modal-title"
-          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 overflow-y-auto"
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-2.5 sm:p-6 overflow-y-auto"
         >
-          <div className="bg-white text-zinc-950 border border-zinc-300 rounded-2xl max-w-3xl w-full p-5 sm:p-7 space-y-5 shadow-2xl my-auto max-h-[92vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b border-zinc-200 pb-3 sticky top-0 bg-white z-10">
-              <div>
+          <div className="bg-white text-zinc-950 border border-zinc-300 rounded-2xl max-w-3xl w-full p-3.5 sm:p-7 space-y-5 shadow-2xl my-auto max-h-[92vh] overflow-y-auto overflow-x-hidden">
+            <div className="flex items-start justify-between gap-2 border-b border-zinc-200 pb-3 sticky top-0 bg-white z-10">
+              <div className="min-w-0">
                 <h2
                   id="add-product-modal-title"
-                  className="font-display text-lg font-extrabold uppercase tracking-[0.08em] text-zinc-950"
+                  className="font-display text-base sm:text-lg font-extrabold uppercase tracking-[0.08em] text-zinc-950"
                 >
                   Add New Product Item
                 </h2>
                 <p className="text-xs text-zinc-500">
-                  Configure product details, discounts, 4:5 photos (auto-shrunk
-                  to ~35–55 KB), colors, and per-size stock.
+                  Configure product details, discounts, 4:5 photos, colors, and
+                  per-size stock.
                 </p>
               </div>
               <button
                 type="button"
                 onClick={() => setIsAddProductModalOpen(false)}
                 aria-label="Close Add Product Modal"
-                className="p-2 rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-800 cursor-pointer"
+                className="p-2 rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-800 cursor-pointer shrink-0"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -5974,14 +6069,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
 
               {/* UP TO 4 PRODUCT IMAGE URLS */}
-              <div className="p-3.5 bg-zinc-50 border border-zinc-200 space-y-2.5">
-                <div className="flex items-center justify-between">
+              <div className="p-3 sm:p-3.5 bg-zinc-50 border border-zinc-200 space-y-2.5">
+                <div className="flex flex-wrap items-center justify-between gap-1.5">
                   <label className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-zinc-900">
-                    <ImageIcon className="w-3.5 h-3.5" />
+                    <ImageIcon className="w-3.5 h-3.5 shrink-0" />
                     <span>Product Image URLs (Add 1 up to 4 Image URLs)</span>
                   </label>
                   <span className="text-[10px] text-zinc-500 uppercase tracking-wider">
-                    4:5 Ratio · Auto-Shrinks to ~35–55 KB
+                    4:5 Ratio · Smart Image Optimization
                   </span>
                 </div>
 
@@ -5990,160 +6085,168 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <span className="block text-[10px] font-bold uppercase tracking-wider text-zinc-600 mb-0.5">
                       1. Primary Image URL
                     </span>
-                    <div className="flex items-start gap-1.5">
+                    <div className="flex flex-col sm:flex-row sm:items-start gap-1.5">
                       <input
                         type="text"
                         value={itemUrl}
                         onChange={(e) => setItemUrl(e.target.value)}
                         placeholder="https://... (Main Front View)"
                         aria-label="Primary Product Image URL 1"
-                        className="flex-1 min-w-0 px-2.5 py-1.5 text-xs bg-white border border-zinc-300"
+                        className="w-full sm:flex-1 min-w-0 px-2.5 py-1.5 text-xs bg-white border border-zinc-300"
                       />
-                      <R2ImageUploadButton
-                        label={
-                          itemUrl.trim() ? 'Replace Photo' : 'Upload Photo'
-                        }
-                        ariaLabel="Upload Photo for Primary Image URL 1"
-                        onUploaded={(url) => setItemUrl(url)}
-                      />
-                      {Boolean(itemUrl.trim()) && (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setImagePendingDelete({
-                              label: 'New Item Primary Image #1',
-                              imageUrl: itemUrl,
-                              onConfirm: () => setItemUrl(''),
-                            })
+                      <div className="flex flex-wrap items-center justify-end gap-1.5 w-full sm:w-auto shrink-0">
+                        <R2ImageUploadButton
+                          label={
+                            itemUrl.trim() ? 'Replace Photo' : 'Upload Photo'
                           }
-                          aria-label="Delete Primary Image URL 1"
-                          title="Delete this image from item & R2 bucket"
-                          className="px-2.5 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 cursor-pointer shrink-0"
-                        >
-                          <Trash2 className="w-3 h-3" />
-                          <span>Delete</span>
-                        </button>
-                      )}
+                          ariaLabel="Upload Photo for Primary Image URL 1"
+                          onUploaded={(url) => setItemUrl(url)}
+                        />
+                        {Boolean(itemUrl.trim()) && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setImagePendingDelete({
+                                label: 'New Item Primary Image #1',
+                                imageUrl: itemUrl,
+                                onConfirm: () => setItemUrl(''),
+                              })
+                            }
+                            aria-label="Delete Primary Image URL 1"
+                            title="Delete this image"
+                            className="px-2.5 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 cursor-pointer shrink-0"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                            <span>Delete</span>
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
                   <div>
                     <span className="block text-[10px] font-bold uppercase tracking-wider text-zinc-600 mb-0.5">
                       2. Image URL #2 (Optional)
                     </span>
-                    <div className="flex items-start gap-1.5">
+                    <div className="flex flex-col sm:flex-row sm:items-start gap-1.5">
                       <input
                         type="text"
                         value={itemUrl2}
                         onChange={(e) => setItemUrl2(e.target.value)}
                         placeholder="https://... (Second Angle / Detail)"
                         aria-label="Product Image URL 2"
-                        className="flex-1 min-w-0 px-2.5 py-1.5 text-xs bg-white border border-zinc-300"
+                        className="w-full sm:flex-1 min-w-0 px-2.5 py-1.5 text-xs bg-white border border-zinc-300"
                       />
-                      <R2ImageUploadButton
-                        label={
-                          itemUrl2.trim() ? 'Replace Photo' : 'Upload Photo'
-                        }
-                        ariaLabel="Upload Photo for Image URL 2"
-                        onUploaded={(url) => setItemUrl2(url)}
-                      />
-                      {Boolean(itemUrl2.trim()) && (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setImagePendingDelete({
-                              label: 'New Item Image #2',
-                              imageUrl: itemUrl2,
-                              onConfirm: () => setItemUrl2(''),
-                            })
+                      <div className="flex flex-wrap items-center justify-end gap-1.5 w-full sm:w-auto shrink-0">
+                        <R2ImageUploadButton
+                          label={
+                            itemUrl2.trim() ? 'Replace Photo' : 'Upload Photo'
                           }
-                          aria-label="Delete Image URL 2"
-                          title="Delete this image from item & R2 bucket"
-                          className="px-2.5 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 cursor-pointer shrink-0"
-                        >
-                          <Trash2 className="w-3 h-3" />
-                          <span>Delete</span>
-                        </button>
-                      )}
+                          ariaLabel="Upload Photo for Image URL 2"
+                          onUploaded={(url) => setItemUrl2(url)}
+                        />
+                        {Boolean(itemUrl2.trim()) && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setImagePendingDelete({
+                                label: 'New Item Image #2',
+                                imageUrl: itemUrl2,
+                                onConfirm: () => setItemUrl2(''),
+                              })
+                            }
+                            aria-label="Delete Image URL 2"
+                            title="Delete this image"
+                            className="px-2.5 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 cursor-pointer shrink-0"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                            <span>Delete</span>
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
                   <div>
                     <span className="block text-[10px] font-bold uppercase tracking-wider text-zinc-600 mb-0.5">
                       3. Image URL #3 (Optional)
                     </span>
-                    <div className="flex items-start gap-1.5">
+                    <div className="flex flex-col sm:flex-row sm:items-start gap-1.5">
                       <input
                         type="text"
                         value={itemUrl3}
                         onChange={(e) => setItemUrl3(e.target.value)}
                         placeholder="https://... (Third Angle / Back)"
                         aria-label="Product Image URL 3"
-                        className="flex-1 min-w-0 px-2.5 py-1.5 text-xs bg-white border border-zinc-300"
+                        className="w-full sm:flex-1 min-w-0 px-2.5 py-1.5 text-xs bg-white border border-zinc-300"
                       />
-                      <R2ImageUploadButton
-                        label={
-                          itemUrl3.trim() ? 'Replace Photo' : 'Upload Photo'
-                        }
-                        ariaLabel="Upload Photo for Image URL 3"
-                        onUploaded={(url) => setItemUrl3(url)}
-                      />
-                      {Boolean(itemUrl3.trim()) && (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setImagePendingDelete({
-                              label: 'New Item Image #3',
-                              imageUrl: itemUrl3,
-                              onConfirm: () => setItemUrl3(''),
-                            })
+                      <div className="flex flex-wrap items-center justify-end gap-1.5 w-full sm:w-auto shrink-0">
+                        <R2ImageUploadButton
+                          label={
+                            itemUrl3.trim() ? 'Replace Photo' : 'Upload Photo'
                           }
-                          aria-label="Delete Image URL 3"
-                          title="Delete this image from item & R2 bucket"
-                          className="px-2.5 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 cursor-pointer shrink-0"
-                        >
-                          <Trash2 className="w-3 h-3" />
-                          <span>Delete</span>
-                        </button>
-                      )}
+                          ariaLabel="Upload Photo for Image URL 3"
+                          onUploaded={(url) => setItemUrl3(url)}
+                        />
+                        {Boolean(itemUrl3.trim()) && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setImagePendingDelete({
+                                label: 'New Item Image #3',
+                                imageUrl: itemUrl3,
+                                onConfirm: () => setItemUrl3(''),
+                              })
+                            }
+                            aria-label="Delete Image URL 3"
+                            title="Delete this image"
+                            className="px-2.5 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 cursor-pointer shrink-0"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                            <span>Delete</span>
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
                   <div>
                     <span className="block text-[10px] font-bold uppercase tracking-wider text-zinc-600 mb-0.5">
                       4. Image URL #4 (Optional)
                     </span>
-                    <div className="flex items-start gap-1.5">
+                    <div className="flex flex-col sm:flex-row sm:items-start gap-1.5">
                       <input
                         type="text"
                         value={itemUrl4}
                         onChange={(e) => setItemUrl4(e.target.value)}
                         placeholder="https://... (Fourth Angle / Lookbook)"
                         aria-label="Product Image URL 4"
-                        className="flex-1 min-w-0 px-2.5 py-1.5 text-xs bg-white border border-zinc-300"
+                        className="w-full sm:flex-1 min-w-0 px-2.5 py-1.5 text-xs bg-white border border-zinc-300"
                       />
-                      <R2ImageUploadButton
-                        label={
-                          itemUrl4.trim() ? 'Replace Photo' : 'Upload Photo'
-                        }
-                        ariaLabel="Upload Photo for Image URL 4"
-                        onUploaded={(url) => setItemUrl4(url)}
-                      />
-                      {Boolean(itemUrl4.trim()) && (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setImagePendingDelete({
-                              label: 'New Item Image #4',
-                              imageUrl: itemUrl4,
-                              onConfirm: () => setItemUrl4(''),
-                            })
+                      <div className="flex flex-wrap items-center justify-end gap-1.5 w-full sm:w-auto shrink-0">
+                        <R2ImageUploadButton
+                          label={
+                            itemUrl4.trim() ? 'Replace Photo' : 'Upload Photo'
                           }
-                          aria-label="Delete Image URL 4"
-                          title="Delete this image from item & R2 bucket"
-                          className="px-2.5 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 cursor-pointer shrink-0"
-                        >
-                          <Trash2 className="w-3 h-3" />
-                          <span>Delete</span>
-                        </button>
-                      )}
+                          ariaLabel="Upload Photo for Image URL 4"
+                          onUploaded={(url) => setItemUrl4(url)}
+                        />
+                        {Boolean(itemUrl4.trim()) && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setImagePendingDelete({
+                                label: 'New Item Image #4',
+                                imageUrl: itemUrl4,
+                                onConfirm: () => setItemUrl4(''),
+                              })
+                            }
+                            aria-label="Delete Image URL 4"
+                            title="Delete this image"
+                            className="px-2.5 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 cursor-pointer shrink-0"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                            <span>Delete</span>
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -6217,48 +6320,50 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         <span className="block text-[11px] font-bold uppercase tracking-wider text-zinc-900">
                           Add New Color (Name, Hex Code, or Color Palette):
                         </span>
-                        <div className="flex flex-wrap items-center gap-2">
+                        <div className="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-2">
                           <input
                             type="text"
                             value={newColorInput}
                             onChange={(e) => setNewColorInput(e.target.value)}
                             placeholder="Color Name (e.g. Emerald, Camel, Bordeaux)..."
                             aria-label="New custom color name"
-                            className="flex-1 min-w-[160px] px-2.5 py-1.5 text-xs bg-white border border-zinc-300"
+                            className="w-full sm:flex-1 min-w-0 px-2.5 py-1.5 text-xs bg-white border border-zinc-300"
                           />
-                          <div className="flex items-center gap-1.5">
-                            <input
-                              type="color"
-                              value={
-                                /^#([0-9A-Fa-f]{6})$/.test(newColorHexInput)
-                                  ? newColorHexInput
-                                  : '#3D4F2F'
-                              }
-                              onChange={(e) =>
-                                setNewColorHexInput(e.target.value)
-                              }
-                              aria-label="Pick color from palette wheel"
-                              title="Click to open Color Palette Picker"
-                              className="w-8 h-8 p-0.5 bg-white border border-zinc-300 cursor-pointer shrink-0"
-                            />
-                            <input
-                              type="text"
-                              value={newColorHexInput}
-                              onChange={(e) =>
-                                setNewColorHexInput(e.target.value)
-                              }
-                              placeholder="#HEX (e.g. #3D4F2F)"
-                              aria-label="New custom color hex code"
-                              className="w-28 px-2.5 py-1.5 text-xs font-mono-tabular bg-white border border-zinc-300"
-                            />
+                          <div className="flex items-center gap-1.5 justify-between sm:justify-start">
+                            <div className="flex items-center gap-1.5">
+                              <input
+                                type="color"
+                                value={
+                                  /^#([0-9A-Fa-f]{6})$/.test(newColorHexInput)
+                                    ? newColorHexInput
+                                    : '#3D4F2F'
+                                }
+                                onChange={(e) =>
+                                  setNewColorHexInput(e.target.value)
+                                }
+                                aria-label="Pick color from palette wheel"
+                                title="Click to open Color Palette Picker"
+                                className="w-8 h-8 p-0.5 bg-white border border-zinc-300 cursor-pointer shrink-0"
+                              />
+                              <input
+                                type="text"
+                                value={newColorHexInput}
+                                onChange={(e) =>
+                                  setNewColorHexInput(e.target.value)
+                                }
+                                placeholder="#HEX (e.g. #3D4F2F)"
+                                aria-label="New custom color hex code"
+                                className="w-28 px-2.5 py-1.5 text-xs font-mono-tabular bg-white border border-zinc-300"
+                              />
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleAddAndCheckCustomColor()}
+                              className="px-3.5 py-1.5 bg-zinc-950 text-white text-xs font-bold uppercase tracking-wider cursor-pointer hover:bg-zinc-800 whitespace-nowrap shrink-0"
+                            >
+                              + Add Color
+                            </button>
                           </div>
-                          <button
-                            type="button"
-                            onClick={() => handleAddAndCheckCustomColor()}
-                            className="px-3.5 py-1.5 bg-zinc-950 text-white text-xs font-bold uppercase tracking-wider cursor-pointer hover:bg-zinc-800"
-                          >
-                            + Add Color
-                          </button>
                         </div>
 
                         {/* Quick Clickable Color Palette Swatches */}
@@ -6364,7 +6469,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                 <span className="block text-[10px] font-bold uppercase text-zinc-700 mb-0.5">
                                   1. Main Color Photo (Shown on Website Card &amp; First in Pop-up) *
                                 </span>
-                                <div className="flex items-start gap-1.5">
+                                <div className="flex flex-col sm:flex-row sm:items-start gap-1.5">
                                   <input
                                     type="text"
                                     value={dc.imageUrl}
@@ -6378,51 +6483,53 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                       )
                                     }
                                     placeholder={`1st Image URL for ${dc.colorName} (Main Card Photo)`}
-                                    className="flex-1 min-w-0 px-2.5 py-1.5 text-xs bg-white border border-zinc-300"
+                                    className="w-full sm:flex-1 min-w-0 px-2.5 py-1.5 text-xs bg-white border border-zinc-300"
                                   />
-                                  <R2ImageUploadButton
-                                    compact={true}
-                                    label={
-                                      dc.imageUrl?.trim()
-                                        ? 'Replace Photo'
-                                        : 'Upload Photo'
-                                    }
-                                    ariaLabel={`Upload Photo 1 for color ${dc.colorName}`}
-                                    onUploaded={(url) =>
-                                      updateDraftColorField(
-                                        dc.colorName,
-                                        (prev) => ({
-                                          ...prev,
-                                          imageUrl: url,
-                                        })
-                                      )
-                                    }
-                                  />
-                                  {Boolean(dc.imageUrl?.trim()) && (
-                                    <button
-                                      type="button"
-                                      onClick={() =>
-                                        setImagePendingDelete({
-                                          label: `New Item (${dc.colorName} · Photo #1)`,
-                                          imageUrl: dc.imageUrl,
-                                          onConfirm: () =>
-                                            updateDraftColorField(
-                                              dc.colorName,
-                                              (prev) => ({
-                                                ...prev,
-                                                imageUrl: '',
-                                              })
-                                            ),
-                                        })
+                                  <div className="flex flex-wrap items-center justify-end gap-1.5 w-full sm:w-auto shrink-0">
+                                    <R2ImageUploadButton
+                                      compact={true}
+                                      label={
+                                        dc.imageUrl?.trim()
+                                          ? 'Replace Photo'
+                                          : 'Upload Photo'
                                       }
-                                      aria-label={`Delete Photo 1 for color ${dc.colorName}`}
-                                      title="Delete this image from item & R2 bucket"
-                                      className="px-2.5 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 cursor-pointer shrink-0"
-                                    >
-                                      <Trash2 className="w-3 h-3" />
-                                      <span>Delete</span>
-                                    </button>
-                                  )}
+                                      ariaLabel={`Upload Photo 1 for color ${dc.colorName}`}
+                                      onUploaded={(url) =>
+                                        updateDraftColorField(
+                                          dc.colorName,
+                                          (prev) => ({
+                                            ...prev,
+                                            imageUrl: url,
+                                          })
+                                        )
+                                      }
+                                    />
+                                    {Boolean(dc.imageUrl?.trim()) && (
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          setImagePendingDelete({
+                                            label: `New Item (${dc.colorName} · Photo #1)`,
+                                            imageUrl: dc.imageUrl,
+                                            onConfirm: () =>
+                                              updateDraftColorField(
+                                                dc.colorName,
+                                                (prev) => ({
+                                                  ...prev,
+                                                  imageUrl: '',
+                                                })
+                                              ),
+                                          })
+                                        }
+                                        aria-label={`Delete Photo 1 for color ${dc.colorName}`}
+                                        title="Delete this image"
+                                        className="px-2.5 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 cursor-pointer shrink-0"
+                                      >
+                                        <Trash2 className="w-3 h-3" />
+                                        <span>Delete</span>
+                                      </button>
+                                    )}
+                                  </div>
                                 </div>
                               </div>
 
@@ -6432,7 +6539,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                   <span className="block text-[10px] font-bold uppercase text-zinc-600 mb-0.5">
                                     {gIdx + 2}. Color Photo #{gIdx + 2} (Shown in Item Pop-up Gallery)
                                   </span>
-                                  <div className="flex items-start gap-1.5">
+                                  <div className="flex flex-col sm:flex-row sm:items-start gap-1.5">
                                     <input
                                       type="text"
                                       value={gUrls[gIdx] || ''}
@@ -6460,77 +6567,79 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                         );
                                       }}
                                       placeholder={`Photo #${gIdx + 2} URL for ${dc.colorName} (Optional)`}
-                                      className="flex-1 min-w-0 px-2.5 py-1.5 text-xs bg-white border border-zinc-300"
+                                      className="w-full sm:flex-1 min-w-0 px-2.5 py-1.5 text-xs bg-white border border-zinc-300"
                                     />
-                                    <R2ImageUploadButton
-                                      compact={true}
-                                      label={
-                                        gUrls[gIdx]?.trim()
-                                          ? 'Replace Photo'
-                                          : 'Upload Photo'
-                                      }
-                                      ariaLabel={`Upload Photo ${gIdx + 2} for color ${dc.colorName}`}
-                                      onUploaded={(url) =>
-                                        updateDraftColorField(
-                                          dc.colorName,
-                                          (prev) => {
-                                            const nextG = [
-                                              ...(prev.galleryUrls || [
-                                                '',
-                                                '',
-                                                '',
-                                              ]),
-                                            ];
-                                            while (nextG.length < 3) {
-                                              nextG.push('');
-                                            }
-                                            nextG[gIdx] = url;
-                                            return {
-                                              ...prev,
-                                              galleryUrls: nextG,
-                                            };
-                                          }
-                                        )
-                                      }
-                                    />
-                                    {Boolean(gUrls[gIdx]?.trim()) && (
-                                      <button
-                                        type="button"
-                                        onClick={() =>
-                                          setImagePendingDelete({
-                                            label: `New Item (${dc.colorName} · Photo #${gIdx + 2})`,
-                                            imageUrl: gUrls[gIdx],
-                                            onConfirm: () =>
-                                              updateDraftColorField(
-                                                dc.colorName,
-                                                (prev) => {
-                                                  const nextG = [
-                                                    ...(prev.galleryUrls || [
-                                                      '',
-                                                      '',
-                                                      '',
-                                                    ]),
-                                                  ];
-                                                  while (nextG.length < 3) {
-                                                    nextG.push('');
-                                                  }
-                                                  nextG[gIdx] = '';
-                                                  return {
-                                                    ...prev,
-                                                    galleryUrls: nextG,
-                                                  };
-                                                }
-                                              ),
-                                          })
+                                    <div className="flex flex-wrap items-center justify-end gap-1.5 w-full sm:w-auto shrink-0">
+                                      <R2ImageUploadButton
+                                        compact={true}
+                                        label={
+                                          gUrls[gIdx]?.trim()
+                                            ? 'Replace Photo'
+                                            : 'Upload Photo'
                                         }
-                                        aria-label={`Delete Photo ${gIdx + 2} for color ${dc.colorName}`}
-                                        title="Delete this image from item & R2 bucket"
-                                        className="px-2.5 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 cursor-pointer shrink-0"
-                                      >
-                                        <Trash2 className="w-3 h-3" />
-                                        <span>Delete</span>
-                                      </button>
-                                    )}
+                                        ariaLabel={`Upload Photo ${gIdx + 2} for color ${dc.colorName}`}
+                                        onUploaded={(url) =>
+                                          updateDraftColorField(
+                                            dc.colorName,
+                                            (prev) => {
+                                              const nextG = [
+                                                ...(prev.galleryUrls || [
+                                                  '',
+                                                  '',
+                                                  '',
+                                                ]),
+                                              ];
+                                              while (nextG.length < 3) {
+                                                nextG.push('');
+                                              }
+                                              nextG[gIdx] = url;
+                                              return {
+                                                ...prev,
+                                                galleryUrls: nextG,
+                                              };
+                                            }
+                                          )
+                                        }
+                                      />
+                                      {Boolean(gUrls[gIdx]?.trim()) && (
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            setImagePendingDelete({
+                                              label: `New Item (${dc.colorName} · Photo #${gIdx + 2})`,
+                                              imageUrl: gUrls[gIdx],
+                                              onConfirm: () =>
+                                                updateDraftColorField(
+                                                  dc.colorName,
+                                                  (prev) => {
+                                                    const nextG = [
+                                                      ...(prev.galleryUrls || [
+                                                        '',
+                                                        '',
+                                                        '',
+                                                      ]),
+                                                    ];
+                                                    while (nextG.length < 3) {
+                                                      nextG.push('');
+                                                    }
+                                                    nextG[gIdx] = '';
+                                                    return {
+                                                      ...prev,
+                                                      galleryUrls: nextG,
+                                                    };
+                                                  }
+                                                ),
+                                            })
+                                          }
+                                          aria-label={`Delete Photo ${gIdx + 2} for color ${dc.colorName}`}
+                                          title="Delete this image"
+                                          className="px-2.5 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 cursor-pointer shrink-0"
+                                        >
+                                          <Trash2 className="w-3 h-3" />
+                                          <span>Delete</span>
+                                        </button>
+                                      )}
+                                    </div>
                                   </div>
                                 </div>
                               ))}
@@ -6542,7 +6651,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                 Size Type &amp; Sizes for {dc.colorName} (Choose
                                 Letter, Number, or Kids CM):
                               </span>
-                              <div className="grid grid-cols-3 gap-2">
+                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                                 <button
                                   type="button"
                                   onClick={() =>
@@ -6646,7 +6755,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               </div>
 
                               {/* Custom Size Input (e.g. 103 cm, 36, XXL) */}
-                              <div className="flex gap-2">
+                              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                                 <input
                                   type="text"
                                   value={dc.customSizeInput || ''}
@@ -6666,7 +6775,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                       ? 'Add custom numeric size (e.g. 36, 46)'
                                       : 'Add custom size (e.g. XXL, One Size)'
                                   }
-                                  className="flex-1 px-2.5 py-1.5 text-xs bg-white border border-zinc-300"
+                                  className="w-full sm:flex-1 min-w-0 px-2.5 py-1.5 text-xs bg-white border border-zinc-300"
                                 />
                                 <button
                                   type="button"
@@ -6702,7 +6811,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                       }
                                     );
                                   }}
-                                  className="px-3 py-1.5 bg-zinc-900 text-white text-xs font-bold uppercase cursor-pointer"
+                                  className="px-3 py-1.5 bg-zinc-900 text-white text-xs font-bold uppercase cursor-pointer whitespace-nowrap shrink-0"
                                 >
                                   + Add Size
                                 </button>
@@ -6765,7 +6874,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       per size) *
                     </label>
 
-                    <div className="grid grid-cols-3 gap-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                       <button
                         type="button"
                         onClick={() => handleSizeTypeChange('letter')}
@@ -6891,18 +7000,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   })}
                 </div>
 
-                <div className="flex gap-2 pt-1">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 pt-1">
                   <input
                     type="text"
                     value={newMaterialInput}
                     onChange={(e) => setNewMaterialInput(e.target.value)}
                     placeholder="Add custom material (e.g. Calfskin)..."
-                    className="flex-1 px-3 py-1.5 text-xs bg-white border border-zinc-300"
+                    className="w-full sm:flex-1 min-w-0 px-3 py-1.5 text-xs bg-white border border-zinc-300"
                   />
                   <button
                     type="button"
                     onClick={handleAddAndCheckCustomMaterial}
-                    className="px-3 py-1.5 bg-zinc-900 text-white text-xs font-bold uppercase tracking-wider cursor-pointer"
+                    className="px-3 py-1.5 bg-zinc-900 text-white text-xs font-bold uppercase tracking-wider cursor-pointer whitespace-nowrap shrink-0"
                   >
                     + Add &amp; Check
                   </button>
@@ -6935,17 +7044,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 />
               </div>
 
-              <div className="flex items-center justify-end gap-3 pt-2 border-t border-zinc-200">
+              <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2.5 pt-2 border-t border-zinc-200">
                 <button
                   type="button"
                   onClick={() => setIsAddProductModalOpen(false)}
-                  className="px-4 py-3 rounded-xl bg-zinc-100 text-zinc-800 text-xs font-bold uppercase tracking-wider cursor-pointer"
+                  className="px-4 py-3 rounded-xl bg-zinc-100 text-zinc-800 text-xs font-bold uppercase tracking-wider cursor-pointer text-center"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-3 rounded-xl bg-zinc-950 text-white text-xs font-bold tracking-[0.14em] uppercase hover:bg-zinc-800 transition-colors cursor-pointer"
+                  className="px-5 py-3 rounded-xl bg-zinc-950 text-white text-xs font-bold tracking-[0.12em] uppercase hover:bg-zinc-800 transition-colors cursor-pointer text-center"
                 >
                   Publish Item to SAMO Storefront
                 </button>

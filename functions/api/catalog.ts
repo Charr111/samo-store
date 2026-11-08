@@ -114,6 +114,9 @@ export const onRequestPost = async (context: {
         ...(patch.siteBanners && typeof patch.siteBanners === 'object'
           ? { siteBanners: patch.siteBanners }
           : {}),
+        ...(typeof patch.autoAcceptOrders === 'boolean'
+          ? { autoAcceptOrders: patch.autoAcceptOrders }
+          : {}),
         deletedProductIds: mergedDeletedProducts,
         deletedCategoryIds: mergedDeletedCategories,
         updatedAt: Date.now(),

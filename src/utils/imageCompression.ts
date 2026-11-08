@@ -301,9 +301,10 @@ export async function prepareOriginalQualityImage(
 }
 
 /**
- * Compresses an image File in the browser (c_limit 600x750 4:5 studio ratio, adaptive quality).
- * Guarantees 1.2 MB - 8 MB mobile camera photos (including iPhone HEIC and JPG) shrink down to
- * ~30 KB - 60 KB WebP/JPEG across both iOS Safari/WebKit and Android/Desktop Chrome.
+ * Compresses an image File in the browser by ~60% to 70% of its original size
+ * (retaining ~25% to 40% of the original file size — e.g., a 2 MB image becomes ~500 KB to 800 KB).
+ * Preserves high studio resolution (up to 2400x3000) while adaptively selecting the JPEG/WebP
+ * quality level that lands inside the 60%–70% reduction window.
  */
 export async function compressImageToWebP(
   file: File,
@@ -318,12 +319,19 @@ export async function compressImageToWebP(
     throw new Error('Please select a valid image file (JPG, PNG, WebP, HEIC).');
   }
 
-  const maxWidth = options?.maxWidth ?? 600;
-  const maxHeight = options?.maxHeight ?? 750;
-  const initialQuality = options?.quality ?? 0.72;
-  const targetMaxBytes = options?.targetMaxBytes ?? 60 * 1024; // 60 KB target budget
+  const originalBytes = Math.max(1024, file.size);
+  const maxWidth = options?.maxWidth ?? 2400;
+  const maxHeight = options?.maxHeight ?? 3000;
 
-  const decodedBlob = await convertHeicToJpegIfNeeded(file, 0.88);
+  // Target 60% to 70% reduction => resulting file is ~25% to 40% of original size
+  // (For a 2 MB / 2,048 KB file: min ~512 KB, ideal ~675 KB, max ~819 KB)
+  const minTargetBytes = Math.max(30 * 1024, Math.round(originalBytes * 0.25));
+  const maxTargetBytes =
+    options?.targetMaxBytes ??
+    Math.max(60 * 1024, Math.round(originalBytes * 0.40));
+  const idealTargetBytes = Math.round((minTargetBytes + maxTargetBytes) / 2);
+
+  const decodedBlob = await convertHeicToJpegIfNeeded(file, 0.94);
   const objectUrl = URL.createObjectURL(decodedBlob);
 
   try {
@@ -343,44 +351,89 @@ export async function compressImageToWebP(
     );
 
     let canvas = renderToCanvas(img, width, height);
-    let bestResult = await encodeSmallestCanvasBlob(canvas, initialQuality);
 
-    // Step down quality iteratively if the encoded image exceeds ~60 KB (e.g. on high-detail photos or iOS WebKit)
-    const qualitySteps = [0.62, 0.52, 0.44, 0.36];
-    for (const q of qualitySteps) {
-      if (bestResult.blob.size <= targetMaxBytes) break;
-      const candidate = await encodeSmallestCanvasBlob(canvas, q);
-      if (candidate.blob.size < bestResult.blob.size) {
-        bestResult = candidate;
+    const candidateQualities = options?.quality
+      ? [options.quality, 0.92, 0.85, 0.78, 0.70, 0.60]
+      : [0.95, 0.92, 0.88, 0.84, 0.80, 0.75, 0.70, 0.64, 0.56, 0.48];
+
+    let bestInWindow: { blob: Blob; contentType: string; diff: number } | null =
+      null;
+    let bestUnderMax: { blob: Blob; contentType: string; diff: number } | null =
+      null;
+    let smallestOverall: { blob: Blob; contentType: string } | null = null;
+
+    for (const q of candidateQualities) {
+      const [jpegBlob, webpBlob] = await Promise.all([
+        encodeCanvasSingleFormat(canvas, 'image/jpeg', q),
+        encodeCanvasSingleFormat(canvas, 'image/webp', q),
+      ]);
+
+      const candidates: Array<{ blob: Blob; contentType: string }> = [];
+      if (jpegBlob) candidates.push({ blob: jpegBlob, contentType: 'image/jpeg' });
+      if (webpBlob) candidates.push({ blob: webpBlob, contentType: 'image/webp' });
+
+      for (const cand of candidates) {
+        const sz = cand.blob.size;
+        const diff = Math.abs(sz - idealTargetBytes);
+
+        if (!smallestOverall || sz < smallestOverall.blob.size) {
+          smallestOverall = cand;
+        }
+
+        if (sz >= minTargetBytes && sz <= maxTargetBytes) {
+          if (!bestInWindow || diff < bestInWindow.diff) {
+            bestInWindow = { ...cand, diff };
+          }
+        }
+
+        if (sz <= maxTargetBytes) {
+          if (!bestUnderMax || diff < bestUnderMax.diff) {
+            bestUnderMax = { ...cand, diff };
+          }
+        }
+      }
+
+      if (bestInWindow && bestInWindow.diff <= idealTargetBytes * 0.12) {
+        break;
       }
     }
 
-    // If still above targetMaxBytes (e.g., mobile browser ignores lower quality steps), scale down dimensions slightly
-    if (bestResult.blob.size > targetMaxBytes) {
-      width = Math.max(320, Math.round(width * 0.82));
-      height = Math.max(400, Math.round(height * 0.82));
+    let chosen =
+      bestInWindow ||
+      bestUnderMax ||
+      (smallestOverall
+        ? { ...smallestOverall, diff: Math.abs(smallestOverall.blob.size - idealTargetBytes) }
+        : null);
+
+    // If still above maxTargetBytes (e.g., ultra-dense image), scale down dimensions slightly so it shrinks by at least 60%
+    if (!chosen || chosen.blob.size > maxTargetBytes) {
+      width = Math.max(480, Math.round(width * 0.78));
+      height = Math.max(600, Math.round(height * 0.78));
       canvas = renderToCanvas(img, width, height);
-      const scaledCandidate = await encodeSmallestCanvasBlob(canvas, 0.52);
-      if (scaledCandidate.blob.size < bestResult.blob.size) {
-        bestResult = scaledCandidate;
+      const scaled = await encodeSmallestCanvasBlob(canvas, 0.76);
+      if (!chosen || scaled.blob.size < chosen.blob.size) {
+        chosen = {
+          ...scaled,
+          diff: Math.abs(scaled.blob.size - idealTargetBytes),
+        };
       }
     }
 
-    const base64Data = await blobToBase64Data(bestResult.blob);
+    const base64Data = await blobToBase64Data(chosen.blob);
     const fileName = sanitizeUploadFileName(
       file.name,
       Date.now(),
-      bestResult.contentType
+      chosen.contentType
     );
 
     return {
       base64Data,
-      contentType: bestResult.contentType,
+      contentType: chosen.contentType,
       fileName,
       width,
       height,
       originalSizeBytes: file.size,
-      compressedSizeBytes: bestResult.blob.size,
+      compressedSizeBytes: chosen.blob.size,
       wasShrunk: true,
     };
   } finally {
@@ -390,7 +443,7 @@ export async function compressImageToWebP(
 
 /**
  * Uploads an image file to Cloudflare R2 via /api/r2-upload.
- * Respects the global Auto-Shrink toggle (shrinks to ~50 KB WebP when ON, or uploads original quality when OFF).
+ * Respects the global Auto-Shrink toggle (shrinks by ~60%–70% when ON, or uploads original quality when OFF).
  */
 export async function uploadCompressedImageToR2(
   file: File,
@@ -400,6 +453,7 @@ export async function uploadCompressedImageToR2(
   sizeBytes: number;
   originalSizeKB: number;
   compressedSizeKB: number;
+  reductionPercent: number;
   width: number;
   height: number;
   wasShrunk: boolean;
@@ -441,12 +495,20 @@ export async function uploadCompressedImageToR2(
   const finalBytes = payload.sizeBytes || prepared.compressedSizeBytes;
   const compressedSizeKB = Math.max(1, Math.round(finalBytes / 1024));
   const originalSizeKB = Math.max(1, Math.round(prepared.originalSizeBytes / 1024));
+  const reductionPercent =
+    prepared.originalSizeBytes > 0
+      ? Math.max(
+          0,
+          Math.round((1 - finalBytes / prepared.originalSizeBytes) * 100)
+        )
+      : 0;
 
   return {
     url: payload.url,
     sizeBytes: finalBytes,
     originalSizeKB,
     compressedSizeKB,
+    reductionPercent,
     width: prepared.width,
     height: prepared.height,
     wasShrunk: shouldShrink,

@@ -91,6 +91,7 @@ const STORAGE_KEYS = {
   cart: 'samo_cart_v1',
   aiAdmin: 'samo_ai_admin_unlocked_v1',
   siteBanners: 'samo_site_banners_v2',
+  autoAcceptOrders: 'samo_auto_accept_orders_v1',
 };
 
 export function deepCleanFirestorePayload<T>(value: T): T {
@@ -314,6 +315,9 @@ export default function App() {
     }
     return Array.from(byEmail.values());
   });
+  const [autoAcceptOrders, setAutoAcceptOrders] = useState<boolean>(() =>
+    loadStored<boolean>(STORAGE_KEYS.autoAcceptOrders, false)
+  );
 
   // Shopping Bag & Active Sole Product Modal State
   const [cartItems, setCartItems] = useState<CartItem[]>(() =>
@@ -433,6 +437,15 @@ export default function App() {
 
   useEffect(() => {
     try {
+      localStorage.setItem(
+        STORAGE_KEYS.autoAcceptOrders,
+        JSON.stringify(autoAcceptOrders)
+      );
+    } catch {}
+  }, [autoAcceptOrders]);
+
+  useEffect(() => {
+    try {
       localStorage.setItem(STORAGE_KEYS.cart, JSON.stringify(cartItems));
     } catch {}
   }, [cartItems]);
@@ -482,6 +495,7 @@ export default function App() {
             orders,
             preorders,
             admins,
+            autoAcceptOrders,
           });
           return;
         }
@@ -551,6 +565,9 @@ export default function App() {
         }
         if (Array.isArray(data.admins) && data.admins.length > 0) {
           setAdmins(data.admins as AdminRecord[]);
+        }
+        if (typeof data.autoAcceptOrders === 'boolean') {
+          setAutoAcceptOrders(data.autoAcceptOrders);
         }
       } catch {}
     };
@@ -725,19 +742,28 @@ export default function App() {
   ): Promise<OrderItem> => {
     const newId = `ord-${Date.now()}`;
     const nowIso = new Date().toISOString();
+    const initialStatus: OrderStatus = autoAcceptOrders ? 'accepted' : 'pending';
     const newOrder: OrderItem = {
       ...orderPayload,
       id: newId,
-      status: 'pending',
+      status: initialStatus,
       createdAt: nowIso,
     };
 
-    setOrders((prev) => {
-      const next = [newOrder, ...prev];
-      pushServerCatalogPatch({ orders: next });
-      return next;
-    });
+    const nextOrders = [newOrder, ...orders];
+    setOrders(nextOrders);
     setCartItems([]);
+
+    if (autoAcceptOrders) {
+      const updatedCatalog = decrementStockForAcceptedOrder(products, newOrder);
+      setProducts(updatedCatalog);
+      await pushServerCatalogPatch({
+        orders: nextOrders,
+        products: updatedCatalog,
+      });
+    } else {
+      await pushServerCatalogPatch({ orders: nextOrders });
+    }
 
     return newOrder;
   };
@@ -1212,6 +1238,39 @@ export default function App() {
     });
   };
 
+  const handleToggleAutoAcceptOrders = async (nextEnabled: boolean) => {
+    setAutoAcceptOrders(nextEnabled);
+    try {
+      localStorage.setItem(
+        STORAGE_KEYS.autoAcceptOrders,
+        JSON.stringify(nextEnabled)
+      );
+    } catch {}
+
+    if (nextEnabled) {
+      const pendingList = orders.filter((o) => o.status === 'pending');
+      if (pendingList.length > 0) {
+        const nextOrders: OrderItem[] = orders.map((o) =>
+          o.status === 'pending' ? { ...o, status: 'accepted' } : o
+        );
+        let nextCatalog = products;
+        for (const pendingOrd of pendingList) {
+          nextCatalog = decrementStockForAcceptedOrder(nextCatalog, pendingOrd);
+        }
+        setOrders(nextOrders);
+        setProducts(nextCatalog);
+        await pushServerCatalogPatch({
+          autoAcceptOrders: true,
+          orders: nextOrders,
+          products: nextCatalog,
+        });
+        return;
+      }
+    }
+
+    await pushServerCatalogPatch({ autoAcceptOrders: nextEnabled });
+  };
+
   const handleAddAdminByEmail = async (email: string) => {
     const cleanEmail = email.trim().toLowerCase();
     const record: AdminRecord = {
@@ -1514,6 +1573,8 @@ export default function App() {
         onAddCustomColor={handleAddCustomColor}
         onUpdateOrderStatus={handleUpdateOrderStatus}
         onDeleteOrder={handleDeleteOrder}
+        autoAcceptOrders={autoAcceptOrders}
+        onToggleAutoAcceptOrders={handleToggleAutoAcceptOrders}
         onUpdatePreorderStatus={handleUpdatePreorderStatus}
         onDeletePreorder={handleDeletePreorder}
         onAddAdminByEmail={handleAddAdminByEmail}
