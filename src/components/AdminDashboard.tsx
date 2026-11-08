@@ -79,7 +79,10 @@ import {
 } from '../utils/catalogLogic';
 import { ProductImage } from './ProductImage';
 import {
+  deleteMediaFromR2,
+  getShrinkUploadsEnabled,
   ImageCompressionOptions,
+  setShrinkUploadsEnabled,
   uploadCompressedImageToR2,
   uploadVideoFileToR2,
 } from '../utils/imageCompression';
@@ -116,12 +119,18 @@ export const R2ImageUploadButton: React.FC<R2ImageUploadButtonProps> = ({
     try {
       const result = await uploadCompressedImageToR2(file, compressionOptions);
       onUploaded(result.url);
-      setStatusMessage(
-        `✓ Shrunk ${result.originalSizeKB} KB → ${result.compressedSizeKB} KB`
-      );
+      if (result.wasShrunk) {
+        setStatusMessage(
+          `✓ Shrunk ${result.originalSizeKB} KB → ${result.compressedSizeKB} KB`
+        );
+      } else {
+        setStatusMessage(
+          `✓ Uploaded Original (${result.compressedSizeKB} KB — Shrink Off)`
+        );
+      }
     } catch (err) {
       const msg =
-        err instanceof Error ? err.message : 'Failed to shrink/upload photo.';
+        err instanceof Error ? err.message : 'Failed to upload photo.';
       setErrorMessage(msg);
     } finally {
       setUploading(false);
@@ -130,6 +139,8 @@ export const R2ImageUploadButton: React.FC<R2ImageUploadButtonProps> = ({
       }
     }
   };
+
+  const shrinkActive = getShrinkUploadsEnabled();
 
   return (
     <div className="inline-flex flex-col items-end shrink-0">
@@ -151,7 +162,13 @@ export const R2ImageUploadButton: React.FC<R2ImageUploadButtonProps> = ({
         } bg-white text-zinc-950 font-bold uppercase tracking-wider rounded-lg hover:bg-zinc-200 disabled:opacity-60 transition-colors cursor-pointer whitespace-nowrap flex items-center gap-1.5 shadow-sm`}
       >
         <Upload className="w-3.5 h-3.5 shrink-0" />
-        <span>{uploading ? 'Shrinking & Uploading...' : label}</span>
+        <span>
+          {uploading
+            ? shrinkActive
+              ? 'Shrinking & Uploading...'
+              : 'Uploading Original...'
+            : label}
+        </span>
       </button>
       {statusMessage && (
         <span className="text-[10px] font-mono-tabular font-bold text-emerald-400 mt-1">
@@ -301,6 +318,11 @@ interface AdminDashboardProps {
     nextInStock: boolean
   ) => Promise<void>;
   onAddCategory: (cat: Omit<CategoryItem, 'id'>) => Promise<void>;
+  onUpdateCategory: (
+    categoryId: string,
+    newName: string,
+    newDescription?: string
+  ) => Promise<void>;
   onDeleteCategory: (id: string) => Promise<void>;
   onAddProduct: (prod: Omit<ProductItem, 'id'>) => Promise<void>;
   onUpdateProductSizeQuantity: (
@@ -315,21 +337,7 @@ interface AdminDashboardProps {
   ) => Promise<void>;
   onUpdateProductMeta: (
     productId: string,
-    updates: Partial<
-      Pick<
-        ProductItem,
-        | 'name'
-        | 'price'
-        | 'isNewArrival'
-        | 'isFullSet'
-        | 'category'
-        | 'discountType'
-        | 'discountValue'
-        | 'imageUrl'
-        | 'galleryUrls'
-        | 'inStock'
-      >
-    >
+    updates: Partial<ProductItem>
   ) => Promise<void>;
   onDeleteProduct: (id: string) => Promise<void>;
   onAddPromoCode: (promo: Omit<PromoCodeItem, 'id'>) => Promise<void>;
@@ -366,6 +374,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onUpdateSiteBanners,
   onToggleProductStock,
   onAddCategory,
+  onUpdateCategory,
   onDeleteCategory,
   onAddProduct,
   onUpdateProductSizeQuantity,
@@ -405,6 +414,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     });
   };
 
+  // Toggle ON/OFF for Auto-Shrink Image Upload
+  const [shrinkUploadsEnabled, setShrinkUploadsState] = useState<boolean>(() =>
+    getShrinkUploadsEnabled()
+  );
+
+  const handleToggleShrinkUploads = () => {
+    const next = !shrinkUploadsEnabled;
+    setShrinkUploadsState(next);
+    setShrinkUploadsEnabled(next);
+    setItemFeedback(
+      next
+        ? 'Auto-Shrink Image Upload turned ON (photos will shrink to ~50 KB WebP).'
+        : 'Auto-Shrink Image Upload turned OFF (photos will upload at original full quality).'
+    );
+  };
+
   // Dashboard & Product List Filtering States
   const [globalSearchQuery, setGlobalSearchQuery] = useState('');
   const [productStockFilter, setProductStockFilter] = useState<
@@ -416,12 +441,26 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     Department | 'all'
   >('all');
 
-  // Modals State: Add Product Modal, Add Category Modal, Edit Product Modal, Delete Confirmation Modal
+  // Modals State: Add Product, Add Category, Edit Category, Edit Product, Delete Product/Image/Category Confirmations
   const [isAddProductModalOpen, setIsAddProductModalOpen] = useState(false);
   const [isAddCategoryModalOpen, setIsAddCategoryModalOpen] = useState(false);
+  const [editingCategory, setEditingCategory] = useState<CategoryItem | null>(
+    null
+  );
+  const [editCatName, setEditCatName] = useState('');
+  const [editCatDesc, setEditCatDesc] = useState('');
+  const [categoryPendingDelete, setCategoryPendingDelete] =
+    useState<CategoryItem | null>(null);
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
+  const [editProdCustomSizeInput, setEditProdCustomSizeInput] = useState('');
+  const [editProdNewMaterialInput, setEditProdNewMaterialInput] = useState('');
   const [productPendingDelete, setProductPendingDelete] =
     useState<ProductItem | null>(null);
+  const [imagePendingDelete, setImagePendingDelete] = useState<{
+    label: string;
+    imageUrl: string;
+    onConfirm: () => Promise<void> | void;
+  } | null>(null);
 
   const [authError, setAuthError] = useState<string>('');
   const [orderSearchQuery, setOrderSearchQuery] = useState<string>('');
@@ -2000,8 +2039,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </h1>
                   <p className="text-xs text-zinc-400 mt-0.5">
                     Toggle any item switch off to mark it Out of Stock on the
-                    storefront, click the pencil to edit sizes/colors/photos, or
-                    add new products.
+                    storefront, click the pencil to edit name/sizes/colors/photos,
+                    or add new products.
                   </p>
                 </div>
 
@@ -2026,12 +2065,80 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </div>
               </div>
 
-              {/* Quick Categories Row (Matches Reference Image) */}
+              {/* Main Dashboard Image Upload Auto-Shrink Toggle & Cloudflare R2 Storage Control Bar */}
+              <div className="bg-[#18181C] border border-zinc-800/90 rounded-2xl p-4 sm:px-5 sm:py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex items-start sm:items-center gap-3.5">
+                  <div className="w-9 h-9 rounded-xl bg-zinc-900 border border-zinc-700 flex items-center justify-center text-white shrink-0">
+                    <Sparkles className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-xs sm:text-sm font-bold text-white">
+                        Auto-Shrink Image Uploads
+                      </span>
+                      <span
+                        className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+                          shrinkUploadsEnabled
+                            ? 'bg-emerald-950/90 text-emerald-300 border border-emerald-700/70'
+                            : 'bg-amber-950/90 text-amber-300 border border-amber-700/70'
+                        }`}
+                      >
+                        {shrinkUploadsEnabled
+                          ? 'ON · Shrinking to ~50 KB WebP'
+                          : 'OFF · Original Full Quality'}
+                      </span>
+                      <span className="px-2 py-0.5 rounded text-[10px] font-mono-tabular uppercase tracking-wider bg-zinc-900 text-zinc-300 border border-zinc-700 flex items-center gap-1">
+                        <Cloud className="w-3 h-3" />
+                        <span>Cloudflare R2 Bucket Active</span>
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-zinc-400 mt-0.5">
+                      {shrinkUploadsEnabled
+                        ? 'Uploaded item & banner photos are automatically shrunk to ~35–55 KB for instant loading. Turn off anytime to upload original uncompressed resolution.'
+                        : 'Image shrinking is currently turned OFF. Uploaded item & banner photos will be stored in Cloudflare R2 at their original resolution without shrinking.'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between sm:justify-end gap-3 pt-2 sm:pt-0 border-t sm:border-t-0 border-zinc-800/80 shrink-0">
+                  <span className="text-xs font-semibold text-zinc-300">
+                    {shrinkUploadsEnabled ? 'Shrink ON' : 'Shrink OFF'}
+                  </span>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={shrinkUploadsEnabled}
+                    data-testid="toggle-shrink-uploads"
+                    aria-label="Toggle Auto-Shrink Image Uploads On or Off"
+                    onClick={handleToggleShrinkUploads}
+                    className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border transition-colors duration-200 items-center ${
+                      shrinkUploadsEnabled
+                        ? 'bg-white border-white'
+                        : 'bg-zinc-800 border-zinc-700'
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full transition-transform duration-200 ${
+                        shrinkUploadsEnabled
+                          ? 'translate-x-5 bg-zinc-950'
+                          : 'translate-x-1 bg-zinc-400'
+                      }`}
+                    />
+                  </button>
+                </div>
+              </div>
+
+              {/* Quick Categories Row (Matches Reference Image + Edit Category Name Button) */}
               <div className="space-y-2.5">
                 <div className="flex items-center justify-between">
-                  <h2 className="text-xs sm:text-sm font-semibold text-zinc-200">
-                    Quick Categories
-                  </h2>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-xs sm:text-sm font-semibold text-zinc-200">
+                      Quick Categories
+                    </h2>
+                    <span className="text-[11px] text-zinc-500 hidden sm:inline">
+                      (Click pencil icon on any category to rename it)
+                    </span>
+                  </div>
                   <div className="flex items-center gap-1.5 text-[11px]">
                     {(
                       [
@@ -2092,33 +2199,55 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       const catFilterKey = `${cat.department}::${cat.name}`;
                       const isSelected = selectedQuickCategory === catFilterKey;
                       return (
-                        <button
+                        <div
                           key={cat.id}
-                          type="button"
-                          onClick={() =>
-                            setSelectedQuickCategory(
-                              isSelected ? 'all' : catFilterKey
-                            )
-                          }
-                          className={`px-4 py-2.5 rounded-xl border text-xs font-semibold flex items-center gap-2 whitespace-nowrap shrink-0 transition-all cursor-pointer ${
+                          className={` rounded-xl border text-xs font-semibold flex items-center whitespace-nowrap shrink-0 transition-all ${
                             isSelected
                               ? 'bg-white text-zinc-950 border-white'
                               : 'bg-[#18181C] text-zinc-200 border-zinc-800 hover:border-zinc-700'
                           }`}
                         >
-                          <span>
-                            {cat.department === 'kids'
-                              ? `Kids · ${cat.name}`
-                              : cat.name}
-                          </span>
-                          <span
-                            className={`text-[11px] font-mono-tabular ${
-                              isSelected ? 'text-zinc-700' : 'text-zinc-500'
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setSelectedQuickCategory(
+                                isSelected ? 'all' : catFilterKey
+                              )
+                            }
+                            className="pl-3.5 pr-2 py-2.5 flex items-center gap-2 cursor-pointer"
+                          >
+                            <span>
+                              {cat.department === 'kids'
+                                ? `Kids · ${cat.name}`
+                                : cat.name}
+                            </span>
+                            <span
+                              className={`text-[11px] font-mono-tabular ${
+                                isSelected ? 'text-zinc-700' : 'text-zinc-500'
+                              }`}
+                            >
+                              ({cat.count})
+                            </span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingCategory(cat);
+                              setEditCatName(cat.name);
+                              setEditCatDesc(cat.description || '');
+                            }}
+                            aria-label={`Edit category name ${cat.name}`}
+                            title={`Rename "${cat.name}" category`}
+                            className={`pr-2.5 pl-1 py-2.5 cursor-pointer transition-colors ${
+                              isSelected
+                                ? 'text-zinc-600 hover:text-zinc-950'
+                                : 'text-zinc-500 hover:text-white'
                             }`}
                           >
-                            ({cat.count})
-                          </span>
-                        </button>
+                            <Pencil className="w-3 h-3" />
+                          </button>
+                        </div>
                       );
                     })}
 
@@ -2959,8 +3088,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       >
                         <div className="flex items-center justify-between gap-2 border-b border-zinc-800 pb-3">
                           <div>
-                            <div className="text-xs font-bold uppercase text-white">
-                              Women · {cat.name}
+                            <div className="text-xs font-bold uppercase text-white flex items-center gap-2">
+                              <span>Women · {cat.name}</span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingCategory(cat);
+                                  setEditCatName(cat.name);
+                                  setEditCatDesc(cat.description || '');
+                                }}
+                                aria-label={`Edit category section name ${cat.name}`}
+                                title="Edit Category Name"
+                                className="px-2 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-[10px] font-bold uppercase tracking-wider inline-flex items-center gap-1 cursor-pointer"
+                              >
+                                <Pencil className="w-2.5 h-2.5" />
+                                <span>Rename</span>
+                              </button>
                             </div>
                             <div className="text-[11px] text-zinc-400">
                               Banner appears between products in /women (
@@ -3006,7 +3149,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
                             <button
                               type="button"
-                              onClick={() => onDeleteCategory(cat.id)}
+                              onClick={() => setCategoryPendingDelete(cat)}
                               aria-label={`Delete category ${cat.name}`}
                               title="Delete Category"
                               className="p-1.5 rounded-lg text-zinc-400 hover:text-red-400 border border-zinc-800 hover:border-red-800 cursor-pointer"
@@ -3164,8 +3307,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       >
                         <div className="flex items-center justify-between gap-2 border-b border-zinc-800 pb-3">
                           <div>
-                            <div className="text-xs font-bold uppercase text-white">
-                              Kids · {cat.name}
+                            <div className="text-xs font-bold uppercase text-white flex items-center gap-2">
+                              <span>Kids · {cat.name}</span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingCategory(cat);
+                                  setEditCatName(cat.name);
+                                  setEditCatDesc(cat.description || '');
+                                }}
+                                aria-label={`Edit category section name ${cat.name}`}
+                                title="Edit Category Name"
+                                className="px-2 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-[10px] font-bold uppercase tracking-wider inline-flex items-center gap-1 cursor-pointer"
+                              >
+                                <Pencil className="w-2.5 h-2.5" />
+                                <span>Rename</span>
+                              </button>
                             </div>
                             <div className="text-[11px] text-zinc-400">
                               Banner appears between products in /kids (
@@ -3213,7 +3370,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
                             <button
                               type="button"
-                              onClick={() => onDeleteCategory(cat.id)}
+                              onClick={() => setCategoryPendingDelete(cat)}
                               aria-label={`Delete category ${cat.name}`}
                               title="Delete Category"
                               className="p-1.5 rounded-lg text-zinc-400 hover:text-red-400 border border-zinc-800 hover:border-red-800 cursor-pointer"
@@ -3927,14 +4084,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       </nav>
 
       {/* =========================================================================
-          POP-UP MODAL 1: DELETE CONFIRMATION ("Are you sure you want to delete?")
+          POP-UP MODAL 1: DELETE ITEM CONFIRMATION ("Are you sure you want to delete?")
          ========================================================================= */}
       {productPendingDelete && (
         <div
           role="dialog"
           aria-modal="true"
           aria-labelledby="delete-confirm-title"
-          className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-4"
+          className="fixed inset-0 z-[60] bg-black/75 backdrop-blur-xs flex items-center justify-center p-4"
         >
           <div className="bg-[#18181C] border border-zinc-700 rounded-2xl max-w-md w-full p-6 space-y-5 shadow-2xl">
             <div className="flex items-start gap-3.5">
@@ -3954,7 +4111,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     {productPendingDelete.name}
                   </strong>{' '}
                   ({productPendingDelete.department} ·{' '}
-                  {productPendingDelete.category}) from the SAMO storefront.
+                  {productPendingDelete.category}) from the SAMO storefront and
+                  delete its uploaded images from the Cloudflare R2 bucket.
                 </p>
               </div>
             </div>
@@ -3987,7 +4145,221 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       )}
 
       {/* =========================================================================
-          POP-UP MODAL 2: ADD NEW CATEGORY MODAL
+          POP-UP MODAL 1B: DELETE SINGLE IMAGE CONFIRMATION ("Are you sure?")
+          Removes the image from the item AND deletes it from Cloudflare R2 bucket
+         ========================================================================= */}
+      {imagePendingDelete && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="delete-image-confirm-title"
+          className="fixed inset-0 z-[70] bg-black/80 backdrop-blur-xs flex items-center justify-center p-4"
+        >
+          <div className="bg-[#18181C] border border-zinc-700 rounded-2xl max-w-md w-full p-6 space-y-5 shadow-2xl">
+            <div className="flex items-start gap-3.5">
+              <div className="w-10 h-10 rounded-full bg-red-950/80 border border-red-800 text-red-400 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div className="space-y-1 min-w-0">
+                <h3
+                  id="delete-image-confirm-title"
+                  className="text-base font-bold text-white"
+                >
+                  Are you sure you want to delete this image?
+                </h3>
+                <p className="text-xs text-zinc-400 leading-relaxed">
+                  You are about to remove{' '}
+                  <strong className="text-white">
+                    {imagePendingDelete.label}
+                  </strong>{' '}
+                  from this item and permanently delete the image file from your
+                  Cloudflare R2 bucket.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2 border-t border-zinc-800">
+              <button
+                type="button"
+                onClick={() => setImagePendingDelete(null)}
+                className="px-4 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-bold uppercase tracking-wider cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  const target = imagePendingDelete;
+                  setImagePendingDelete(null);
+                  await deleteMediaFromR2(target.imageUrl);
+                  await target.onConfirm();
+                }}
+                className="px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-bold uppercase tracking-wider cursor-pointer"
+              >
+                Yes, Delete Image
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================================
+          POP-UP MODAL 1C: DELETE CATEGORY CONFIRMATION ("Are you sure?")
+         ========================================================================= */}
+      {categoryPendingDelete && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="delete-cat-confirm-title"
+          className="fixed inset-0 z-[60] bg-black/75 backdrop-blur-xs flex items-center justify-center p-4"
+        >
+          <div className="bg-[#18181C] border border-zinc-700 rounded-2xl max-w-md w-full p-6 space-y-5 shadow-2xl">
+            <div className="flex items-start gap-3.5">
+              <div className="w-10 h-10 rounded-full bg-red-950/80 border border-red-800 text-red-400 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div className="space-y-1">
+                <h3
+                  id="delete-cat-confirm-title"
+                  className="text-base font-bold text-white"
+                >
+                  Are you sure you want to delete this category?
+                </h3>
+                <p className="text-xs text-zinc-400 leading-relaxed">
+                  You are about to remove the{' '}
+                  <strong className="text-white">
+                    {categoryPendingDelete.name}
+                  </strong>{' '}
+                  ({categoryPendingDelete.department.toUpperCase()}) category
+                  section.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2 border-t border-zinc-800">
+              <button
+                type="button"
+                onClick={() => setCategoryPendingDelete(null)}
+                className="px-4 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-bold uppercase tracking-wider cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  const target = categoryPendingDelete;
+                  setCategoryPendingDelete(null);
+                  await onDeleteCategory(target.id);
+                }}
+                className="px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-bold uppercase tracking-wider cursor-pointer"
+              >
+                Yes, Delete Category
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================================
+          POP-UP MODAL 2A: EDIT CATEGORY SECTION NAME MODAL
+         ========================================================================= */}
+      {editingCategory && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="edit-category-modal-title"
+          className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto"
+        >
+          <div className="bg-[#18181C] border border-zinc-700 rounded-2xl max-w-md w-full p-6 space-y-5 shadow-2xl my-auto">
+            <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+              <div>
+                <h2
+                  id="edit-category-modal-title"
+                  className="font-display text-base font-bold uppercase tracking-wider text-white"
+                >
+                  Edit Category Section Name
+                </h2>
+                <p className="text-[11px] text-zinc-400 mt-0.5">
+                  {editingCategory.department.toUpperCase()} Department ·
+                  Updates category section &amp; all linked items
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingCategory(null)}
+                aria-label="Close Edit Category Modal"
+                className="p-1.5 text-zinc-400 hover:text-white cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                const clean = editCatName.trim();
+                if (!clean) return;
+                await onUpdateCategory(
+                  editingCategory.id,
+                  clean,
+                  editCatDesc.trim()
+                );
+                setCatFeedback(
+                  `Renamed category "${editingCategory.name}" to "${clean}".`
+                );
+                setEditingCategory(null);
+              }}
+              className="space-y-4"
+            >
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-zinc-300 mb-1">
+                  Category Name *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editCatName}
+                  onChange={(e) => setEditCatName(e.target.value)}
+                  placeholder="Enter new category section name..."
+                  className="w-full px-3 py-2.5 text-xs bg-zinc-900 border border-zinc-700 rounded-lg text-white"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-zinc-300 mb-1">
+                  Description
+                </label>
+                <textarea
+                  rows={2}
+                  value={editCatDesc}
+                  onChange={(e) => setEditCatDesc(e.target.value)}
+                  placeholder="Editorial description..."
+                  className="w-full px-3 py-2 text-xs bg-zinc-900 border border-zinc-700 rounded-lg text-white"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2.5 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingCategory(null)}
+                  className="px-4 py-2.5 rounded-xl bg-zinc-800 text-zinc-300 text-xs font-bold uppercase tracking-wider cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 rounded-xl bg-white text-zinc-950 text-xs font-bold uppercase tracking-wider hover:bg-zinc-200 cursor-pointer"
+                >
+                  Save Category Name
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================================
+          POP-UP MODAL 2B: ADD NEW CATEGORY MODAL
          ========================================================================= */}
       {isAddCategoryModalOpen && (
         <div
@@ -4116,9 +4488,223 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 Boolean(prod.hasColors) &&
                 Array.isArray(prod.colorVariants) &&
                 prod.colorVariants.length > 0;
+              const editDeptCats = getCategoriesByDepartment(
+                categories,
+                prod.department
+              );
 
               return (
                 <div className="space-y-4 text-xs">
+                  {/* Full Product Core Details Editor: Name, Price, Department, Category, Style, Description, Materials */}
+                  <div className="p-4 bg-zinc-50 border border-zinc-200 rounded-xl space-y-3.5">
+                    <div className="font-bold uppercase tracking-wider text-zinc-900">
+                      Product Name, Price, Category &amp; Details:
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div className="sm:col-span-2">
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-700 mb-1">
+                          Product Name *
+                        </label>
+                        <input
+                          type="text"
+                          value={prod.name}
+                          onChange={(e) =>
+                            onUpdateProductMeta(prod.id, {
+                              name: e.target.value.toUpperCase(),
+                            })
+                          }
+                          aria-label="Edit Product Name"
+                          placeholder="Product Name"
+                          className="w-full px-2.5 py-1.5 text-xs font-bold bg-white border border-zinc-300 focus:border-zinc-950 focus:outline-none"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-700 mb-1">
+                          Price (USD $) *
+                        </label>
+                        <input
+                          type="number"
+                          min="1"
+                          value={prod.price}
+                          onChange={(e) =>
+                            onUpdateProductMeta(prod.id, {
+                              price: Math.max(1, Number(e.target.value) || 1),
+                            })
+                          }
+                          aria-label="Edit Product Price"
+                          className="w-full px-2.5 py-1.5 text-xs font-mono-tabular font-bold bg-white border border-zinc-300 focus:border-zinc-950 focus:outline-none"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div>
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-700 mb-1">
+                          Department
+                        </label>
+                        <select
+                          value={prod.department}
+                          onChange={(e) => {
+                            const nextDept = e.target.value as Department;
+                            const nextDeptCats = getCategoriesByDepartment(
+                              categories,
+                              nextDept
+                            );
+                            const nextCat =
+                              nextDeptCats[0]?.name || prod.category;
+                            onUpdateProductMeta(prod.id, {
+                              department: nextDept,
+                              category: nextCat,
+                              ...(nextDept === 'kids'
+                                ? { isFullSet: false }
+                                : {}),
+                            });
+                          }}
+                          aria-label="Edit Product Department"
+                          className="w-full px-2.5 py-1.5 text-xs bg-white border border-zinc-300 uppercase"
+                        >
+                          <option value="women">Women</option>
+                          <option value="kids">Kids</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-700 mb-1">
+                          Category Section
+                        </label>
+                        <select
+                          value={prod.category}
+                          onChange={(e) => {
+                            const nextCat = e.target.value;
+                            onUpdateProductMeta(prod.id, {
+                              category: nextCat,
+                              isFullSet:
+                                prod.department === 'women' &&
+                                nextCat.trim().toLowerCase() === 'full set',
+                            });
+                          }}
+                          aria-label="Edit Product Category"
+                          className="w-full px-2.5 py-1.5 text-xs bg-white border border-zinc-300"
+                        >
+                          {editDeptCats.map((c) => (
+                            <option key={c.id} value={c.name}>
+                              {c.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-700 mb-1">
+                          Aesthetic Style
+                        </label>
+                        <select
+                          value={prod.style}
+                          onChange={(e) =>
+                            onUpdateProductMeta(prod.id, {
+                              style: e.target.value as StyleType,
+                            })
+                          }
+                          aria-label="Edit Product Style"
+                          className="w-full px-2.5 py-1.5 text-xs bg-white border border-zinc-300"
+                        >
+                          <option value="Classic">Classic</option>
+                          <option value="Sport Chic">Sport Chic</option>
+                          <option value="Fine Leather">Fine Leather</option>
+                          <option value="Suede">Suede</option>
+                          <option value="Fur">Fur</option>
+                          <option value="Accessories">Accessories</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Description Editor */}
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-700 mb-1">
+                        Product Notes / Description
+                      </label>
+                      <textarea
+                        rows={2}
+                        value={prod.description || ''}
+                        onChange={(e) =>
+                          onUpdateProductMeta(prod.id, {
+                            description: e.target.value,
+                          })
+                        }
+                        aria-label="Edit Product Description"
+                        placeholder="Editorial notes and construction details..."
+                        className="w-full px-2.5 py-1.5 text-xs bg-white border border-zinc-300"
+                      />
+                    </div>
+
+                    {/* Materials Editor */}
+                    <div className="space-y-2 pt-1 border-t border-zinc-200">
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-700">
+                        Materials ({(prod.materials || []).length} Selected):
+                      </label>
+                      <div className="flex flex-wrap gap-1.5">
+                        {allMaterials.map((mat) => {
+                          const active = (prod.materials || []).includes(mat);
+                          return (
+                            <button
+                              key={mat}
+                              type="button"
+                              onClick={() => {
+                                const currentMats = prod.materials || [];
+                                const nextMats = active
+                                  ? currentMats.filter((m) => m !== mat)
+                                  : [...currentMats, mat];
+                                if (nextMats.length === 0) return;
+                                onUpdateProductMeta(prod.id, {
+                                  materials: nextMats,
+                                });
+                              }}
+                              className={`px-2 py-1 text-[10px] font-semibold border flex items-center gap-1 cursor-pointer ${
+                                active
+                                  ? 'bg-zinc-950 text-white border-zinc-950'
+                                  : 'bg-white text-zinc-700 border-zinc-300'
+                              }`}
+                            >
+                              {active && <Check className="w-2.5 h-2.5" />}
+                              <span>{mat}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <div className="flex gap-1.5">
+                        <input
+                          type="text"
+                          value={editProdNewMaterialInput}
+                          onChange={(e) =>
+                            setEditProdNewMaterialInput(e.target.value)
+                          }
+                          placeholder="Add custom material..."
+                          className="flex-1 px-2.5 py-1 text-xs bg-white border border-zinc-300"
+                        />
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            const clean = editProdNewMaterialInput.trim();
+                            if (!clean) return;
+                            await onAddCustomMaterial(clean);
+                            const currentMats = prod.materials || [];
+                            if (!currentMats.includes(clean)) {
+                              await onUpdateProductMeta(prod.id, {
+                                materials: [...currentMats, clean],
+                              });
+                            }
+                            setEditProdNewMaterialInput('');
+                          }}
+                          className="px-3 py-1 bg-zinc-900 text-white text-[10px] font-bold uppercase cursor-pointer"
+                        >
+                          + Add Material
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
                   {/* Placement Checkboxes & Color Variant Toggle */}
                   <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 bg-zinc-50 border border-zinc-200 rounded-xl">
                     <label className="flex items-center gap-2 font-bold uppercase tracking-wider text-zinc-900 cursor-pointer">
@@ -4381,13 +4967,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                 </div>
                               </div>
 
-                              {/* 4 Upload Photos for this Color (1st shows on Website Card when color clicked; all 4 show in Item Pop-up) */}
+                              {/* 4 Upload Photos for this Color */}
                               <div className="space-y-2 p-2.5 bg-zinc-50 border border-zinc-200 rounded-lg">
                                 <div className="text-[10px] font-bold uppercase tracking-wider text-zinc-800">
                                   4 Photos for {variant.colorName} (Photo #1
                                   shows on website card when color is clicked;
-                                  all 4 appear in item pop-up · Auto-shrinks to
-                                  ~50 KB WebP):
+                                  all 4 appear in item pop-up):
                                 </div>
                                 {/* Photo 1 (Main Color Photo) */}
                                 <div>
@@ -4413,6 +4998,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                     />
                                     <R2ImageUploadButton
                                       compact={true}
+                                      label={
+                                        variant.imageUrl?.trim()
+                                          ? 'Replace Photo'
+                                          : 'Upload Photo'
+                                      }
                                       ariaLabel={`Upload Photo 1 for ${prod.name} color ${variant.colorName}`}
                                       onUploaded={(url) =>
                                         handleCatalogVariantChange(
@@ -4425,6 +5015,32 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                         )
                                       }
                                     />
+                                    {Boolean(variant.imageUrl?.trim()) && (
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          setImagePendingDelete({
+                                            label: `${prod.name} (${variant.colorName} · Photo #1)`,
+                                            imageUrl: variant.imageUrl,
+                                            onConfirm: () =>
+                                              handleCatalogVariantChange(
+                                                prod,
+                                                variant.colorName,
+                                                (v) => ({
+                                                  ...v,
+                                                  imageUrl: '',
+                                                })
+                                              ),
+                                          })
+                                        }
+                                        aria-label={`Delete Photo 1 for ${prod.name} color ${variant.colorName}`}
+                                        title="Delete this image from item & R2 bucket"
+                                        className="px-2.5 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 cursor-pointer shrink-0"
+                                      >
+                                        <Trash2 className="w-3 h-3" />
+                                        <span>Delete</span>
+                                      </button>
+                                    )}
                                   </div>
                                 </div>
 
@@ -4467,6 +5083,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                       />
                                       <R2ImageUploadButton
                                         compact={true}
+                                        label={
+                                          gUrls[gIdx]?.trim()
+                                            ? 'Replace Photo'
+                                            : 'Upload Photo'
+                                        }
                                         ariaLabel={`Upload Photo ${gIdx + 2} for ${prod.name} color ${variant.colorName}`}
                                         onUploaded={(url) =>
                                           handleCatalogVariantChange(
@@ -4492,6 +5113,47 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                           )
                                         }
                                       />
+                                      {Boolean(gUrls[gIdx]?.trim()) && (
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            setImagePendingDelete({
+                                              label: `${prod.name} (${variant.colorName} · Photo #${gIdx + 2})`,
+                                              imageUrl: gUrls[gIdx],
+                                              onConfirm: () =>
+                                                handleCatalogVariantChange(
+                                                  prod,
+                                                  variant.colorName,
+                                                  (v) => {
+                                                    const nextGallery = [
+                                                      ...(v.galleryUrls || [
+                                                        '',
+                                                        '',
+                                                        '',
+                                                      ]),
+                                                    ];
+                                                    while (
+                                                      nextGallery.length < 3
+                                                    ) {
+                                                      nextGallery.push('');
+                                                    }
+                                                    nextGallery[gIdx] = '';
+                                                    return {
+                                                      ...v,
+                                                      galleryUrls: nextGallery,
+                                                    };
+                                                  }
+                                                ),
+                                            })
+                                          }
+                                          aria-label={`Delete Photo ${gIdx + 2} for ${prod.name} color ${variant.colorName}`}
+                                          title="Delete this image from item & R2 bucket"
+                                          className="px-2.5 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 cursor-pointer shrink-0"
+                                        >
+                                          <Trash2 className="w-3 h-3" />
+                                          <span>Delete</span>
+                                        </button>
+                                      )}
                                     </div>
                                   </div>
                                 ))}
@@ -4723,11 +5385,87 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       </div>
                     </div>
                   ) : (
-                    <div className="p-4 bg-zinc-50 border border-zinc-200 rounded-xl space-y-2.5">
+                    <div className="p-4 bg-zinc-50 border border-zinc-200 rounded-xl space-y-3">
                       <span className="block font-bold uppercase tracking-wider text-zinc-800">
-                        Per-Size Stock Controls ({prod.sizeType}):
+                        Size Type, Sizes &amp; Per-Size Stock Controls (
+                        {prod.sizeType}):
                       </span>
-                      <div className="flex flex-wrap gap-2">
+
+                      {/* 3 Size Type Buttons for Single-Color Product */}
+                      <div className="grid grid-cols-3 gap-1.5">
+                        {(
+                          [
+                            { id: 'letter', label: '1. Letter (XS–XL)' },
+                            { id: 'numeric', label: '2. Number (36, 38...)' },
+                            { id: 'cm', label: '3. Kids CM (100 cm)' },
+                          ] as { id: SizeType; label: string }[]
+                        ).map((st) => (
+                          <button
+                            key={st.id}
+                            type="button"
+                            onClick={() => {
+                              const nextSizes = getDefaultSizesForType(st.id);
+                              onUpdateProductMeta(prod.id, {
+                                sizeType: st.id,
+                                sizes: nextSizes,
+                                sizeQuantities: buildSizeQuantitiesMap(
+                                  nextSizes,
+                                  {}
+                                ),
+                              });
+                            }}
+                            className={`py-1.5 px-2 text-[10px] font-bold uppercase border cursor-pointer ${
+                              prod.sizeType === st.id
+                                ? 'bg-zinc-950 text-white border-zinc-950'
+                                : 'bg-white text-zinc-700 border-zinc-300'
+                            }`}
+                          >
+                            {st.label}
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* Preset Sizes Toggle for Single-Color Product */}
+                      <div className="flex flex-wrap gap-1.5">
+                        {(prod.sizeType === 'letter'
+                          ? LETTER_SIZES
+                          : prod.sizeType === 'numeric'
+                          ? NUMERIC_SIZES
+                          : CM_SIZES
+                        ).map((presetSz) => {
+                          const active = prod.sizes.includes(presetSz);
+                          return (
+                            <button
+                              key={presetSz}
+                              type="button"
+                              onClick={() => {
+                                const nextSizes = active
+                                  ? prod.sizes.filter((s) => s !== presetSz)
+                                  : [...prod.sizes, presetSz];
+                                if (nextSizes.length === 0) return;
+                                onUpdateProductMeta(prod.id, {
+                                  sizes: nextSizes,
+                                  sizeQuantities: buildSizeQuantitiesMap(
+                                    nextSizes,
+                                    prod.sizeQuantities
+                                  ),
+                                });
+                              }}
+                              className={`px-2 py-1 text-[10px] font-mono-tabular font-semibold border flex items-center gap-1 cursor-pointer ${
+                                active
+                                  ? 'bg-zinc-950 text-white border-zinc-950'
+                                  : 'bg-white text-zinc-700 border-zinc-300'
+                              }`}
+                            >
+                              {active && <Check className="w-2.5 h-2.5" />}
+                              <span>{presetSz}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {/* Per-Size Quantity Adjusters + Custom Size Input */}
+                      <div className="flex flex-wrap items-center gap-2 pt-1">
                         {prod.sizes.map((sz) => {
                           const szQty = getSizeQuantity(prod, sz);
                           const isZero = szQty <= 0;
@@ -4773,6 +5511,45 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             </div>
                           );
                         })}
+
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="text"
+                            value={editProdCustomSizeInput}
+                            onChange={(e) =>
+                              setEditProdCustomSizeInput(e.target.value)
+                            }
+                            placeholder="Custom size (e.g. 103 cm, 36, XXL)"
+                            className="w-40 px-2 py-1 text-[10px] bg-white border border-zinc-300"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const rawSz = editProdCustomSizeInput.trim();
+                              if (!rawSz) return;
+                              const normalized = normalizeSizeEntry(
+                                rawSz,
+                                prod.sizeType
+                              );
+                              if (!normalized) return;
+                              const nextSizes = prod.sizes.includes(normalized)
+                                ? prod.sizes
+                                : [...prod.sizes, normalized];
+                              onUpdateProductMeta(prod.id, {
+                                sizes: nextSizes,
+                                sizeQuantities: {
+                                  ...prod.sizeQuantities,
+                                  [normalized]:
+                                    prod.sizeQuantities?.[normalized] ?? 5,
+                                },
+                              });
+                              setEditProdCustomSizeInput('');
+                            }}
+                            className="px-2.5 py-1 bg-zinc-900 text-white text-[10px] font-bold uppercase cursor-pointer"
+                          >
+                            + Add Size
+                          </button>
+                        </div>
                       </div>
                     </div>
                   )}
@@ -4817,11 +5594,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     )}
                   </div>
 
-                  {/* Up to 4 Product Image URLs Editor */}
+                  {/* Up to 4 Product Image URLs Editor (with Replace & Delete Image + R2 Cleanup) */}
                   <div className="p-4 bg-zinc-50 border border-zinc-200 rounded-xl space-y-2.5">
                     <div className="font-bold uppercase tracking-wider text-zinc-800">
-                      Product Image URLs (Up to 4 Angles — Paste URL or Upload
-                      &amp; Auto-Shrink):
+                      Product Image URLs (Up to 4 Angles — Upload, Replace, or
+                      Delete Any Image):
                     </div>
                     <div className="space-y-2">
                       <div className="flex items-start gap-2">
@@ -4838,56 +5615,123 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         />
                         <R2ImageUploadButton
                           compact={true}
+                          label={
+                            prod.imageUrl?.trim()
+                              ? 'Replace Photo'
+                              : 'Upload Photo'
+                          }
                           ariaLabel={`Upload Primary Photo for ${prod.name}`}
                           onUploaded={(url) =>
                             onUpdateProductMeta(prod.id, { imageUrl: url })
                           }
                         />
+                        {Boolean(prod.imageUrl?.trim()) && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setImagePendingDelete({
+                                label: `${prod.name} (Primary Image #1)`,
+                                imageUrl: prod.imageUrl,
+                                onConfirm: () =>
+                                  onUpdateProductMeta(prod.id, {
+                                    imageUrl: '',
+                                  }),
+                              })
+                            }
+                            aria-label={`Delete Primary Photo for ${prod.name}`}
+                            title="Delete this image from item & R2 bucket"
+                            className="px-2.5 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 cursor-pointer shrink-0"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                            <span>Delete</span>
+                          </button>
+                        )}
                       </div>
-                      {[0, 1, 2].map((gIdx) => (
-                        <div key={gIdx} className="flex items-start gap-2">
-                          <input
-                            type="text"
-                            value={prod.galleryUrls?.[gIdx] || ''}
-                            onChange={(e) => {
-                              const current = [
-                                prod.galleryUrls?.[0] || '',
-                                prod.galleryUrls?.[1] || '',
-                                prod.galleryUrls?.[2] || '',
-                              ];
-                              current[gIdx] = e.target.value;
-                              onUpdateProductMeta(prod.id, {
-                                galleryUrls: current.filter((u) =>
-                                  Boolean(u.trim())
-                                ),
-                              });
-                            }}
-                            placeholder={`${gIdx + 2}. Image URL #${
-                              gIdx + 2
-                            } (Optional)`}
-                            className="flex-1 min-w-0 px-2.5 py-1.5 text-xs bg-white border border-zinc-300"
-                          />
-                          <R2ImageUploadButton
-                            compact={true}
-                            ariaLabel={`Upload Photo #${gIdx + 2} for ${
-                              prod.name
-                            }`}
-                            onUploaded={(url) => {
-                              const current = [
-                                prod.galleryUrls?.[0] || '',
-                                prod.galleryUrls?.[1] || '',
-                                prod.galleryUrls?.[2] || '',
-                              ];
-                              current[gIdx] = url;
-                              onUpdateProductMeta(prod.id, {
-                                galleryUrls: current.filter((u) =>
-                                  Boolean(u.trim())
-                                ),
-                              });
-                            }}
-                          />
-                        </div>
-                      ))}
+                      {[0, 1, 2].map((gIdx) => {
+                        const currentGalleryUrl =
+                          prod.galleryUrls?.[gIdx] || '';
+                        return (
+                          <div key={gIdx} className="flex items-start gap-2">
+                            <input
+                              type="text"
+                              value={currentGalleryUrl}
+                              onChange={(e) => {
+                                const current = [
+                                  prod.galleryUrls?.[0] || '',
+                                  prod.galleryUrls?.[1] || '',
+                                  prod.galleryUrls?.[2] || '',
+                                ];
+                                current[gIdx] = e.target.value;
+                                onUpdateProductMeta(prod.id, {
+                                  galleryUrls: current.filter((u) =>
+                                    Boolean(u.trim())
+                                  ),
+                                });
+                              }}
+                              placeholder={`${gIdx + 2}. Image URL #${
+                                gIdx + 2
+                              } (Optional)`}
+                              className="flex-1 min-w-0 px-2.5 py-1.5 text-xs bg-white border border-zinc-300"
+                            />
+                            <R2ImageUploadButton
+                              compact={true}
+                              label={
+                                currentGalleryUrl.trim()
+                                  ? 'Replace Photo'
+                                  : 'Upload Photo'
+                              }
+                              ariaLabel={`Upload Photo #${gIdx + 2} for ${
+                                prod.name
+                              }`}
+                              onUploaded={(url) => {
+                                const current = [
+                                  prod.galleryUrls?.[0] || '',
+                                  prod.galleryUrls?.[1] || '',
+                                  prod.galleryUrls?.[2] || '',
+                                ];
+                                current[gIdx] = url;
+                                onUpdateProductMeta(prod.id, {
+                                  galleryUrls: current.filter((u) =>
+                                    Boolean(u.trim())
+                                  ),
+                                });
+                              }}
+                            />
+                            {Boolean(currentGalleryUrl.trim()) && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setImagePendingDelete({
+                                    label: `${prod.name} (Image #${gIdx + 2})`,
+                                    imageUrl: currentGalleryUrl,
+                                    onConfirm: () => {
+                                      const current = [
+                                        prod.galleryUrls?.[0] || '',
+                                        prod.galleryUrls?.[1] || '',
+                                        prod.galleryUrls?.[2] || '',
+                                      ];
+                                      current[gIdx] = '';
+                                      onUpdateProductMeta(prod.id, {
+                                        galleryUrls: current.filter((u) =>
+                                          Boolean(u.trim())
+                                        ),
+                                      });
+                                    },
+                                  })
+                                }
+                                aria-label={`Delete Photo #${gIdx + 2} for ${
+                                  prod.name
+                                }`}
+                                title="Delete this image from item & R2 bucket"
+                                className="px-2.5 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 cursor-pointer shrink-0"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                                <span>Delete</span>
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
 
@@ -5156,9 +6000,30 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         className="flex-1 min-w-0 px-2.5 py-1.5 text-xs bg-white border border-zinc-300"
                       />
                       <R2ImageUploadButton
+                        label={
+                          itemUrl.trim() ? 'Replace Photo' : 'Upload Photo'
+                        }
                         ariaLabel="Upload Photo for Primary Image URL 1"
                         onUploaded={(url) => setItemUrl(url)}
                       />
+                      {Boolean(itemUrl.trim()) && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setImagePendingDelete({
+                              label: 'New Item Primary Image #1',
+                              imageUrl: itemUrl,
+                              onConfirm: () => setItemUrl(''),
+                            })
+                          }
+                          aria-label="Delete Primary Image URL 1"
+                          title="Delete this image from item & R2 bucket"
+                          className="px-2.5 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 cursor-pointer shrink-0"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                          <span>Delete</span>
+                        </button>
+                      )}
                     </div>
                   </div>
                   <div>
@@ -5175,9 +6040,30 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         className="flex-1 min-w-0 px-2.5 py-1.5 text-xs bg-white border border-zinc-300"
                       />
                       <R2ImageUploadButton
+                        label={
+                          itemUrl2.trim() ? 'Replace Photo' : 'Upload Photo'
+                        }
                         ariaLabel="Upload Photo for Image URL 2"
                         onUploaded={(url) => setItemUrl2(url)}
                       />
+                      {Boolean(itemUrl2.trim()) && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setImagePendingDelete({
+                              label: 'New Item Image #2',
+                              imageUrl: itemUrl2,
+                              onConfirm: () => setItemUrl2(''),
+                            })
+                          }
+                          aria-label="Delete Image URL 2"
+                          title="Delete this image from item & R2 bucket"
+                          className="px-2.5 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 cursor-pointer shrink-0"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                          <span>Delete</span>
+                        </button>
+                      )}
                     </div>
                   </div>
                   <div>
@@ -5194,9 +6080,30 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         className="flex-1 min-w-0 px-2.5 py-1.5 text-xs bg-white border border-zinc-300"
                       />
                       <R2ImageUploadButton
+                        label={
+                          itemUrl3.trim() ? 'Replace Photo' : 'Upload Photo'
+                        }
                         ariaLabel="Upload Photo for Image URL 3"
                         onUploaded={(url) => setItemUrl3(url)}
                       />
+                      {Boolean(itemUrl3.trim()) && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setImagePendingDelete({
+                              label: 'New Item Image #3',
+                              imageUrl: itemUrl3,
+                              onConfirm: () => setItemUrl3(''),
+                            })
+                          }
+                          aria-label="Delete Image URL 3"
+                          title="Delete this image from item & R2 bucket"
+                          className="px-2.5 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 cursor-pointer shrink-0"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                          <span>Delete</span>
+                        </button>
+                      )}
                     </div>
                   </div>
                   <div>
@@ -5213,9 +6120,30 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         className="flex-1 min-w-0 px-2.5 py-1.5 text-xs bg-white border border-zinc-300"
                       />
                       <R2ImageUploadButton
+                        label={
+                          itemUrl4.trim() ? 'Replace Photo' : 'Upload Photo'
+                        }
                         ariaLabel="Upload Photo for Image URL 4"
                         onUploaded={(url) => setItemUrl4(url)}
                       />
+                      {Boolean(itemUrl4.trim()) && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setImagePendingDelete({
+                              label: 'New Item Image #4',
+                              imageUrl: itemUrl4,
+                              onConfirm: () => setItemUrl4(''),
+                            })
+                          }
+                          aria-label="Delete Image URL 4"
+                          title="Delete this image from item & R2 bucket"
+                          className="px-2.5 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 cursor-pointer shrink-0"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                          <span>Delete</span>
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -5428,8 +6356,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               <div className="text-[10px] font-bold uppercase tracking-wider text-zinc-900">
                                 Upload Up to 4 Photos for {dc.colorName} (Photo
                                 #1 appears on website card when customer clicks
-                                this color; all 4 appear in item pop-up ·
-                                Auto-shrinks to ~50 KB WebP):
+                                this color; all 4 appear in item pop-up):
                               </div>
 
                               {/* Slot 1: Primary Color Image */}
@@ -5455,6 +6382,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                   />
                                   <R2ImageUploadButton
                                     compact={true}
+                                    label={
+                                      dc.imageUrl?.trim()
+                                        ? 'Replace Photo'
+                                        : 'Upload Photo'
+                                    }
                                     ariaLabel={`Upload Photo 1 for color ${dc.colorName}`}
                                     onUploaded={(url) =>
                                       updateDraftColorField(
@@ -5466,6 +6398,31 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                       )
                                     }
                                   />
+                                  {Boolean(dc.imageUrl?.trim()) && (
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        setImagePendingDelete({
+                                          label: `New Item (${dc.colorName} · Photo #1)`,
+                                          imageUrl: dc.imageUrl,
+                                          onConfirm: () =>
+                                            updateDraftColorField(
+                                              dc.colorName,
+                                              (prev) => ({
+                                                ...prev,
+                                                imageUrl: '',
+                                              })
+                                            ),
+                                        })
+                                      }
+                                      aria-label={`Delete Photo 1 for color ${dc.colorName}`}
+                                      title="Delete this image from item & R2 bucket"
+                                      className="px-2.5 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 cursor-pointer shrink-0"
+                                    >
+                                      <Trash2 className="w-3 h-3" />
+                                      <span>Delete</span>
+                                    </button>
+                                  )}
                                 </div>
                               </div>
 
@@ -5507,6 +6464,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                     />
                                     <R2ImageUploadButton
                                       compact={true}
+                                      label={
+                                        gUrls[gIdx]?.trim()
+                                          ? 'Replace Photo'
+                                          : 'Upload Photo'
+                                      }
                                       ariaLabel={`Upload Photo ${gIdx + 2} for color ${dc.colorName}`}
                                       onUploaded={(url) =>
                                         updateDraftColorField(
@@ -5531,6 +6493,44 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                         )
                                       }
                                     />
+                                    {Boolean(gUrls[gIdx]?.trim()) && (
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          setImagePendingDelete({
+                                            label: `New Item (${dc.colorName} · Photo #${gIdx + 2})`,
+                                            imageUrl: gUrls[gIdx],
+                                            onConfirm: () =>
+                                              updateDraftColorField(
+                                                dc.colorName,
+                                                (prev) => {
+                                                  const nextG = [
+                                                    ...(prev.galleryUrls || [
+                                                      '',
+                                                      '',
+                                                      '',
+                                                    ]),
+                                                  ];
+                                                  while (nextG.length < 3) {
+                                                    nextG.push('');
+                                                  }
+                                                  nextG[gIdx] = '';
+                                                  return {
+                                                    ...prev,
+                                                    galleryUrls: nextG,
+                                                  };
+                                                }
+                                              ),
+                                          })
+                                        }
+                                        aria-label={`Delete Photo ${gIdx + 2} for color ${dc.colorName}`}
+                                        title="Delete this image from item & R2 bucket"
+                                        className="px-2.5 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 cursor-pointer shrink-0"
+                                      >
+                                        <Trash2 className="w-3 h-3" />
+                                        <span>Delete</span>
+                                      </button>
+                                    )}
                                   </div>
                                 </div>
                               ))}

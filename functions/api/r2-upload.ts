@@ -87,14 +87,14 @@ export const onRequestPost = async (context: {
     const isVideo =
       (typeof contentType === 'string' && contentType.startsWith('video/')) ||
       (typeof fileName === 'string' && /\.(mp4|webm|mov|hevc|m4v)$/i.test(fileName));
-    const maxAllowedBytes = isVideo ? 35 * 1024 * 1024 : 10 * 1024 * 1024;
+    const maxAllowedBytes = isVideo ? 35 * 1024 * 1024 : 25 * 1024 * 1024;
 
     if (bytes.byteLength > maxAllowedBytes) {
       return new Response(
         JSON.stringify({
           error: isVideo
             ? 'Video exceeds the 35 MB maximum upload size.'
-            : 'Compressed image exceeds 10 MB maximum upload size.',
+            : 'Image exceeds 25 MB maximum upload size.',
         }),
         {
           status: 413,

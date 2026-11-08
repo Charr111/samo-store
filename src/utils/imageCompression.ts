@@ -3,6 +3,7 @@ export interface ImageCompressionOptions {
   maxHeight?: number;
   quality?: number;
   targetMaxBytes?: number;
+  forceShrink?: boolean;
 }
 
 export interface CompressedImageResult {
@@ -13,6 +14,38 @@ export interface CompressedImageResult {
   height: number;
   originalSizeBytes: number;
   compressedSizeBytes: number;
+  wasShrunk?: boolean;
+}
+
+export const SHRINK_STORAGE_KEY = 'samo_shrink_uploads_enabled_v1';
+
+/**
+ * Returns whether automatic image shrinking (~50 KB WebP) is currently enabled.
+ * Defaults to true unless toggled off by the admin.
+ */
+export function getShrinkUploadsEnabled(): boolean {
+  try {
+    if (typeof window === 'undefined' || !window.localStorage) return true;
+    const raw = window.localStorage.getItem(SHRINK_STORAGE_KEY);
+    if (raw === null) return true;
+    return raw !== 'false';
+  } catch {
+    return true;
+  }
+}
+
+/**
+ * Persists the admin toggle for automatic image shrinking on/off.
+ */
+export function setShrinkUploadsEnabled(enabled: boolean): void {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.setItem(SHRINK_STORAGE_KEY, enabled ? 'true' : 'false');
+      window.dispatchEvent(
+        new CustomEvent('samo-shrink-toggle-changed', { detail: { enabled } })
+      );
+    }
+  } catch {}
 }
 
 /**
@@ -64,7 +97,14 @@ export function sanitizeUploadFileName(
       .replace(/^-+|-+$/g, '')
       .slice(0, 60) || 'samo-item';
 
-  const ext = contentType === 'image/jpeg' ? 'jpg' : 'webp';
+  let ext = 'webp';
+  if (contentType === 'image/jpeg' || contentType === 'image/jpg') {
+    ext = 'jpg';
+  } else if (contentType === 'image/png') {
+    ext = 'png';
+  } else if (contentType === 'image/gif') {
+    ext = 'gif';
+  }
   return `${timestamp}-${slug}.${ext}`;
 }
 
@@ -165,12 +205,9 @@ function renderToCanvas(
 }
 
 /**
- * Compresses an image File in the browser (c_limit 600x750 4:5 studio ratio, adaptive quality).
- * Guarantees 1.2 MB - 5 MB mobile camera photos shrink down to ~30 KB - 60 KB across
-/**
  * Converts iPhone HEIC/HEIF photos to a standard JPEG Blob if the browser cannot decode them natively.
  */
-async function convertHeicToJpegIfNeeded(file: File): Promise<Blob> {
+async function convertHeicToJpegIfNeeded(file: File, quality = 0.88): Promise<Blob> {
   const isHeic =
     file.name.toLowerCase().endsWith('.heic') ||
     file.name.toLowerCase().endsWith('.heif') ||
@@ -181,30 +218,86 @@ async function convertHeicToJpegIfNeeded(file: File): Promise<Blob> {
     return file;
   }
 
-  // Check if browser decodes HEIC natively (e.g. Safari on iOS 17+)
-  if (typeof createImageBitmap === 'function') {
-    try {
-      const bmp = await createImageBitmap(file);
-      if (bmp.width > 0 && bmp.height > 0) {
-        bmp.close();
-        return file;
-      }
-    } catch {}
-  }
-
   try {
     const heic2anyModule = await import('heic2any');
     const heic2any = heic2anyModule.default || heic2anyModule;
     const converted = await heic2any({
       blob: file,
       toType: 'image/jpeg',
-      quality: 0.88,
+      quality,
     });
     return Array.isArray(converted) ? converted[0] : converted;
   } catch (err) {
     console.warn('heic2any conversion fallback:', err);
     return file;
   }
+}
+
+/**
+ * Prepares an image file for upload WITHOUT shrinking when the admin turns OFF Auto-Shrink.
+ * Preserves original resolution and quality (converts raw .heic/.heif to full-resolution JPEG so all browsers can render it).
+ */
+export async function prepareOriginalQualityImage(
+  file: File
+): Promise<CompressedImageResult> {
+  const isImageCandidate =
+    Boolean(file) &&
+    ((file.type && file.type.startsWith('image/')) ||
+      /\.(jpe?g|png|webp|heic|heif|gif|avif)$/i.test(file.name || ''));
+
+  if (!isImageCandidate) {
+    throw new Error('Please select a valid image file (JPG, PNG, WebP, HEIC).');
+  }
+
+  const isHeic =
+    file.name.toLowerCase().endsWith('.heic') ||
+    file.name.toLowerCase().endsWith('.heif') ||
+    file.type === 'image/heic' ||
+    file.type === 'image/heif';
+
+  const targetBlob = isHeic ? await convertHeicToJpegIfNeeded(file, 0.95) : file;
+  let contentType = targetBlob.type || file.type || 'image/jpeg';
+  if (isHeic || contentType === 'image/heic' || contentType === 'image/heif') {
+    contentType = 'image/jpeg';
+  } else if (!contentType.startsWith('image/')) {
+    if (file.name.toLowerCase().endsWith('.png')) contentType = 'image/png';
+    else if (file.name.toLowerCase().endsWith('.webp')) contentType = 'image/webp';
+    else contentType = 'image/jpeg';
+  }
+
+  let width = 1200;
+  let height = 1500;
+  const objectUrl = URL.createObjectURL(targetBlob);
+  try {
+    const dims = await new Promise<{ w: number; h: number }>((resolve) => {
+      const imageEl = new Image();
+      imageEl.onload = () =>
+        resolve({
+          w: imageEl.naturalWidth || imageEl.width || 1200,
+          h: imageEl.naturalHeight || imageEl.height || 1500,
+        });
+      imageEl.onerror = () => resolve({ w: 1200, h: 1500 });
+      imageEl.src = objectUrl;
+    });
+    width = dims.w;
+    height = dims.h;
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+
+  const base64Data = await blobToBase64Data(targetBlob);
+  const fileName = sanitizeUploadFileName(file.name, Date.now(), contentType);
+
+  return {
+    base64Data,
+    contentType,
+    fileName,
+    width,
+    height,
+    originalSizeBytes: file.size,
+    compressedSizeBytes: targetBlob.size,
+    wasShrunk: false,
+  };
 }
 
 /**
@@ -230,7 +323,7 @@ export async function compressImageToWebP(
   const initialQuality = options?.quality ?? 0.72;
   const targetMaxBytes = options?.targetMaxBytes ?? 60 * 1024; // 60 KB target budget
 
-  const decodedBlob = await convertHeicToJpegIfNeeded(file);
+  const decodedBlob = await convertHeicToJpegIfNeeded(file, 0.88);
   const objectUrl = URL.createObjectURL(decodedBlob);
 
   try {
@@ -288,6 +381,7 @@ export async function compressImageToWebP(
       height,
       originalSizeBytes: file.size,
       compressedSizeBytes: bestResult.blob.size,
+      wasShrunk: true,
     };
   } finally {
     URL.revokeObjectURL(objectUrl);
@@ -295,7 +389,8 @@ export async function compressImageToWebP(
 }
 
 /**
- * Compresses an image file in the browser and uploads it to Cloudflare R2 via /api/r2-upload.
+ * Uploads an image file to Cloudflare R2 via /api/r2-upload.
+ * Respects the global Auto-Shrink toggle (shrinks to ~50 KB WebP when ON, or uploads original quality when OFF).
  */
 export async function uploadCompressedImageToR2(
   file: File,
@@ -307,8 +402,16 @@ export async function uploadCompressedImageToR2(
   compressedSizeKB: number;
   width: number;
   height: number;
+  wasShrunk: boolean;
 }> {
-  const compressed = await compressImageToWebP(file, options);
+  const shouldShrink =
+    options?.forceShrink !== undefined
+      ? options.forceShrink
+      : getShrinkUploadsEnabled();
+
+  const prepared = shouldShrink
+    ? await compressImageToWebP(file, options)
+    : await prepareOriginalQualityImage(file);
 
   const response = await fetch('/api/r2-upload', {
     method: 'POST',
@@ -316,9 +419,9 @@ export async function uploadCompressedImageToR2(
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      fileName: compressed.fileName,
-      contentType: compressed.contentType,
-      base64Data: compressed.base64Data,
+      fileName: prepared.fileName,
+      contentType: prepared.contentType,
+      base64Data: prepared.base64Data,
     }),
   });
 
@@ -335,18 +438,77 @@ export async function uploadCompressedImageToR2(
     );
   }
 
-  const finalBytes = payload.sizeBytes || compressed.compressedSizeBytes;
+  const finalBytes = payload.sizeBytes || prepared.compressedSizeBytes;
   const compressedSizeKB = Math.max(1, Math.round(finalBytes / 1024));
-  const originalSizeKB = Math.max(1, Math.round(compressed.originalSizeBytes / 1024));
+  const originalSizeKB = Math.max(1, Math.round(prepared.originalSizeBytes / 1024));
 
   return {
     url: payload.url,
     sizeBytes: finalBytes,
     originalSizeKB,
     compressedSizeKB,
-    width: compressed.width,
-    height: compressed.height,
+    width: prepared.width,
+    height: prepared.height,
+    wasShrunk: shouldShrink,
   };
+}
+
+/**
+ * Extracts the R2 object key (e.g., "products/173000-jacket.webp" or "banners/...") from a public R2 URL.
+ */
+export function extractR2ObjectKey(url: string): string | null {
+  if (!url || typeof url !== 'string') return null;
+  const trimmed = url.trim();
+  if (!trimmed || trimmed.startsWith('studio://') || trimmed.startsWith('/assets/')) {
+    return null;
+  }
+  try {
+    const parsed = new URL(trimmed);
+    const pathKey = parsed.pathname.replace(/^\/+/, '');
+    if (pathKey.startsWith('products/') || pathKey.startsWith('banners/')) {
+      return pathKey;
+    }
+  } catch {
+    if (trimmed.startsWith('products/') || trimmed.startsWith('banners/')) {
+      return trimmed;
+    }
+  }
+  return null;
+}
+
+/**
+ * Deletes one or more uploaded images/videos from the Cloudflare R2 bucket via /api/r2-delete.
+ */
+export async function deleteMediaFromR2(
+  urls: string | string[]
+): Promise<{ deletedKeys: string[] }> {
+  const list = Array.isArray(urls) ? urls : [urls];
+  const keys = Array.from(
+    new Set(
+      list
+        .map((u) => extractR2ObjectKey(u))
+        .filter((k): k is string => Boolean(k))
+    )
+  );
+  if (keys.length === 0) {
+    return { deletedKeys: [] };
+  }
+  try {
+    const res = await fetch('/api/r2-delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ keys }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      return {
+        deletedKeys: Array.isArray(data?.deletedKeys) ? data.deletedKeys : keys,
+      };
+    }
+  } catch (err) {
+    console.warn('[SAMO Atelier] R2 media delete notice:', err);
+  }
+  return { deletedKeys: keys };
 }
 
 /**

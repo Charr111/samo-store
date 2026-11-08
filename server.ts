@@ -5,11 +5,17 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI, ThinkingLevel, Type } from '@google/genai';
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import {
+  S3Client,
+  PutObjectCommand,
+  GetObjectCommand,
+  DeleteObjectCommand,
+} from '@aws-sdk/client-s3';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const CATALOG_STATE_FILE = path.join(__dirname, '.samo-catalog-state.json');
+const R2_CATALOG_OBJECT_KEY = 'state/catalog.json';
 
 interface PersistedCatalogState {
   updatedAt: number;
@@ -26,35 +32,9 @@ interface PersistedCatalogState {
   siteBanners?: Record<string, unknown>;
 }
 
-function readCatalogState(): PersistedCatalogState {
-  try {
-    if (fs.existsSync(CATALOG_STATE_FILE)) {
-      const raw = fs.readFileSync(CATALOG_STATE_FILE, 'utf-8');
-      const parsed = JSON.parse(raw) as PersistedCatalogState;
-      if (parsed && typeof parsed === 'object') {
-        return parsed;
-      }
-    }
-  } catch {}
-  return { updatedAt: 0 };
-}
-
-function writeCatalogState(patch: Partial<PersistedCatalogState>): PersistedCatalogState {
-  const current = readCatalogState();
-  const next: PersistedCatalogState = {
-    ...current,
-    ...patch,
-    updatedAt: Date.now(),
-  };
-  try {
-    fs.writeFileSync(CATALOG_STATE_FILE, JSON.stringify(next, null, 2), 'utf-8');
-  } catch {}
-  return next;
-}
-
 const R2_CORS_HEADERS: Record<string, string> = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, PUT, OPTIONS',
+  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type, Authorization',
   'Cross-Origin-Resource-Policy': 'cross-origin',
 };
@@ -86,6 +66,115 @@ function getR2Config() {
   };
 }
 
+function createR2Client(): { s3: S3Client; bucketName: string; publicBaseUrl: string } | null {
+  const { accountId, accessKeyId, secretAccessKey, bucketName, publicBaseUrl } =
+    getR2Config();
+  if (!accountId || !accessKeyId || !secretAccessKey || !bucketName) {
+    return null;
+  }
+  const s3 = new S3Client({
+    region: 'auto',
+    endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
+    credentials: {
+      accessKeyId,
+      secretAccessKey,
+    },
+  });
+  return { s3, bucketName, publicBaseUrl };
+}
+
+function readLocalCatalogState(): PersistedCatalogState {
+  try {
+    if (fs.existsSync(CATALOG_STATE_FILE)) {
+      const raw = fs.readFileSync(CATALOG_STATE_FILE, 'utf-8');
+      const parsed = JSON.parse(raw) as PersistedCatalogState;
+      if (parsed && typeof parsed === 'object') {
+        return parsed;
+      }
+    }
+  } catch {}
+  return { updatedAt: 0 };
+}
+
+async function readR2CatalogState(): Promise<PersistedCatalogState | null> {
+  const r2 = createR2Client();
+  if (!r2) return null;
+  try {
+    const resp = await r2.s3.send(
+      new GetObjectCommand({
+        Bucket: r2.bucketName,
+        Key: R2_CATALOG_OBJECT_KEY,
+      })
+    );
+    if (!resp.Body) return null;
+    const raw = await resp.Body.transformToString('utf-8');
+    const parsed = JSON.parse(raw) as PersistedCatalogState;
+    if (parsed && typeof parsed === 'object') {
+      return parsed;
+    }
+  } catch {
+    // Object may not exist yet on first run
+  }
+  return null;
+}
+
+async function pushCatalogStateToR2(state: PersistedCatalogState): Promise<void> {
+  const r2 = createR2Client();
+  if (!r2) return;
+  try {
+    await r2.s3.send(
+      new PutObjectCommand({
+        Bucket: r2.bucketName,
+        Key: R2_CATALOG_OBJECT_KEY,
+        Body: JSON.stringify(state, null, 2),
+        ContentType: 'application/json',
+        CacheControl: 'no-store, no-cache, must-revalidate',
+      })
+    );
+  } catch (err) {
+    console.warn('[SAMO R2] Failed to persist state/catalog.json to R2:', err);
+  }
+}
+
+let lastR2PullMs = 0;
+
+async function readCatalogState(): Promise<PersistedCatalogState> {
+  const local = readLocalCatalogState();
+  const now = Date.now();
+  // Periodically check R2 bucket so all environments stay in sync with Cloudflare R2
+  if (now - lastR2PullMs > 5000 || !local.updatedAt) {
+    lastR2PullMs = now;
+    const remote = await readR2CatalogState();
+    if (remote && (remote.updatedAt || 0) > (local.updatedAt || 0)) {
+      try {
+        fs.writeFileSync(CATALOG_STATE_FILE, JSON.stringify(remote, null, 2), 'utf-8');
+      } catch {}
+      return remote;
+    } else if (!remote && local.updatedAt > 0) {
+      // Seed R2 bucket with existing local catalog state if R2 didn't have state/catalog.json yet
+      await pushCatalogStateToR2(local);
+    }
+  }
+  return local;
+}
+
+async function writeCatalogState(
+  patch: Partial<PersistedCatalogState>
+): Promise<PersistedCatalogState> {
+  const current = await readCatalogState();
+  const next: PersistedCatalogState = {
+    ...current,
+    ...patch,
+    updatedAt: Date.now(),
+  };
+  try {
+    fs.writeFileSync(CATALOG_STATE_FILE, JSON.stringify(next, null, 2), 'utf-8');
+  } catch {}
+  await pushCatalogStateToR2(next);
+  lastR2PullMs = Date.now();
+  return next;
+}
+
 function getAiClient(): GoogleGenAI {
   return new GoogleGenAI({
     apiKey: process.env.GEMINI_API_KEY,
@@ -103,16 +192,20 @@ async function startServer() {
 
   app.use(express.json({ limit: '50mb' }));
 
-  // Cross-Device Catalog Sync Endpoint (Syncs Phone <-> Laptop on preview & production server)
-  app.get('/api/catalog', (_req, res) => {
+  // Sync local catalog state with Cloudflare R2 bucket on startup
+  readCatalogState().catch(() => {});
+
+  // Cross-Device Catalog Sync Endpoint (Backed by Cloudflare R2 state/catalog.json)
+  app.get('/api/catalog', async (_req, res) => {
     res.set('Cache-Control', 'no-store');
-    res.json(readCatalogState());
+    const state = await readCatalogState();
+    res.json(state);
   });
 
-  app.post('/api/catalog', (req, res) => {
+  app.post('/api/catalog', async (req, res) => {
     res.set('Cache-Control', 'no-store');
     const body = req.body || {};
-    const current = readCatalogState();
+    const current = await readCatalogState();
     const mergedDeletedProducts = Array.from(
       new Set([
         ...(current.deletedProductIds || []),
@@ -126,7 +219,7 @@ async function startServer() {
       ])
     );
 
-    const updated = writeCatalogState({
+    const updated = await writeCatalogState({
       ...(Array.isArray(body.products) ? { products: body.products } : {}),
       ...(Array.isArray(body.categories) ? { categories: body.categories } : {}),
       ...(Array.isArray(body.promoCodes) ? { promoCodes: body.promoCodes } : {}),
@@ -162,15 +255,8 @@ async function startServer() {
         return;
       }
 
-      const {
-        accountId,
-        accessKeyId,
-        secretAccessKey,
-        bucketName,
-        publicBaseUrl,
-      } = getR2Config();
-
-      if (!accountId || !accessKeyId || !secretAccessKey || !bucketName) {
+      const r2 = createR2Client();
+      if (!r2) {
         res.status(500).json({
           error:
             'Cloudflare R2 credentials are not configured on the server.',
@@ -191,13 +277,13 @@ async function startServer() {
       const isVideo =
         (typeof contentType === 'string' && contentType.startsWith('video/')) ||
         (typeof fileName === 'string' && /\.(mp4|webm|mov|hevc|m4v)$/i.test(fileName));
-      const maxAllowedBytes = isVideo ? 35 * 1024 * 1024 : 10 * 1024 * 1024;
+      const maxAllowedBytes = isVideo ? 35 * 1024 * 1024 : 25 * 1024 * 1024;
 
       if (buffer.byteLength > maxAllowedBytes) {
         res.status(413).json({
           error: isVideo
             ? 'Video exceeds the 35 MB maximum upload size.'
-            : 'Compressed image exceeds the 10 MB maximum upload size.',
+            : 'Image exceeds the 25 MB maximum upload size.',
         });
         return;
       }
@@ -231,6 +317,8 @@ async function startServer() {
           : '.mp4'
         : mimeType === 'image/jpeg'
         ? '.jpg'
+        : mimeType === 'image/png'
+        ? '.png'
         : '.webp';
 
       const safeFileName =
@@ -251,18 +339,9 @@ async function startServer() {
         ? `banners/${finalFileName}`
         : `products/${finalFileName}`;
 
-      const s3 = new S3Client({
-        region: 'auto',
-        endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
-        credentials: {
-          accessKeyId,
-          secretAccessKey,
-        },
-      });
-
-      await s3.send(
+      await r2.s3.send(
         new PutObjectCommand({
-          Bucket: bucketName,
+          Bucket: r2.bucketName,
           Key: objectKey,
           Body: buffer,
           ContentType: mimeType,
@@ -270,7 +349,7 @@ async function startServer() {
         })
       );
 
-      const publicUrl = `${publicBaseUrl}/${objectKey}`;
+      const publicUrl = `${r2.publicBaseUrl}/${objectKey}`;
       res.status(200).json({
         url: publicUrl,
         key: objectKey,
@@ -281,6 +360,58 @@ async function startServer() {
         error instanceof Error
           ? error.message
           : 'Failed to upload image to Cloudflare R2.';
+      res.status(500).json({ error: message });
+    }
+  });
+
+  // 0B. Cloudflare R2 Media Delete Endpoint (Deletes images/videos from R2 bucket when deleted in Admin)
+  app.options('/api/r2-delete', (_req, res) => {
+    res.set(R2_CORS_HEADERS).status(204).end();
+  });
+
+  app.post('/api/r2-delete', async (req, res) => {
+    res.set(R2_CORS_HEADERS);
+    try {
+      const rawKeys = Array.isArray(req.body?.keys) ? req.body.keys : [];
+      const safeKeys = rawKeys
+        .map((k: unknown) =>
+          typeof k === 'string' ? k.trim().replace(/^\/+/, '') : ''
+        )
+        .filter(
+          (k: string) =>
+            Boolean(k) &&
+            (k.startsWith('products/') || k.startsWith('banners/'))
+        );
+
+      if (safeKeys.length === 0) {
+        res.status(200).json({ deletedKeys: [] });
+        return;
+      }
+
+      const r2 = createR2Client();
+      if (r2) {
+        await Promise.all(
+          safeKeys.map((key: string) =>
+            r2.s3
+              .send(
+                new DeleteObjectCommand({
+                  Bucket: r2.bucketName,
+                  Key: key,
+                })
+              )
+              .catch((err) => {
+                console.warn(`[SAMO R2] Failed to delete object ${key}:`, err);
+              })
+          )
+        );
+      }
+
+      res.status(200).json({ deletedKeys: safeKeys });
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'Failed to delete media from Cloudflare R2.';
       res.status(500).json({ error: message });
     }
   });

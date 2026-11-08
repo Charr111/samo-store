@@ -61,22 +61,13 @@ import {
 } from './utils/catalogLogic';
 import {
   auth,
-  collection,
-  db,
-  deleteDoc,
-  doc,
   firebaseSignOut,
   googleProvider,
-  handleFirestoreError,
   onAuthStateChanged,
-  onSnapshot,
-  OperationType,
-  serverTimestamp,
-  setDoc,
   signInWithPopup,
-  updateDoc,
   User,
 } from './lib/firebase';
+import { deleteMediaFromR2 } from './utils/imageCompression';
 import { Navbar } from './components/Navbar';
 import { HeroVideoSection } from './components/HeroVideoSection';
 import { ProductImage } from './components/ProductImage';
@@ -88,6 +79,7 @@ import { AiStylistModal } from './components/AiStylistModal';
 
 const STORAGE_KEYS = {
   categories: 'samo_categories_v2',
+  deletedCategories: 'samo_deleted_categories_v1',
   products: 'samo_products_v5',
   deletedProducts: 'samo_deleted_products_v1',
   promos: 'samo_promo_codes_v1',
@@ -100,17 +92,6 @@ const STORAGE_KEYS = {
   aiAdmin: 'samo_ai_admin_unlocked_v1',
   siteBanners: 'samo_site_banners_v2',
 };
-
-function sanitizeFirestorePayload<T extends Record<string, unknown>>(
-  raw: T
-): Record<string, unknown> {
-  const clean: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(raw)) {
-    if (k === 'id' || v === undefined) continue;
-    clean[k] = v;
-  }
-  return clean;
-}
 
 export function deepCleanFirestorePayload<T>(value: T): T {
   if (value === undefined || value === null) {
@@ -152,26 +133,34 @@ function loadStored<T>(key: string, fallback: T): T {
   }
 }
 
-function mergeStoredCategories(stored: CategoryItem[]): CategoryItem[] {
+function mergeStoredCategories(
+  stored: CategoryItem[],
+  deletedCategoryIds: string[] = []
+): CategoryItem[] {
+  const deletedSet = new Set(deletedCategoryIds);
   const map = new Map<string, CategoryItem>();
-  for (const c of INITIAL_CATEGORIES) map.set(c.id, c);
-  for (const c of stored) {
-    if (c.department === 'kids') {
-      const normalizedName = normalizeKidsCategoryName(c.name);
-      if (normalizedName.toLowerCase() === 'full set' || c.id === 'kids-full-set') {
-        continue;
-      }
-      const normalizedSlug = createSafeSlug(normalizedName);
-      const canonicalId = `kids-${normalizedSlug}`;
-      map.set(canonicalId, {
-        ...c,
-        id: canonicalId,
-        name: normalizedName,
-        slug: normalizedSlug,
-      });
-    } else {
+
+  for (const c of INITIAL_CATEGORIES) {
+    if (!deletedSet.has(c.id)) {
       map.set(c.id, c);
     }
+  }
+
+  for (const c of stored) {
+    if (!c || !c.id || deletedSet.has(c.id)) continue;
+    if (
+      c.department === 'kids' &&
+      (c.name.trim().toLowerCase() === 'full set' || c.id === 'kids-full-set')
+    ) {
+      continue;
+    }
+    const cleanName = c.name.trim();
+    const cleanSlug = createSafeSlug(cleanName);
+    map.set(c.id, {
+      ...c,
+      name: cleanName,
+      slug: cleanSlug,
+    });
   }
   return Array.from(map.values());
 }
@@ -186,10 +175,7 @@ function normalizeStoredProducts(
   // 1. Insert stored / newly added admin products FIRST so newest items stay at the top
   for (const item of items) {
     if (!item || !item.id || deletedSet.has(item.id)) continue;
-    const normalizedCat =
-      item.department === 'kids'
-        ? normalizeKidsCategoryName(item.category)
-        : item.category;
+    const normalizedCat = item.category.trim();
     if (
       item.department === 'kids' &&
       (normalizedCat.toLowerCase() === 'full set' || item.id === 'samo-k-fullset-01')
@@ -200,10 +186,9 @@ function normalizeStoredProducts(
     map.set(item.id, {
       ...item,
       category: normalizedCat,
-      galleryUrls:
-        Array.isArray(item.galleryUrls) && item.galleryUrls.length > 0
-          ? item.galleryUrls
-          : seedFallback?.galleryUrls || [],
+      galleryUrls: Array.isArray(item.galleryUrls)
+        ? item.galleryUrls
+        : seedFallback?.galleryUrls || [],
       isFullSet:
         item.department === 'kids'
           ? false
@@ -277,8 +262,14 @@ export default function App() {
   const [deletedProductIds, setDeletedProductIds] = useState<string[]>(() =>
     loadStored(STORAGE_KEYS.deletedProducts, [])
   );
+  const [deletedCategoryIds, setDeletedCategoryIds] = useState<string[]>(() =>
+    loadStored(STORAGE_KEYS.deletedCategories, [])
+  );
   const [categories, setCategories] = useState<CategoryItem[]>(() =>
-    mergeStoredCategories(loadStored(STORAGE_KEYS.categories, INITIAL_CATEGORIES))
+    mergeStoredCategories(
+      loadStored(STORAGE_KEYS.categories, INITIAL_CATEGORIES),
+      loadStored(STORAGE_KEYS.deletedCategories, [])
+    )
   );
   const [siteBanners, setSiteBanners] = useState<SiteBannersConfig>(() => {
     try {
@@ -286,7 +277,10 @@ export default function App() {
     } catch {}
     return mergeSiteBannersConfig(
       loadStored<Partial<SiteBannersConfig> | null>(STORAGE_KEYS.siteBanners, null),
-      mergeStoredCategories(loadStored(STORAGE_KEYS.categories, INITIAL_CATEGORIES))
+      mergeStoredCategories(
+        loadStored(STORAGE_KEYS.categories, INITIAL_CATEGORIES),
+        loadStored(STORAGE_KEYS.deletedCategories, [])
+      )
     );
   });
   const [products, setProducts] = useState<ProductItem[]>(() =>
@@ -349,9 +343,8 @@ export default function App() {
     'suggested' | 'price-asc' | 'price-desc'
   >('suggested');
 
-  // Firebase Auth State
+  // Firebase Auth State (Used strictly for Google Admin Sign-in; Catalog data lives in Cloudflare R2)
   const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [authReady, setAuthReady] = useState<boolean>(false);
   const [aiAdminUnlocked, setAiAdminUnlocked] = useState<boolean>(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get('ai_admin') === '1') return true;
@@ -365,6 +358,15 @@ export default function App() {
     } catch {}
     setSiteBanners((prev) => mergeSiteBannersConfig(prev, categories));
   }, [categories]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        STORAGE_KEYS.deletedCategories,
+        JSON.stringify(deletedCategoryIds)
+      );
+    } catch {}
+  }, [deletedCategoryIds]);
 
   useEffect(() => {
     try {
@@ -447,16 +449,15 @@ export default function App() {
     return () => window.removeEventListener('popstate', onPopState);
   }, []);
 
-  // Track Firebase Auth state
+  // Track Google Auth state for Admin login
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (user) => {
       setCurrentUser(user);
-      setAuthReady(true);
     });
     return () => unsub();
   }, []);
 
-  // Cross-Device Server Catalog Sync (Phone <-> Laptop on preview & production server)
+  // Cloudflare R2 Bucket Catalog Sync (/api/catalog -> state/catalog.json in R2)
   useEffect(() => {
     let active = true;
 
@@ -467,6 +468,24 @@ export default function App() {
         const data = await res.json();
         if (!active || !data || typeof data !== 'object') return;
 
+        // If R2 bucket state/catalog.json has not been seeded yet, push current catalog state to R2
+        if (!data.updatedAt && (!Array.isArray(data.products) || data.products.length === 0)) {
+          pushServerCatalogPatch({
+            products,
+            categories,
+            deletedProductIds,
+            deletedCategoryIds,
+            siteBanners,
+            promoCodes,
+            customMaterials,
+            customColors,
+            orders,
+            preorders,
+            admins,
+          });
+          return;
+        }
+
         const remoteDeletedIds: string[] = Array.isArray(data.deletedProductIds)
           ? data.deletedProductIds
           : [];
@@ -476,41 +495,46 @@ export default function App() {
           );
         }
 
+        const remoteDeletedCatIds: string[] = Array.isArray(data.deletedCategoryIds)
+          ? data.deletedCategoryIds
+          : [];
+        if (remoteDeletedCatIds.length > 0) {
+          setDeletedCategoryIds((prev) =>
+            Array.from(new Set([...prev, ...remoteDeletedCatIds]))
+          );
+        }
+
         if (Array.isArray(data.products) && data.products.length > 0) {
-          setProducts((prev) => {
-            const deletedSet = new Set(remoteDeletedIds);
-            const mergedMap = new Map<string, ProductItem>();
-            for (const rp of data.products as ProductItem[]) {
-              if (rp && rp.id && !deletedSet.has(rp.id)) {
-                mergedMap.set(rp.id, rp);
-              }
-            }
-            for (const lp of prev) {
-              if (lp && lp.id && !deletedSet.has(lp.id) && !mergedMap.has(lp.id)) {
-                mergedMap.set(lp.id, lp);
-              }
-            }
-            return normalizeStoredProducts(
-              Array.from(mergedMap.values()),
+          setProducts(
+            normalizeStoredProducts(
+              data.products as ProductItem[],
               remoteDeletedIds
-            );
-          });
+            )
+          );
         }
 
         if (Array.isArray(data.categories) && data.categories.length > 0) {
-          setCategories(mergeStoredCategories(data.categories as CategoryItem[]));
+          setCategories(
+            mergeStoredCategories(
+              data.categories as CategoryItem[],
+              remoteDeletedCatIds
+            )
+          );
         }
         if (data.siteBanners && typeof data.siteBanners === 'object') {
           setSiteBanners((prev) =>
             mergeSiteBannersConfig(
-              data.siteBanners as Partial<SiteBannersConfig>,
+              { ...prev, ...(data.siteBanners as Partial<SiteBannersConfig>) },
               Array.isArray(data.categories) && data.categories.length > 0
-                ? mergeStoredCategories(data.categories as CategoryItem[])
+                ? mergeStoredCategories(
+                    data.categories as CategoryItem[],
+                    remoteDeletedCatIds
+                  )
                 : INITIAL_CATEGORIES
             )
           );
         }
-        if (Array.isArray(data.promoCodes) && data.promoCodes.length > 0) {
+        if (Array.isArray(data.promoCodes)) {
           setPromoCodes(data.promoCodes as PromoCodeItem[]);
         }
         if (Array.isArray(data.customMaterials) && data.customMaterials.length > 0) {
@@ -519,16 +543,14 @@ export default function App() {
         if (Array.isArray(data.customColors) && data.customColors.length > 0) {
           setCustomColors(data.customColors as string[]);
         }
-        if (Array.isArray(data.orders) && data.orders.length > 0) {
+        if (Array.isArray(data.orders)) {
           setOrders(data.orders as OrderItem[]);
         }
-        if (Array.isArray(data.preorders) && data.preorders.length > 0) {
+        if (Array.isArray(data.preorders)) {
           setPreorders(data.preorders as PreorderItem[]);
         }
-        if (data.siteBanners && typeof data.siteBanners === 'object') {
-          setSiteBanners((prev) =>
-            mergeSiteBannersConfig({ ...prev, ...data.siteBanners }, INITIAL_CATEGORIES)
-          );
+        if (Array.isArray(data.admins) && data.admins.length > 0) {
+          setAdmins(data.admins as AdminRecord[]);
         }
       } catch {}
     };
@@ -544,321 +566,6 @@ export default function App() {
       window.removeEventListener('focus', onFocus);
     };
   }, []);
-
-  // Subscribe to public Firestore collections (products, categories, promo_codes, settings/site_banners)
-  useEffect(() => {
-    if (!authReady) return;
-
-    const unsubSiteBanners = onSnapshot(
-      doc(db, 'settings', 'site_banners_v2'),
-      (snap) => {
-        if (snap.exists()) {
-          const data = snap.data() as Partial<SiteBannersConfig>;
-          setSiteBanners((prev) =>
-            mergeSiteBannersConfig({ ...prev, ...data }, INITIAL_CATEGORIES)
-          );
-        }
-      },
-      () => {}
-    );
-
-    const unsubCategories = onSnapshot(
-      collection(db, 'categories'),
-      (snap) => {
-        if (!snap.empty) {
-          const remoteCats: CategoryItem[] = snap.docs
-            .map((d) => {
-              const data = d.data();
-              const dept = (
-                data.department === 'kids' ? 'kids' : 'women'
-              ) as Department;
-              const rawName = String(data.name || '');
-              const normalizedName =
-                dept === 'kids' ? normalizeKidsCategoryName(rawName) : rawName;
-              return {
-                id: d.id,
-                name: normalizedName,
-                slug: String(data.slug || createSafeSlug(normalizedName)),
-                department: dept,
-                description: String(data.description || ''),
-              };
-            })
-            .filter(
-              (rc) =>
-                !(
-                  rc.department === 'kids' &&
-                  (rc.name.toLowerCase() === 'full set' ||
-                    rc.id === 'kids-full-set')
-                )
-            );
-          setCategories((prev) => {
-            const merged = [...prev];
-            for (const rc of remoteCats) {
-              if (
-                !merged.some(
-                  (m) =>
-                    m.id === rc.id ||
-                    (m.department === rc.department &&
-                      m.name.toLowerCase() === rc.name.toLowerCase())
-                )
-              ) {
-                merged.push(rc);
-              }
-            }
-            return merged;
-          });
-        }
-      },
-      () => {}
-    );
-
-    const unsubProducts = onSnapshot(
-      collection(db, 'products'),
-      (snap) => {
-        if (!snap.empty) {
-          const remoteProds: ProductItem[] = snap.docs
-            .map((d) => {
-              const data = d.data();
-              const seedFallback = INITIAL_PRODUCTS.find((sp) => sp.id === d.id);
-              const dept = (
-                data.department === 'kids' ? 'kids' : 'women'
-              ) as Department;
-              const rawCat = String(data.category || 'Jacket');
-              const normalizedCat =
-                dept === 'kids' ? normalizeKidsCategoryName(rawCat) : rawCat;
-              const sizes =
-                Array.isArray(data.sizes) && data.sizes.length > 0
-                  ? data.sizes
-                  : ['M'];
-              const sizeQuantities = buildSizeQuantitiesMap(
-                sizes,
-                data.sizeQuantities
-              );
-              const totalQty = sumSizeQuantities(sizes, sizeQuantities);
-              const hasColors =
-                data.hasColors !== undefined
-                  ? Boolean(data.hasColors)
-                  : Boolean(seedFallback?.hasColors);
-              const colorVariants = Array.isArray(data.colorVariants)
-                ? (data.colorVariants as ProductColorVariant[])
-                : seedFallback?.colorVariants;
-
-              const isFullSet =
-                dept === 'kids'
-                  ? false
-                  : data.isFullSet !== undefined
-                  ? Boolean(data.isFullSet)
-                  : Boolean(seedFallback?.isFullSet);
-              const setItems =
-                dept === 'kids'
-                  ? undefined
-                  : Array.isArray(data.setItems)
-                  ? (data.setItems as FullSetSubItem[])
-                  : seedFallback?.setItems;
-
-              const explicitOutOfStock = data.inStock === false;
-              const baseProd: ProductItem = {
-                id: d.id,
-                name: String(data.name || ''),
-                department: dept,
-                category: normalizedCat,
-                style: (data.style || 'Classic') as StyleType,
-                price: Number(data.price) || 0,
-                quantity: totalQty,
-                sizeQuantities,
-                isFullSet,
-                setItems,
-                isNewArrival: Boolean(data.isNewArrival ?? data.featured ?? true),
-                discountType: (data.discountType || 'none') as DiscountType,
-                discountValue: Number(data.discountValue) || 0,
-                imageUrl: String(data.imageUrl || ''),
-                galleryUrls:
-                  Array.isArray(data.galleryUrls) && data.galleryUrls.length > 0
-                    ? data.galleryUrls
-                    : seedFallback?.galleryUrls || [],
-                sizeType: data.sizeType || 'letter',
-                sizes,
-                hasColors,
-                colorVariants,
-                materials: Array.isArray(data.materials)
-                  ? data.materials
-                  : ['Cow Leather'],
-                description: String(data.description || ''),
-                inStock: explicitOutOfStock ? false : totalQty > 0 && Boolean(data.inStock ?? true),
-                featured: Boolean(data.featured ?? true),
-              };
-
-              if (
-                hasColors &&
-                Array.isArray(colorVariants) &&
-                colorVariants.length > 0
-              ) {
-                const synced = syncProductFromColorVariants(
-                  colorVariants,
-                  baseProd.sizeType
-                );
-                return {
-                  ...baseProd,
-                  hasColors: true,
-                  colorVariants,
-                  imageUrl: colorVariants[0]?.imageUrl || baseProd.imageUrl,
-                  ...synced,
-                  inStock: explicitOutOfStock ? false : synced.inStock,
-                };
-              }
-              return baseProd;
-            })
-            .filter(
-              (rp) =>
-                !(
-                  rp.department === 'kids' &&
-                  (rp.category.toLowerCase() === 'full set' ||
-                    rp.id === 'samo-k-fullset-01')
-                )
-            );
-          setProducts((prev) => {
-            const map = new Map<string, ProductItem>();
-            // Keep remote Firestore items & new local items at the top
-            for (const rp of remoteProds) map.set(rp.id, rp);
-            for (const p of prev) {
-              if (!map.has(p.id)) map.set(p.id, p);
-            }
-            return normalizeStoredProducts(Array.from(map.values()));
-          });
-        }
-      },
-      () => {}
-    );
-
-    const unsubPromos = onSnapshot(
-      collection(db, 'promo_codes'),
-      (snap) => {
-        if (!snap.empty) {
-          const remotePromos: PromoCodeItem[] = snap.docs.map((d) => {
-            const data = d.data();
-            return {
-              id: d.id,
-              code: String(data.code || ''),
-              discountType: data.discountType === 'fixed' ? 'fixed' : 'percentage',
-              discountValue: Number(data.discountValue) || 0,
-              active: Boolean(data.active ?? true),
-            };
-          });
-          setPromoCodes((prev) => {
-            const map = new Map<string, PromoCodeItem>();
-            for (const p of prev) map.set(p.id, p);
-            for (const rp of remotePromos) map.set(rp.id, rp);
-            return Array.from(map.values());
-          });
-        }
-      },
-      () => {}
-    );
-
-    return () => {
-      unsubSiteBanners();
-      unsubCategories();
-      unsubProducts();
-      unsubPromos();
-    };
-  }, [authReady]);
-
-  // Subscribe to Admin-only Firestore collections (orders, admins) when signed in as verified admin
-  useEffect(() => {
-    if (!authReady || !currentUser) return;
-    if (!isAuthorizedAdminEmail(currentUser.email, admins)) return;
-
-    const unsubOrders = onSnapshot(
-      collection(db, 'orders'),
-      (snap) => {
-        if (!snap.empty) {
-          const remoteOrders: OrderItem[] = snap.docs.map((d) => {
-            const data = d.data();
-            return {
-              id: d.id,
-              orderNumber: String(data.orderNumber || d.id),
-              customerName: String(data.customerName || ''),
-              customerEmail: String(data.customerEmail || ''),
-              customerPhone: String(data.customerPhone || ''),
-              shippingLocation: String(data.shippingLocation || ''),
-              deliveryMethod: data.deliveryMethod || 'Standard Delivery',
-              paymentMethod: data.paymentMethod || undefined,
-              deliveryFee: Number(data.deliveryFee) || 0,
-              subtotal: Number(data.subtotal) || 0,
-              discountAmount: Number(data.discountAmount) || 0,
-              promoCode: String(data.promoCode || ''),
-              totalPrice: Number(data.totalPrice) || 0,
-              itemsSummary: String(data.itemsSummary || ''),
-              itemsCount: Number(data.itemsCount) || 1,
-              primaryProductName: String(data.primaryProductName || ''),
-              primaryProductSize: String(data.primaryProductSize || ''),
-              primaryProductImage: String(data.primaryProductImage || ''),
-              orderedItems: Array.isArray(data.orderedItems)
-                ? data.orderedItems
-                : undefined,
-              status: (data.status || 'pending') as OrderStatus,
-              createdAt:
-                data.createdAt?.toDate?.()?.toISOString?.() ||
-                new Date().toISOString(),
-            };
-          });
-          setOrders((prev) => {
-            const map = new Map<string, OrderItem>();
-            for (const o of remoteOrders) map.set(o.id, o);
-            for (const o of prev) {
-              if (!map.has(o.id)) map.set(o.id, o);
-            }
-            return Array.from(map.values());
-          });
-        }
-      },
-      () => {}
-    );
-
-    const unsubPreorders = onSnapshot(
-      collection(db, 'preorders'),
-      (snap) => {
-        if (!snap.empty) {
-          const remotePreorders: PreorderItem[] = snap.docs.map((d) => {
-            const data = d.data();
-            return {
-              id: d.id,
-              productId: String(data.productId || ''),
-              productName: String(data.productName || ''),
-              productImage: String(data.productImage || ''),
-              department: (data.department === 'kids' ? 'kids' : 'women') as Department,
-              category: String(data.category || ''),
-              selectedSize: String(data.selectedSize || data.requestedSize || ''),
-              selectedColor: data.selectedColor || data.requestedColor
-                ? String(data.selectedColor || data.requestedColor)
-                : undefined,
-              customerContact: String(data.customerContact || data.contactInfo || ''),
-              status: (data.status === 'notified'
-                ? 'notified'
-                : 'pending') as PreorderStatus,
-              createdAt:
-                data.createdAt?.toDate?.()?.toISOString?.() ||
-                new Date().toISOString(),
-            };
-          });
-          setPreorders((prev) => {
-            const map = new Map<string, PreorderItem>();
-            for (const p of remotePreorders) map.set(p.id, p);
-            for (const p of prev) {
-              if (!map.has(p.id) && p.productName) map.set(p.id, p);
-            }
-            return Array.from(map.values());
-          });
-        }
-      },
-      () => {}
-    );
-
-    return () => {
-      unsubOrders();
-      unsubPreorders();
-    };
-  }, [authReady, currentUser, admins]);
 
   // Navigation handler updating browser URL
   const handleNavigate = (route: RoutePath, categoryName?: string) => {
@@ -1025,26 +732,17 @@ export default function App() {
       createdAt: nowIso,
     };
 
-    setOrders((prev) => [newOrder, ...prev]);
+    setOrders((prev) => {
+      const next = [newOrder, ...prev];
+      pushServerCatalogPatch({ orders: next });
+      return next;
+    });
     setCartItems([]);
-
-    try {
-      await setDoc(doc(db, 'orders', newId), {
-        ...orderPayload,
-        status: 'pending',
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      });
-    } catch (error) {
-      try {
-        handleFirestoreError(error, OperationType.CREATE, `orders/${newId}`);
-      } catch {}
-    }
 
     return newOrder;
   };
 
-  // Preorder / Back-in-Stock Request Handler (Public write to Firestore `preorders`)
+  // Preorder / Back-in-Stock Request Handler (Persisted to Cloudflare R2 Catalog)
   const handleSubmitPreorder = async (payload: {
     product: ProductItem;
     selectedSize: string;
@@ -1067,106 +765,126 @@ export default function App() {
       createdAt: nowIso,
     };
 
-    setPreorders((prev) => [newPreorder, ...prev.filter((p) => Boolean(p.productName))]);
-
-    try {
-      await setDoc(doc(db, 'preorders', newId), {
-        productId: newPreorder.productId,
-        productName: newPreorder.productName,
-        productImage: newPreorder.productImage,
-        department: newPreorder.department,
-        category: newPreorder.category,
-        selectedSize: newPreorder.selectedSize,
-        selectedColor: newPreorder.selectedColor || '',
-        customerContact: newPreorder.customerContact,
-        status: 'pending',
-        createdAt: serverTimestamp(),
-      });
-    } catch (error) {
-      try {
-        handleFirestoreError(error, OperationType.CREATE, `preorders/${newId}`);
-      } catch {}
-    }
+    setPreorders((prev) => {
+      const next = [newPreorder, ...prev.filter((p) => Boolean(p.productName))];
+      pushServerCatalogPatch({ preorders: next });
+      return next;
+    });
   };
 
   const handleUpdatePreorderStatus = async (
     preorderId: string,
     status: PreorderStatus
   ) => {
-    setPreorders((prev) =>
-      prev.map((p) => (p.id === preorderId ? { ...p, status } : p))
-    );
-    if (currentUser && isAuthorizedAdminEmail(currentUser.email, admins)) {
-      try {
-        await updateDoc(doc(db, 'preorders', preorderId), {
-          status,
-          updatedAt: serverTimestamp(),
-        });
-      } catch (err) {
-        try {
-          handleFirestoreError(
-            err,
-            OperationType.UPDATE,
-            `preorders/${preorderId}`
-          );
-        } catch {}
-      }
-    }
+    setPreorders((prev) => {
+      const next = prev.map((p) => (p.id === preorderId ? { ...p, status } : p));
+      pushServerCatalogPatch({ preorders: next });
+      return next;
+    });
   };
 
   const handleDeletePreorder = async (preorderId: string) => {
-    setPreorders((prev) => prev.filter((p) => p.id !== preorderId));
-    if (currentUser && isAuthorizedAdminEmail(currentUser.email, admins)) {
-      try {
-        await deleteDoc(doc(db, 'preorders', preorderId));
-      } catch (err) {
-        try {
-          handleFirestoreError(
-            err,
-            OperationType.DELETE,
-            `preorders/${preorderId}`
-          );
-        } catch {}
-      }
-    }
+    setPreorders((prev) => {
+      const next = prev.filter((p) => p.id !== preorderId);
+      pushServerCatalogPatch({ preorders: next });
+      return next;
+    });
   };
 
-  // Admin Mutations (Categories, Products, Per-Size/Per-Color Stock, Promo Codes, Materials, Colors, Orders, Admins)
+  // Admin Mutations (All persisted directly to Cloudflare R2 Bucket via /api/catalog)
   const handleAddCategory = async (cat: Omit<CategoryItem, 'id'>) => {
     const id = `${cat.department}-${createSafeSlug(cat.name)}-${Date.now()
       .toString()
       .slice(-4)}`;
     const newCat: CategoryItem = { ...cat, id };
-    setCategories((prev) => [...prev, newCat]);
+    setCategories((prev) => {
+      const next = [...prev, newCat];
+      pushServerCatalogPatch({ categories: next });
+      return next;
+    });
+  };
 
-    if (currentUser && isAuthorizedAdminEmail(currentUser.email, admins)) {
-      try {
-        await setDoc(doc(db, 'categories', id), {
-          name: newCat.name,
-          slug: newCat.slug,
-          department: newCat.department,
-          description: newCat.description,
-          createdAt: serverTimestamp(),
-        });
-      } catch (err) {
-        try {
-          handleFirestoreError(err, OperationType.CREATE, `categories/${id}`);
-        } catch {}
-      }
+  const handleUpdateCategory = async (
+    categoryId: string,
+    newName: string,
+    newDescription?: string
+  ) => {
+    const cleanNewName = newName.trim();
+    if (!cleanNewName) return;
+
+    const existingCat = categories.find((c) => c.id === categoryId);
+    if (!existingCat) return;
+
+    const oldName = existingCat.name;
+    const oldBannerKey = getCategoryBannerKey(existingCat.department, oldName);
+    const newBannerKey = getCategoryBannerKey(existingCat.department, cleanNewName);
+
+    const nextCategories = categories.map((c) =>
+      c.id === categoryId
+        ? {
+            ...c,
+            name: cleanNewName,
+            slug: createSafeSlug(cleanNewName),
+            description:
+              newDescription !== undefined ? newDescription : c.description,
+          }
+        : c
+    );
+
+    const nextProducts = products.map((p) =>
+      p.department === existingCat.department &&
+      p.category.trim().toLowerCase() === oldName.trim().toLowerCase()
+        ? { ...p, category: cleanNewName }
+        : p
+    );
+
+    const nextBanners: SiteBannersConfig = {
+      ...siteBanners,
+      categoryBanners: {
+        ...siteBanners.categoryBanners,
+        ...(siteBanners.categoryBanners?.[oldBannerKey]
+          ? {
+              [newBannerKey]: {
+                ...siteBanners.categoryBanners[oldBannerKey],
+                categoryKey: newBannerKey,
+                categoryName: cleanNewName,
+                updatedAt: new Date().toISOString(),
+              },
+            }
+          : {}),
+      },
+    };
+
+    setCategories(nextCategories);
+    setProducts(nextProducts);
+    setSiteBanners(nextBanners);
+    if (
+      selectedCategory !== 'all' &&
+      selectedCategory.trim().toLowerCase() === oldName.trim().toLowerCase()
+    ) {
+      setSelectedCategory(cleanNewName);
     }
+
+    await pushServerCatalogPatch({
+      categories: nextCategories,
+      products: nextProducts,
+      siteBanners: nextBanners,
+    });
   };
 
   const handleDeleteCategory = async (id: string) => {
-    setCategories((prev) => prev.filter((c) => c.id !== id));
-    if (currentUser && isAuthorizedAdminEmail(currentUser.email, admins)) {
-      try {
-        await deleteDoc(doc(db, 'categories', id));
-      } catch (err) {
-        try {
-          handleFirestoreError(err, OperationType.DELETE, `categories/${id}`);
-        } catch {}
-      }
-    }
+    setDeletedCategoryIds((prevDel) => {
+      const nextDel = Array.from(new Set([...prevDel, id]));
+      setCategories((prevCats) => {
+        const nextCats = prevCats.filter((c) => c.id !== id);
+        pushServerCatalogPatch({
+          categories: nextCats,
+          deletedCategoryIds: nextDel,
+        });
+        return nextCats;
+      });
+      return nextDel;
+    });
   };
 
   const handleAddProduct = async (prod: Omit<ProductItem, 'id'>) => {
@@ -1204,20 +922,6 @@ export default function App() {
       pushServerCatalogPatch({ products: next });
       return next;
     });
-
-    if (currentUser && isAuthorizedAdminEmail(currentUser.email, admins)) {
-      try {
-        await setDoc(doc(db, 'products', id), {
-          ...sanitizeFirestorePayload(newProd as unknown as Record<string, unknown>),
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-        });
-      } catch (err) {
-        try {
-          handleFirestoreError(err, OperationType.CREATE, `products/${id}`);
-        } catch {}
-      }
-    }
   };
 
   const handleUpdateProductSizeQuantity = async (
@@ -1259,39 +963,6 @@ export default function App() {
       const syncedSet = syncedFullSets.find((s) => s.id === prev.id);
       return syncedSet || prev;
     });
-
-    if (
-      updatedRef &&
-      currentUser &&
-      isAuthorizedAdminEmail(currentUser.email, admins)
-    ) {
-      const target = updatedRef as ProductItem;
-      try {
-        await updateDoc(doc(db, 'products', productId), {
-          sizeQuantities: target.sizeQuantities,
-          quantity: target.quantity,
-          inStock: target.inStock,
-          updatedAt: serverTimestamp(),
-        });
-        for (const fsItem of syncedFullSets) {
-          await updateDoc(doc(db, 'products', fsItem.id), {
-            setItems: fsItem.setItems || [],
-            sizeQuantities: fsItem.sizeQuantities,
-            quantity: fsItem.quantity,
-            inStock: fsItem.inStock,
-            updatedAt: serverTimestamp(),
-          });
-        }
-      } catch (err) {
-        try {
-          handleFirestoreError(
-            err,
-            OperationType.UPDATE,
-            `products/${productId}`
-          );
-        } catch {}
-      }
-    }
   };
 
   const handleUpdateProductColorVariants = async (
@@ -1338,86 +1009,57 @@ export default function App() {
       if (!prev || prev.id !== productId || !updatedRef) return prev;
       return updatedRef;
     });
-
-    if (
-      updatedRef &&
-      currentUser &&
-      isAuthorizedAdminEmail(currentUser.email, admins)
-    ) {
-      const target = updatedRef as ProductItem;
-      try {
-        await updateDoc(doc(db, 'products', productId), {
-          hasColors: Boolean(target.hasColors),
-          colorVariants: target.colorVariants || [],
-          imageUrl: target.imageUrl,
-          sizeType: target.sizeType,
-          sizes: target.sizes,
-          sizeQuantities: target.sizeQuantities,
-          quantity: target.quantity,
-          inStock: target.inStock,
-          updatedAt: serverTimestamp(),
-        });
-      } catch (err) {
-        try {
-          handleFirestoreError(
-            err,
-            OperationType.UPDATE,
-            `products/${productId}`
-          );
-        } catch {}
-      }
-    }
   };
 
   const handleUpdateProductMeta = async (
     productId: string,
-    updates: Partial<
-      Pick<
-        ProductItem,
-        | 'isNewArrival'
-        | 'isFullSet'
-        | 'category'
-        | 'discountType'
-        | 'discountValue'
-        | 'imageUrl'
-        | 'galleryUrls'
-      >
-    >
+    updates: Partial<ProductItem>
   ) => {
+    let updatedRef: ProductItem | null = null;
+
     setProducts((prev) => {
-      const next = prev.map((p) => {
+      const nextCatalog = prev.map((p) => {
         if (p.id !== productId) return p;
         const nextIsNew =
           updates.isNewArrival !== undefined
             ? updates.isNewArrival
             : p.isNewArrival;
-        return {
+        const merged: ProductItem = {
           ...p,
           ...updates,
           isNewArrival: nextIsNew,
           featured: nextIsNew,
         };
+
+        if (updates.sizes || updates.sizeQuantities) {
+          const nextSizes =
+            Array.isArray(merged.sizes) && merged.sizes.length > 0
+              ? merged.sizes
+              : ['M'];
+          const nextMap = buildSizeQuantitiesMap(
+            nextSizes,
+            merged.sizeQuantities
+          );
+          const nextTotal = sumSizeQuantities(nextSizes, nextMap);
+          merged.sizes = nextSizes;
+          merged.sizeQuantities = nextMap;
+          merged.quantity = nextTotal;
+          merged.inStock =
+            updates.inStock !== undefined ? updates.inStock : nextTotal > 0;
+        }
+
+        updatedRef = merged;
+        return merged;
       });
-      pushServerCatalogPatch({ products: next });
-      return next;
+      const withSyncedSets = syncFullSetsWithCatalog(nextCatalog);
+      pushServerCatalogPatch({ products: withSyncedSets });
+      return withSyncedSets;
     });
 
-    if (currentUser && isAuthorizedAdminEmail(currentUser.email, admins)) {
-      try {
-        await updateDoc(doc(db, 'products', productId), {
-          ...sanitizeFirestorePayload(updates as Record<string, unknown>),
-          updatedAt: serverTimestamp(),
-        });
-      } catch (err) {
-        try {
-          handleFirestoreError(
-            err,
-            OperationType.UPDATE,
-            `products/${productId}`
-          );
-        } catch {}
-      }
-    }
+    setActiveProductModal((prev) => {
+      if (!prev || prev.id !== productId || !updatedRef) return prev;
+      return updatedRef;
+    });
   };
 
   const handleToggleProductStock = async (
@@ -1446,31 +1088,6 @@ export default function App() {
       const syncedSet = syncedFullSets.find((s) => s.id === prev.id);
       return syncedSet || prev;
     });
-
-    if (
-      updatedRef &&
-      currentUser &&
-      isAuthorizedAdminEmail(currentUser.email, admins)
-    ) {
-      const target = updatedRef as ProductItem;
-      try {
-        await updateDoc(doc(db, 'products', productId), {
-          sizeQuantities: target.sizeQuantities,
-          colorVariants: target.colorVariants || [],
-          quantity: target.quantity,
-          inStock: target.inStock,
-          updatedAt: serverTimestamp(),
-        });
-      } catch (err) {
-        try {
-          handleFirestoreError(
-            err,
-            OperationType.UPDATE,
-            `products/${productId}`
-          );
-        } catch {}
-      }
-    }
   };
 
   const handleUpdateSiteBanners = async (nextBanners: SiteBannersConfig) => {
@@ -1479,26 +1096,25 @@ export default function App() {
     try {
       localStorage.setItem(STORAGE_KEYS.siteBanners, JSON.stringify(merged));
     } catch {}
-    pushServerCatalogPatch({ siteBanners: merged });
-    if (currentUser && isAuthorizedAdminEmail(currentUser.email, admins)) {
-      try {
-        const cleaned = deepCleanFirestorePayload({
-          ...merged,
-          updatedAt: serverTimestamp(),
-        });
-        await setDoc(doc(db, 'settings', 'site_banners_v2'), cleaned);
-        console.log('[SAMO Atelier] Synced site_banners_v2 to Firestore successfully');
-      } catch (err) {
-        console.error('[SAMO Atelier] Failed to sync site_banners_v2 to Firestore:', err);
-      }
-    } else {
-      console.warn(
-        '[SAMO Atelier] Banners saved locally & server; sign in via Google Admin to sync to Firestore cloud'
-      );
-    }
+    await pushServerCatalogPatch({ siteBanners: merged });
   };
 
   const handleDeleteProduct = async (id: string) => {
+    const targetProduct = products.find((p) => p.id === id);
+    if (targetProduct) {
+      const r2UrlsToDelete: string[] = [
+        targetProduct.imageUrl,
+        ...(targetProduct.galleryUrls || []),
+        ...(targetProduct.colorVariants || []).flatMap((v) => [
+          v.imageUrl,
+          ...(v.galleryUrls || []),
+        ]),
+      ].filter(Boolean);
+      if (r2UrlsToDelete.length > 0) {
+        deleteMediaFromR2(r2UrlsToDelete).catch(() => {});
+      }
+    }
+
     setDeletedProductIds((prev) => {
       const nextDeleted = Array.from(new Set([...prev, id]));
       setProducts((currProds) => {
@@ -1511,15 +1127,6 @@ export default function App() {
       });
       return nextDeleted;
     });
-    if (currentUser && isAuthorizedAdminEmail(currentUser.email, admins)) {
-      try {
-        await deleteDoc(doc(db, 'products', id));
-      } catch (err) {
-        try {
-          handleFirestoreError(err, OperationType.DELETE, `products/${id}`);
-        } catch {}
-      }
-    }
   };
 
   const handleAddPromoCode = async (promo: Omit<PromoCodeItem, 'id'>) => {
@@ -1529,70 +1136,44 @@ export default function App() {
       id,
       createdAt: new Date().toISOString(),
     };
-    setPromoCodes((prev) => [
-      newPromo,
-      ...prev.filter((p) => p.code.toUpperCase() !== promo.code.toUpperCase()),
-    ]);
-
-    if (currentUser && isAuthorizedAdminEmail(currentUser.email, admins)) {
-      try {
-        await setDoc(doc(db, 'promo_codes', id), {
-          code: newPromo.code,
-          discountType: newPromo.discountType,
-          discountValue: newPromo.discountValue,
-          active: newPromo.active,
-          createdAt: serverTimestamp(),
-        });
-      } catch (err) {
-        try {
-          handleFirestoreError(err, OperationType.CREATE, `promo_codes/${id}`);
-        } catch {}
-      }
-    }
+    setPromoCodes((prev) => {
+      const next = [
+        newPromo,
+        ...prev.filter((p) => p.code.toUpperCase() !== promo.code.toUpperCase()),
+      ];
+      pushServerCatalogPatch({ promoCodes: next });
+      return next;
+    });
   };
 
   const handleDeletePromoCode = async (id: string) => {
-    setPromoCodes((prev) => prev.filter((p) => p.id !== id));
-    if (currentUser && isAuthorizedAdminEmail(currentUser.email, admins)) {
-      try {
-        await deleteDoc(doc(db, 'promo_codes', id));
-      } catch (err) {
-        try {
-          handleFirestoreError(err, OperationType.DELETE, `promo_codes/${id}`);
-        } catch {}
-      }
-    }
+    setPromoCodes((prev) => {
+      const next = prev.filter((p) => p.id !== id);
+      pushServerCatalogPatch({ promoCodes: next });
+      return next;
+    });
   };
 
   const handleAddCustomMaterial = async (materialName: string) => {
     const clean = materialName.trim().slice(0, 60);
     if (!clean) return;
-    setCustomMaterials((prev) =>
-      prev.includes(clean) ? prev : [...prev, clean]
-    );
-    const id = `mat-${createSafeSlug(clean)}`;
-    if (currentUser && isAuthorizedAdminEmail(currentUser.email, admins)) {
-      try {
-        await setDoc(doc(db, 'materials', id), {
-          name: clean,
-          createdAt: serverTimestamp(),
-        });
-      } catch (err) {
-        try {
-          handleFirestoreError(err, OperationType.CREATE, `materials/${id}`);
-        } catch {}
-      }
-    }
+    setCustomMaterials((prev) => {
+      const next = prev.includes(clean) ? prev : [...prev, clean];
+      pushServerCatalogPatch({ customMaterials: next });
+      return next;
+    });
   };
 
   const handleAddCustomColor = async (colorName: string) => {
     const clean = colorName.trim().slice(0, 40);
     if (!clean) return;
-    setCustomColors((prev) =>
-      prev.some((c) => c.toLowerCase() === clean.toLowerCase())
+    setCustomColors((prev) => {
+      const next = prev.some((c) => c.toLowerCase() === clean.toLowerCase())
         ? prev
-        : [...prev, clean]
-    );
+        : [...prev, clean];
+      pushServerCatalogPatch({ customColors: next });
+      return next;
+    });
   };
 
   const handleUpdateOrderStatus = async (
@@ -1602,9 +1183,10 @@ export default function App() {
     const targetOrder = orders.find((o) => o.id === orderId);
     const wasAlreadyAccepted = targetOrder?.status === 'accepted';
 
-    setOrders((prev) =>
-      prev.map((o) => (o.id === orderId ? { ...o, status } : o))
+    const nextOrders = orders.map((o) =>
+      o.id === orderId ? { ...o, status } : o
     );
+    setOrders(nextOrders);
 
     // When admin accepts an order, reduce the stock quantity of the bought size(s) / color(s)
     if (targetOrder && status === 'accepted' && !wasAlreadyAccepted) {
@@ -1613,55 +1195,21 @@ export default function App() {
         targetOrder
       );
       setProducts(updatedCatalog);
-
-      if (currentUser && isAuthorizedAdminEmail(currentUser.email, admins)) {
-        for (const updatedItem of updatedCatalog) {
-          const prevItem = products.find((p) => p.id === updatedItem.id);
-          if (
-            prevItem &&
-            (prevItem.quantity !== updatedItem.quantity ||
-              updatedItem.isFullSet)
-          ) {
-            try {
-              await updateDoc(doc(db, 'products', updatedItem.id), {
-                sizeQuantities: updatedItem.sizeQuantities,
-                setItems: updatedItem.setItems || [],
-                colorVariants: updatedItem.colorVariants || [],
-                quantity: updatedItem.quantity,
-                inStock: updatedItem.inStock,
-                updatedAt: serverTimestamp(),
-              });
-            } catch {}
-          }
-        }
-      }
-    }
-
-    if (currentUser && isAuthorizedAdminEmail(currentUser.email, admins)) {
-      try {
-        await updateDoc(doc(db, 'orders', orderId), {
-          status,
-          updatedAt: serverTimestamp(),
-        });
-      } catch (err) {
-        try {
-          handleFirestoreError(err, OperationType.UPDATE, `orders/${orderId}`);
-        } catch {}
-      }
+      await pushServerCatalogPatch({
+        orders: nextOrders,
+        products: updatedCatalog,
+      });
+    } else {
+      await pushServerCatalogPatch({ orders: nextOrders });
     }
   };
 
   const handleDeleteOrder = async (orderId: string) => {
-    setOrders((prev) => prev.filter((o) => o.id !== orderId));
-    if (currentUser && isAuthorizedAdminEmail(currentUser.email, admins)) {
-      try {
-        await deleteDoc(doc(db, 'orders', orderId));
-      } catch (err) {
-        try {
-          handleFirestoreError(err, OperationType.DELETE, `orders/${orderId}`);
-        } catch {}
-      }
-    }
+    setOrders((prev) => {
+      const next = prev.filter((o) => o.id !== orderId);
+      pushServerCatalogPatch({ orders: next });
+      return next;
+    });
   };
 
   const handleAddAdminByEmail = async (email: string) => {
@@ -1672,48 +1220,22 @@ export default function App() {
       addedBy: currentUser?.email || 'apolokor@gmail.com',
       createdAt: new Date().toISOString(),
     };
-    setAdmins((prev) =>
-      prev.some((a) => a.email.toLowerCase() === cleanEmail)
+    setAdmins((prev) => {
+      const next = prev.some((a) => a.email.toLowerCase() === cleanEmail)
         ? prev
-        : [...prev, record]
-    );
-    if (currentUser && isAuthorizedAdminEmail(currentUser.email, admins)) {
-      try {
-        await setDoc(doc(db, 'admins', cleanEmail), {
-          email: cleanEmail,
-          addedBy: currentUser.email,
-          createdAt: serverTimestamp(),
-        });
-      } catch (err) {
-        try {
-          handleFirestoreError(
-            err,
-            OperationType.CREATE,
-            `admins/${cleanEmail}`
-          );
-        } catch {}
-      }
-    }
+        : [...prev, record];
+      pushServerCatalogPatch({ admins: next });
+      return next;
+    });
   };
 
   const handleRemoveAdminByEmail = async (email: string) => {
     const cleanEmail = email.trim().toLowerCase();
-    setAdmins((prev) =>
-      prev.filter((a) => a.email.toLowerCase() !== cleanEmail)
-    );
-    if (currentUser && isAuthorizedAdminEmail(currentUser.email, admins)) {
-      try {
-        await deleteDoc(doc(db, 'admins', cleanEmail));
-      } catch (err) {
-        try {
-          handleFirestoreError(
-            err,
-            OperationType.DELETE,
-            `admins/${cleanEmail}`
-          );
-        } catch {}
-      }
-    }
+    setAdmins((prev) => {
+      const next = prev.filter((a) => a.email.toLowerCase() !== cleanEmail);
+      pushServerCatalogPatch({ admins: next });
+      return next;
+    });
   };
 
   // AI Quick Search Filter Handler
@@ -1978,6 +1500,7 @@ export default function App() {
         siteBanners={siteBanners}
         onUpdateSiteBanners={handleUpdateSiteBanners}
         onAddCategory={handleAddCategory}
+        onUpdateCategory={handleUpdateCategory}
         onDeleteCategory={handleDeleteCategory}
         onAddProduct={handleAddProduct}
         onUpdateProductSizeQuantity={handleUpdateProductSizeQuantity}
