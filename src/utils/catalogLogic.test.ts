@@ -660,5 +660,222 @@ test('getCategoryBannerKey, getCategoryBannerSplitIndex, and mergeSiteBannersCon
   assert.equal(Boolean(merged.categoryBanners['women:bags']?.imageUrl), true);
 });
 
+import {
+  getDefaultSizesForType,
+  MONTHS_SIZES,
+  YEARS_SIZES,
+} from './catalogLogic';
 
+test('Months and Years size types provide 4 prebuilt sizes each and normalize custom sizes', () => {
+  assert.equal(MONTHS_SIZES.length, 4);
+  assert.deepEqual(getDefaultSizesForType('months'), [
+    '3-6 Months',
+    '6-12 Months',
+    '12-18 Months',
+    '18-24 Months',
+  ]);
+  assert.equal(YEARS_SIZES.length, 4);
+  assert.deepEqual(getDefaultSizesForType('years'), [
+    '2-3 Years',
+    '4-5 Years',
+    '6-7 Years',
+    '8-9 Years',
+  ]);
 
+  assert.equal(normalizeSizeEntry('0-3', 'months'), '0-3 Months');
+  assert.equal(normalizeSizeEntry('24-36 Months', 'months'), '24-36 Months');
+  assert.equal(normalizeSizeEntry('10-11', 'years'), '10-11 Years');
+  assert.equal(normalizeSizeEntry('12-13 Years', 'years'), '12-13 Years');
+});
+
+test('Full Set with multi-color linked pieces defaults to first color if none selected, syncs color variants, and deducts exact color+size stock from original products when bought', () => {
+  const multiColorShirt: ProductItem = {
+    id: 'shirt-multi-1',
+    name: 'SILK ATELIER SHIRT',
+    department: 'women',
+    category: 'Tops',
+    style: 'Classic',
+    price: 900,
+    quantity: 20,
+    sizeQuantities: { S: 5, M: 5 },
+    hasColors: true,
+    colorVariants: [
+      {
+        colorName: 'Ivory',
+        colorHex: '#FFFFF0',
+        imageUrl: 'ivory.jpg',
+        sizeType: 'letter',
+        sizes: ['S', 'M'],
+        sizeQuantities: { S: 5, M: 5 },
+      },
+      {
+        colorName: 'Noir',
+        colorHex: '#09090B',
+        imageUrl: 'noir.jpg',
+        sizeType: 'letter',
+        sizes: ['S', 'M'],
+        sizeQuantities: { S: 4, M: 6 },
+      },
+    ],
+    isNewArrival: true,
+    imageUrl: 'ivory.jpg',
+    galleryUrls: [],
+    sizeType: 'letter',
+    sizes: ['S', 'M'],
+    materials: ['Silk'],
+    description: 'Shirt',
+    inStock: true,
+    featured: true,
+  };
+
+  const trousers: ProductItem = {
+    id: 'trousers-1',
+    name: 'TAILORED WOOL TROUSERS',
+    department: 'women',
+    category: 'Pants',
+    style: 'Classic',
+    price: 1100,
+    quantity: 10,
+    sizeQuantities: { '36': 5, '38': 5 },
+    hasColors: false,
+    colorVariants: [],
+    isNewArrival: true,
+    imageUrl: 'trousers.jpg',
+    galleryUrls: [],
+    sizeType: 'numeric',
+    sizes: ['36', '38'],
+    materials: ['Wool'],
+    description: 'Trousers',
+    inStock: true,
+    featured: true,
+  };
+
+  const fullSetDefaultColor: ProductItem = {
+    id: 'fullset-default-col',
+    name: 'SILK & WOOL MONOLITH SET',
+    department: 'women',
+    category: 'Full Set',
+    style: 'Classic',
+    price: 1850,
+    quantity: 10,
+    sizeQuantities: { S: 5, M: 5 },
+    isFullSet: true,
+    setItems: [
+      {
+        productId: 'shirt-multi-1',
+        productName: 'SILK ATELIER SHIRT',
+        pieceLabel: 'Shirt',
+        sizeType: 'letter',
+        sizes: ['S', 'M'],
+        sizeQuantities: { S: 5, M: 5 },
+        // selectedColors omitted -> should default to first color ('Ivory')
+      },
+      {
+        productId: 'trousers-1',
+        productName: 'TAILORED WOOL TROUSERS',
+        pieceLabel: 'Trousers',
+        sizeType: 'numeric',
+        sizes: ['36', '38'],
+        sizeQuantities: { '36': 5, '38': 5 },
+      },
+    ],
+    isNewArrival: true,
+    imageUrl: 'set.jpg',
+    galleryUrls: [],
+    sizeType: 'letter',
+    sizes: ['S', 'M'],
+    materials: [],
+    description: 'Set',
+    inStock: true,
+    featured: true,
+  };
+
+  const syncedDefault = syncFullSetsWithCatalog([
+    multiColorShirt,
+    trousers,
+    fullSetDefaultColor,
+  ]);
+  const syncedSet1 = syncedDefault.find((p) => p.id === 'fullset-default-col')!;
+  assert.deepEqual(syncedSet1.setItems![0].selectedColors, ['Ivory']);
+  assert.equal(syncedSet1.setItems![0].colorVariants?.length, 1);
+
+  // Now test when admin selects BOTH colors ('Ivory' and 'Noir') and user buys 'Noir' size 'M' + Trousers size '38'
+  const fullSetAllColors: ProductItem = {
+    ...fullSetDefaultColor,
+    setItems: [
+      {
+        ...fullSetDefaultColor.setItems![0],
+        selectedColors: ['Ivory', 'Noir'],
+      },
+      fullSetDefaultColor.setItems![1],
+    ],
+  };
+
+  const catalogBeforeOrder = syncFullSetsWithCatalog([
+    multiColorShirt,
+    trousers,
+    fullSetAllColors,
+  ]);
+
+  const order: OrderItem = {
+    id: 'ord-fs-1',
+    orderNumber: 'SAMO-9001',
+    customerName: 'Aria',
+    customerEmail: 'aria@samo.com',
+    customerPhone: '123456',
+    shippingLocation: 'Paris',
+    deliveryMethod: 'Standard Delivery',
+    deliveryFee: 0,
+    subtotal: 3700,
+    totalPrice: 3700,
+    itemsSummary: '2x SILK & WOOL MONOLITH SET',
+    itemsCount: 2,
+    primaryProductName: 'SILK & WOOL MONOLITH SET',
+    primaryProductSize: 'Shirt: Noir · M / Trousers: 38',
+    primaryProductImage: 'set.jpg',
+    orderedItems: [
+      {
+        productId: 'fullset-default-col',
+        productName: 'SILK & WOOL MONOLITH SET',
+        selectedSize: 'Shirt: Noir · M / Trousers: 38',
+        selectedSetSizes: [
+          {
+            productId: 'shirt-multi-1',
+            productName: 'SILK ATELIER SHIRT',
+            selectedSize: 'M',
+            selectedColor: 'Noir',
+          },
+          {
+            productId: 'trousers-1',
+            productName: 'TAILORED WOOL TROUSERS',
+            selectedSize: '38',
+          },
+        ],
+        quantity: 2,
+      },
+    ],
+    status: 'accepted',
+    createdAt: '2026-11-08T10:00:00Z',
+  };
+
+  const afterOrder = decrementStockForAcceptedOrder(catalogBeforeOrder, order);
+  const updatedShirt = afterOrder.find((p) => p.id === 'shirt-multi-1')!;
+  const updatedTrousers = afterOrder.find((p) => p.id === 'trousers-1')!;
+  const updatedFullSet = afterOrder.find((p) => p.id === 'fullset-default-col')!;
+
+  // Noir M was 6 -> now 4; Ivory M stays 5
+  const noirVar = updatedShirt.colorVariants!.find((v) => v.colorName === 'Noir')!;
+  const ivoryVar = updatedShirt.colorVariants!.find((v) => v.colorName === 'Ivory')!;
+  assert.equal(noirVar.sizeQuantities.M, 4);
+  assert.equal(ivoryVar.sizeQuantities.M, 5);
+
+  // Trousers '38' was 5 -> now 3
+  assert.equal(updatedTrousers.sizeQuantities!['38'], 3);
+
+  // Full Set synced piece colorVariants also reflect Noir M = 4 and Trousers 38 = 3
+  const fsShirtNoir = updatedFullSet.setItems![0].colorVariants!.find(
+    (v) => v.colorName === 'Noir'
+  )!;
+  assert.equal(fsShirtNoir.sizeQuantities.M, 4);
+  assert.equal(updatedFullSet.setItems![1].sizeQuantities['38'], 3);
+});

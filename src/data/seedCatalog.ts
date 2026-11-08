@@ -759,12 +759,6 @@ export const INITIAL_ADMINS: AdminRecord[] = [
     createdAt: '2026-10-20T00:00:00.000Z',
   },
   {
-    id: 'charbelkorab11123@gmail.com',
-    email: 'charbelkorab11123@gmail.com',
-    addedBy: 'System Bootstrap (AI Studio Owner)',
-    createdAt: '2026-10-20T00:00:00.000Z',
-  },
-  {
     id: 'joeykorab88@gmail.com',
     email: 'joeykorab88@gmail.com',
     addedBy: 'System Bootstrap (Owner)',
@@ -777,3 +771,4 @@ export const INITIAL_ADMINS: AdminRecord[] = [
     createdAt: '2026-10-20T00:00:00.000Z',
   },
 ];
+

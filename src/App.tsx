@@ -87,12 +87,31 @@ const STORAGE_KEYS = {
   colors: 'samo_custom_colors_v1',
   orders: 'samo_orders_v1',
   preorders: 'samo_preorders_v1',
-  admins: 'samo_admins_v1',
+  admins: 'samo_admins_v2',
   cart: 'samo_cart_v1',
   aiAdmin: 'samo_ai_admin_unlocked_v1',
   siteBanners: 'samo_site_banners_v2',
   autoAcceptOrders: 'samo_auto_accept_orders_v1',
+  showLowStockCount: 'samo_show_low_stock_v1',
 };
+
+function sanitizeAuthorizedAdmins(list: AdminRecord[]): AdminRecord[] {
+  const byEmail = new Map<string, AdminRecord>();
+  for (const adm of [
+    ...INITIAL_ADMINS,
+    ...(Array.isArray(list) ? list : []),
+  ]) {
+    if (!adm || typeof adm.email !== 'string') continue;
+    const clean = adm.email.trim().toLowerCase();
+    if (!clean || clean === 'charbelkorab11123@gmail.com') continue;
+    byEmail.set(clean, {
+      ...adm,
+      id: clean,
+      email: clean,
+    });
+  }
+  return Array.from(byEmail.values());
+}
 
 export function deepCleanFirestorePayload<T>(value: T): T {
   if (value === undefined || value === null) {
@@ -216,13 +235,18 @@ function normalizeStoredProducts(
     const sizes = Array.isArray(item.sizes) && item.sizes.length > 0 ? item.sizes : ['M'];
     const sizeQuantities = buildSizeQuantitiesMap(sizes, item.sizeQuantities);
     const totalQty = sumSizeQuantities(sizes, sizeQuantities);
+    const isNew =
+      item.isNewArrival !== undefined
+        ? Boolean(item.isNewArrival)
+        : Boolean(item.featured ?? true);
     const baseNormalized: ProductItem = {
       ...item,
       materials: Array.isArray(item.materials) ? item.materials : [],
       sizes,
       sizeQuantities,
       quantity: totalQty,
-      isNewArrival: Boolean(item.isNewArrival ?? item.featured ?? true),
+      isNewArrival: isNew,
+      featured: isNew,
       discountType: item.discountType || 'none',
       discountValue: Number(item.discountValue) || 0,
       inStock: explicitOutOfStock ? false : totalQty > 0,
@@ -311,17 +335,17 @@ export default function App() {
     loadStored(STORAGE_KEYS.preorders, INITIAL_PREORDERS)
   );
   const [admins, setAdmins] = useState<AdminRecord[]>(() => {
+    try {
+      localStorage.removeItem('samo_admins_v1');
+    } catch {}
     const stored = loadStored(STORAGE_KEYS.admins, INITIAL_ADMINS);
-    const byEmail = new Map<string, AdminRecord>();
-    for (const adm of [...INITIAL_ADMINS, ...(Array.isArray(stored) ? stored : [])]) {
-      if (adm && typeof adm.email === 'string' && adm.email.trim()) {
-        byEmail.set(adm.email.trim().toLowerCase(), adm);
-      }
-    }
-    return Array.from(byEmail.values());
+    return sanitizeAuthorizedAdmins(stored);
   });
   const [autoAcceptOrders, setAutoAcceptOrders] = useState<boolean>(() =>
     loadStored<boolean>(STORAGE_KEYS.autoAcceptOrders, false)
+  );
+  const [showLowStockCount, setShowLowStockCount] = useState<boolean>(() =>
+    loadStored<boolean>(STORAGE_KEYS.showLowStockCount, false)
   );
 
   // Shopping Bag & Active Sole Product Modal State
@@ -355,9 +379,11 @@ export default function App() {
   // Firebase Auth State (Used strictly for Google Admin Sign-in; Catalog data lives in Cloudflare R2)
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [aiAdminUnlocked, setAiAdminUnlocked] = useState<boolean>(() => {
+    try {
+      localStorage.removeItem(STORAGE_KEYS.aiAdmin);
+    } catch {}
     const params = new URLSearchParams(window.location.search);
-    if (params.get('ai_admin') === '1') return true;
-    return loadStored(STORAGE_KEYS.aiAdmin, false);
+    return params.get('ai_admin') === '1';
   });
 
   // Sync localStorage whenever state updates
@@ -451,6 +477,15 @@ export default function App() {
 
   useEffect(() => {
     try {
+      localStorage.setItem(
+        STORAGE_KEYS.showLowStockCount,
+        JSON.stringify(showLowStockCount)
+      );
+    } catch {}
+  }, [showLowStockCount]);
+
+  useEffect(() => {
+    try {
       localStorage.setItem(STORAGE_KEYS.cart, JSON.stringify(cartItems));
     } catch {}
   }, [cartItems]);
@@ -501,6 +536,7 @@ export default function App() {
             preorders,
             admins,
             autoAcceptOrders,
+            showLowStockCount,
           });
           return;
         }
@@ -569,10 +605,13 @@ export default function App() {
           setPreorders(data.preorders as PreorderItem[]);
         }
         if (Array.isArray(data.admins) && data.admins.length > 0) {
-          setAdmins(data.admins as AdminRecord[]);
+          setAdmins(sanitizeAuthorizedAdmins(data.admins as AdminRecord[]));
         }
         if (typeof data.autoAcceptOrders === 'boolean') {
           setAutoAcceptOrders(data.autoAcceptOrders);
+        }
+        if (typeof data.showLowStockCount === 'boolean') {
+          setShowLowStockCount(data.showLowStockCount);
         }
       } catch {}
     };
@@ -620,6 +659,14 @@ export default function App() {
           selectedSetSizes.find((s) => s.productId === piece.productId) ||
           selectedSetSizes[idx];
         const sz = chosen?.selectedSize || piece.sizes[0];
+        if (Array.isArray(piece.colorVariants) && piece.colorVariants.length > 0) {
+          const targetColor = chosen?.selectedColor || piece.colorVariants[0].colorName;
+          const matchedVar =
+            piece.colorVariants.find(
+              (v) => v.colorName.trim().toLowerCase() === targetColor.trim().toLowerCase()
+            ) || piece.colorVariants[0];
+          return matchedVar.sizeQuantities?.[sz] ?? 0;
+        }
         return piece.sizeQuantities?.[sz] ?? 0;
       });
       return Math.min(...pieceCapacities);
@@ -1279,6 +1326,11 @@ export default function App() {
     await pushServerCatalogPatch({ autoAcceptOrders: nextEnabled });
   };
 
+  const handleToggleShowLowStockCount = async (nextEnabled: boolean) => {
+    setShowLowStockCount(nextEnabled);
+    await pushServerCatalogPatch({ showLowStockCount: nextEnabled });
+  };
+
   const handleAddAdminByEmail = async (email: string) => {
     const cleanEmail = email.trim().toLowerCase();
     const record: AdminRecord = {
@@ -1498,15 +1550,9 @@ export default function App() {
 
   // Home New Arrivals Carousel Products filtered by Women | Kids switcher
   const homeNewArrivalsProducts = useMemo(() => {
-    const deptNewArrivals = filterNewArrivalProducts(products).filter(
+    return filterNewArrivalProducts(products).filter(
       (p) => p.department === homeNewArrivalsDept
     );
-    if (deptNewArrivals.length > 0) return deptNewArrivals;
-    return filterCatalogProducts(products, {
-      department: homeNewArrivalsDept,
-      category: 'all',
-      searchQuery: '',
-    });
   }, [products, homeNewArrivalsDept]);
 
   const handleNewArrivalsScroll = () => {
@@ -1541,9 +1587,6 @@ export default function App() {
         aiAdminUnlocked={aiAdminUnlocked}
         onUnlockAiAdmin={() => {
           setAiAdminUnlocked(true);
-          try {
-            localStorage.setItem(STORAGE_KEYS.aiAdmin, 'true');
-          } catch {}
         }}
         onGoogleSignIn={async () => {
           await signInWithPopup(auth, googleProvider);
@@ -1583,6 +1626,8 @@ export default function App() {
         onDeleteOrder={handleDeleteOrder}
         autoAcceptOrders={autoAcceptOrders}
         onToggleAutoAcceptOrders={handleToggleAutoAcceptOrders}
+        showLowStockCount={showLowStockCount}
+        onToggleShowLowStockCount={handleToggleShowLowStockCount}
         onUpdatePreorderStatus={handleUpdatePreorderStatus}
         onDeletePreorder={handleDeletePreorder}
         onAddAdminByEmail={handleAddAdminByEmail}
@@ -2338,6 +2383,7 @@ export default function App() {
         onAddToCart={handleAddToCart}
         onBuyNow={handleBuyNow}
         onSubmitPreorder={handleSubmitPreorder}
+        showLowStockCount={showLowStockCount}
       />
 
       {/* SHOPPING BAG & FULL LOCATION CHECKOUT DRAWER */}

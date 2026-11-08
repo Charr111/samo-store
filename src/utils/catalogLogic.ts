@@ -37,6 +37,18 @@ export const PREBUILT_COLORS: readonly string[] = [
 
 export const LETTER_SIZES: readonly string[] = ['XS', 'S', 'M', 'L', 'XL'];
 export const NUMERIC_SIZES: readonly string[] = ['34', '36', '38', '40', '42', '44'];
+export const MONTHS_SIZES: readonly string[] = [
+  '3-6 Months',
+  '6-12 Months',
+  '12-18 Months',
+  '18-24 Months',
+];
+export const YEARS_SIZES: readonly string[] = [
+  '2-3 Years',
+  '4-5 Years',
+  '6-7 Years',
+  '8-9 Years',
+];
 export const CM_SIZES: readonly string[] = [
   '80 cm',
   '90 cm',
@@ -50,7 +62,6 @@ export const CM_SIZES: readonly string[] = [
 
 export const SUPER_ADMIN_EMAILS: readonly string[] = [
   'apolokor@gmail.com',
-  'charbelkorab11123@gmail.com',
   'joeykorab88@gmail.com',
   'samobougharios@gmail.com',
 ];
@@ -153,7 +164,7 @@ export function createSafeSlug(input: string): string {
 }
 
 /**
- * Normalizes a size string according to the selected SizeType ('letter' | 'numeric' | 'cm').
+ * Normalizes a size string according to the selected SizeType ('letter' | 'numeric' | 'months' | 'years' | 'cm').
  */
 export function normalizeSizeEntry(raw: string, sizeType: SizeType): string {
   const trimmed = raw.trim();
@@ -178,6 +189,28 @@ export function normalizeSizeEntry(raw: string, sizeType: SizeType): string {
     return numMatch ? numMatch[0].slice(0, 10) : trimmed.slice(0, 40);
   }
 
+  if (sizeType === 'months') {
+    const mMatch = trimmed.match(/^(\d+(?:\s*[-–]\s*\d+)?)\s*(?:m|mo|mos|months?)?$/i);
+    if (mMatch) {
+      return `${mMatch[1].replace(/\s+/g, '')} Months`;
+    }
+    if (!/months?$/i.test(trimmed)) {
+      return `${trimmed} Months`.slice(0, 40);
+    }
+    return trimmed.replace(/months?$/i, 'Months').slice(0, 40);
+  }
+
+  if (sizeType === 'years') {
+    const yMatch = trimmed.match(/^(\d+(?:\s*[-–]\s*\d+)?)\s*(?:y|yr|yrs|years?)?$/i);
+    if (yMatch) {
+      return `${yMatch[1].replace(/\s+/g, '')} Years`;
+    }
+    if (!/years?$/i.test(trimmed)) {
+      return `${trimmed} Years`.slice(0, 40);
+    }
+    return trimmed.replace(/years?$/i, 'Years').slice(0, 40);
+  }
+
   // sizeType === 'cm'
   const cmNumberMatch = trimmed.match(/^(\d+(?:\.\d+)?)\s*(?:cm|centimeters?)?$/i);
   if (cmNumberMatch) {
@@ -195,6 +228,8 @@ export function normalizeSizeEntry(raw: string, sizeType: SizeType): string {
 export function getDefaultSizesForType(sizeType: SizeType): string[] {
   if (sizeType === 'letter') return [...LETTER_SIZES];
   if (sizeType === 'numeric') return ['36', '38', '40', '42'];
+  if (sizeType === 'months') return [...MONTHS_SIZES];
+  if (sizeType === 'years') return [...YEARS_SIZES];
   return ['90 cm', '100 cm', '110 cm', '120 cm', '130 cm'];
 }
 
@@ -382,8 +417,8 @@ export function filterOrdersByQuery(orders: OrderItem[], searchQuery: string): O
 
 /**
  * Synchronizes all Full Set products in the catalog with their linked standalone products.
- * Whenever a standalone product's per-size stock changes, any Full Set referencing that
- * standalone product automatically reflects the updated per-size stock.
+ * Whenever a standalone product's per-size (or per-color + per-size) stock changes,
+ * any Full Set referencing that standalone product automatically reflects the updated stock.
  */
 export function syncFullSetsWithCatalog(products: ProductItem[]): ProductItem[] {
   const byId = new Map<string, ProductItem>();
@@ -403,16 +438,57 @@ export function syncFullSetsWithCatalog(products: ProductItem[]): ProductItem[] 
         (subItem.productId ? byId.get(subItem.productId) : undefined) ||
         (subItem.productName ? byName.get(subItem.productName.trim().toLowerCase()) : undefined);
 
-      const sizes =
-        Array.isArray(subItem.sizes) && subItem.sizes.length > 0
-          ? subItem.sizes
-          : linked?.sizes && linked.sizes.length > 0
-          ? [...linked.sizes]
-          : getDefaultSizesForType(subItem.sizeType || 'letter');
-
-      const baseQuantities = buildSizeQuantitiesMap(sizes, subItem.sizeQuantities);
-
       if (linked && linked.id !== prod.id) {
+        // If linked standalone product has multiple color variants, sync the allowed colors (defaulting to first color)
+        if (
+          linked.hasColors &&
+          Array.isArray(linked.colorVariants) &&
+          linked.colorVariants.length > 0
+        ) {
+          const requestedColors = Array.isArray(subItem.selectedColors)
+            ? subItem.selectedColors.map((c) => c.trim()).filter(Boolean)
+            : [];
+          const matchedVariants =
+            requestedColors.length > 0
+              ? linked.colorVariants.filter((v) =>
+                  requestedColors.some(
+                    (rc) => rc.toLowerCase() === v.colorName.trim().toLowerCase()
+                  )
+                )
+              : [linked.colorVariants[0]];
+          const finalVariants =
+            matchedVariants.length > 0 ? matchedVariants : [linked.colorVariants[0]];
+
+          const syncedVariants: ProductColorVariant[] = finalVariants.map((v) => ({
+            ...v,
+            sizes: [...v.sizes],
+            sizeQuantities: buildSizeQuantitiesMap(v.sizes, v.sizeQuantities),
+          }));
+
+          const primaryVar = syncedVariants[0];
+          return {
+            ...subItem,
+            productId: linked.id,
+            productName: subItem.productName || linked.name,
+            sizeType: primaryVar.sizeType,
+            sizes: [...primaryVar.sizes],
+            sizeQuantities: buildSizeQuantitiesMap(
+              primaryVar.sizes,
+              primaryVar.sizeQuantities
+            ),
+            selectedColors: syncedVariants.map((v) => v.colorName),
+            colorVariants: syncedVariants,
+          };
+        }
+
+        const sizes =
+          Array.isArray(subItem.sizes) && subItem.sizes.length > 0
+            ? subItem.sizes
+            : linked.sizes && linked.sizes.length > 0
+            ? [...linked.sizes]
+            : getDefaultSizesForType(subItem.sizeType || 'letter');
+
+        const baseQuantities = buildSizeQuantitiesMap(sizes, subItem.sizeQuantities);
         const syncedQuantities: Record<string, number> = {};
         for (const sz of sizes) {
           if (linked.sizes.includes(sz)) {
@@ -425,10 +501,19 @@ export function syncFullSetsWithCatalog(products: ProductItem[]): ProductItem[] 
           ...subItem,
           productId: linked.id,
           productName: subItem.productName || linked.name,
+          sizeType: linked.sizeType || subItem.sizeType,
           sizes,
           sizeQuantities: syncedQuantities,
+          selectedColors: [],
+          colorVariants: [],
         };
       }
+
+      const sizes =
+        Array.isArray(subItem.sizes) && subItem.sizes.length > 0
+          ? subItem.sizes
+          : getDefaultSizesForType(subItem.sizeType || 'letter');
+      const baseQuantities = buildSizeQuantitiesMap(sizes, subItem.sizeQuantities);
 
       return {
         ...subItem,
@@ -438,9 +523,12 @@ export function syncFullSetsWithCatalog(products: ProductItem[]): ProductItem[] 
     });
 
     const primaryPiece = syncedSetItems[0];
-    const pieceTotals = syncedSetItems.map((si) =>
-      sumSizeQuantities(si.sizes, si.sizeQuantities)
-    );
+    const pieceTotals = syncedSetItems.map((si) => {
+      if (Array.isArray(si.colorVariants) && si.colorVariants.length > 0) {
+        return syncProductFromColorVariants(si.colorVariants, si.sizeType).quantity;
+      }
+      return sumSizeQuantities(si.sizes, si.sizeQuantities);
+    });
     const minPieceTotal =
       pieceTotals.length > 0 ? Math.min(...pieceTotals) : 0;
     const allPiecesHaveStock = pieceTotals.every((t) => t > 0);
@@ -504,9 +592,15 @@ export function decrementStockForAcceptedOrder(
     if (Array.isArray(line.selectedSetSizes) && line.selectedSetSizes.length > 0) {
       for (let i = 0; i < line.selectedSetSizes.length; i++) {
         const piece = line.selectedSetSizes[i];
+        const fallbackSub = matchedProd?.setItems?.[i];
+        const resolvedColor =
+          piece.selectedColor ||
+          fallbackSub?.selectedColors?.[0] ||
+          fallbackSub?.colorVariants?.[0]?.colorName;
         deductions.push({
           productId: piece.productId,
           productName: piece.productName,
+          selectedColor: resolvedColor,
           selectedSize: piece.selectedSize,
           quantity: qtyBought,
           parentFullSetId: matchedProd?.id || line.productId,
@@ -525,9 +619,12 @@ export function decrementStockForAcceptedOrder(
         .filter(Boolean);
       matchedProd.setItems.forEach((sub, idx) => {
         const chosenSz = parts[idx] || sub.sizes[0] || '';
+        const defaultColor =
+          sub.selectedColors?.[0] || sub.colorVariants?.[0]?.colorName;
         deductions.push({
           productId: sub.productId,
           productName: sub.productName,
+          selectedColor: defaultColor,
           selectedSize: chosenSz,
           quantity: qtyBought,
           parentFullSetId: matchedProd.id,
@@ -909,7 +1006,9 @@ export function filterCatalogProducts(
 export function filterNewArrivalProducts(products: ProductItem[]): ProductItem[] {
   return products.filter(
     (p) =>
-      Boolean(p.isNewArrival ?? p.featured) &&
+      (p.isNewArrival !== undefined
+        ? Boolean(p.isNewArrival)
+        : Boolean(p.featured)) &&
       !(
         p.department === 'kids' &&
         (p.isFullSet || p.category.trim().toLowerCase() === 'full set')
@@ -1337,5 +1436,56 @@ export function getCategoryBannerSplitIndex(
   }
   return 1;
 }
+
+/**
+ * Generates a tailored luxury editorial product description from product attributes
+ * so "Auto-Draft Editorial Notes" works instantaneously both with AI and offline/on live static hosting.
+ */
+export function buildEditorialProductDescription(
+  params: {
+    name?: string;
+    department?: Department;
+    category?: string;
+    style?: string;
+    materials?: string[];
+    colors?: string[];
+  },
+  variationIndex = 0
+): string {
+  const cleanName = (params.name || '').trim();
+  const deptLabel = params.department === 'kids' ? 'SAMO Kids' : 'SAMO Women';
+  const categoryLabel = (params.category || 'Atelier Piece').trim();
+  const styleLabel = (params.style || 'Classic').trim();
+  const materialsList = Array.isArray(params.materials)
+    ? params.materials.map((m) => m.trim()).filter(Boolean)
+    : [];
+  const colorsList = Array.isArray(params.colors)
+    ? params.colors.map((c) => c.trim()).filter(Boolean)
+    : [];
+
+  const subjectPhrase = cleanName
+    ? `${cleanName} — ${deptLabel.toLowerCase()} ${categoryLabel.toLowerCase()}`
+    : `Architectural ${deptLabel.toLowerCase()} ${categoryLabel.toLowerCase()} silhouette`;
+
+  const materialPhrase =
+    materialsList.length > 0
+      ? ` crafted in supple ${materialsList.join(', ')}`
+      : '';
+
+  const colorPhrase =
+    colorsList.length > 0
+      ? ` Available in ${colorsList.join(', ')} colorway${colorsList.length > 1 ? 's' : ''}.`
+      : '';
+
+  const templates = [
+    `${subjectPhrase}${materialPhrase}. Tailored in the house's signature ${styleLabel.toLowerCase()} proportions with clean architectural lines and precision atelier finishing.${colorPhrase}`,
+    `Designed for the ${deptLabel} collection, this ${categoryLabel.toLowerCase()}${materialPhrase} balances structured ${styleLabel.toLowerCase()} construction with effortless movement and refined hardware details.${colorPhrase}`,
+    `SAMO Atelier ${styleLabel.toLowerCase()} ${categoryLabel.toLowerCase()}${materialPhrase}, cut with a sharp silhouette, tonal seam work, and enduring house craftsmanship.${colorPhrase}`,
+  ];
+
+  const idx = Math.abs(variationIndex) % templates.length;
+  return templates[idx].slice(0, 950);
+}
+
 
 

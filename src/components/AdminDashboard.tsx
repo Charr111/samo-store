@@ -56,6 +56,7 @@ import {
 import {
   buildDefaultCategoryBannerForCategory,
   buildDefaultSiteBanners,
+  buildEditorialProductDescription,
   buildSizeQuantitiesMap,
   CM_SIZES,
   createSafeSlug,
@@ -70,12 +71,14 @@ import {
   LETTER_SIZES,
   mergeColorsList,
   mergeMaterialsList,
+  MONTHS_SIZES,
   normalizeKidsCategoryName,
   normalizeSizeEntry,
   NUMERIC_SIZES,
   sumSizeQuantities,
   SUPER_ADMIN_EMAILS,
   syncProductFromColorVariants,
+  YEARS_SIZES,
 } from '../utils/catalogLogic';
 import { ProductImage } from './ProductImage';
 import {
@@ -348,6 +351,8 @@ interface AdminDashboardProps {
   onDeleteOrder: (orderId: string) => Promise<void>;
   autoAcceptOrders: boolean;
   onToggleAutoAcceptOrders: (nextEnabled: boolean) => Promise<void>;
+  showLowStockCount?: boolean;
+  onToggleShowLowStockCount?: (nextEnabled: boolean) => Promise<void>;
   onUpdatePreorderStatus: (
     preorderId: string,
     status: PreorderStatus
@@ -360,7 +365,6 @@ interface AdminDashboardProps {
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   currentUser,
   aiAdminUnlocked,
-  onUnlockAiAdmin,
   onGoogleSignIn,
   onSignOut,
   onNavigateHome,
@@ -391,6 +395,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onDeleteOrder,
   autoAcceptOrders,
   onToggleAutoAcceptOrders,
+  showLowStockCount = false,
+  onToggleShowLowStockCount,
   onUpdatePreorderStatus,
   onDeletePreorder,
   onAddAdminByEmail,
@@ -523,6 +529,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     'M',
     'L',
   ]);
+  const [setPiece1Colors, setSetPiece1Colors] = useState<string[]>([]);
 
   const [setPiece2ProductId, setSetPiece2ProductId] = useState<string>('');
   const [setPiece2Search, setSetPiece2Search] = useState<string>('');
@@ -537,6 +544,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     '40',
     '42',
   ]);
+  const [setPiece2Colors, setSetPiece2Colors] = useState<string[]>([]);
+
+  // Custom Months & Years Presets Added by Admin
+  const [customMonthsSizes, setCustomMonthsSizes] = useState<string[]>([]);
+  const [customYearsSizes, setCustomYearsSizes] = useState<string[]>([]);
 
   // Existing Catalog Item Custom Color / Size Input State
   const [catalogCustomColorInputs, setCatalogCustomColorInputs] = useState<
@@ -556,6 +568,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [itemDescription, setItemDescription] = useState('');
   const [itemFeedback, setItemFeedback] = useState('');
   const [aiGeneratingCopy, setAiGeneratingCopy] = useState(false);
+  const [draftVariationIndex, setDraftVariationIndex] = useState(0);
+  const [copyDraftedNotice, setCopyDraftedNotice] = useState(false);
 
   // Promo Code Form State
   const [newPromoCode, setNewPromoCode] = useState('');
@@ -596,6 +610,34 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     (p) => !p.isFullSet && p.category.trim().toLowerCase() !== 'full set'
   );
 
+  const getPresetsForSizeType = (st: SizeType): string[] => {
+    if (st === 'letter') return [...LETTER_SIZES];
+    if (st === 'numeric') return [...NUMERIC_SIZES];
+    if (st === 'months') {
+      return Array.from(new Set([...MONTHS_SIZES, ...customMonthsSizes]));
+    }
+    if (st === 'years' || st === 'cm') {
+      return Array.from(new Set([...YEARS_SIZES, ...customYearsSizes]));
+    }
+    return [...LETTER_SIZES];
+  };
+
+  const registerCustomSizePreset = (st: SizeType, normalizedSize: string) => {
+    if (st === 'months') {
+      setCustomMonthsSizes((prev) =>
+        prev.includes(normalizedSize) || MONTHS_SIZES.includes(normalizedSize)
+          ? prev
+          : [...prev, normalizedSize]
+      );
+    } else if (st === 'years' || st === 'cm') {
+      setCustomYearsSizes((prev) =>
+        prev.includes(normalizedSize) || YEARS_SIZES.includes(normalizedSize)
+          ? prev
+          : [...prev, normalizedSize]
+      );
+    }
+  };
+
   const handleSelectSetPieceProduct = (
     pieceNum: 1 | 2,
     selectedProdId: string
@@ -607,6 +649,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         setSetPiece1Label(found.category || 'Piece 1');
         setSetPiece1SizeType(found.sizeType);
         setSetPiece1Sizes([...found.sizes]);
+        if (
+          Boolean(found.hasColors) &&
+          Array.isArray(found.colorVariants) &&
+          found.colorVariants.length > 0
+        ) {
+          setSetPiece1Colors([found.colorVariants[0].colorName]);
+        } else {
+          setSetPiece1Colors([]);
+        }
       }
     } else {
       setSetPiece2ProductId(selectedProdId);
@@ -614,13 +665,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         setSetPiece2Label(found.category || 'Piece 2');
         setSetPiece2SizeType(found.sizeType);
         setSetPiece2Sizes([...found.sizes]);
+        if (
+          Boolean(found.hasColors) &&
+          Array.isArray(found.colorVariants) &&
+          found.colorVariants.length > 0
+        ) {
+          setSetPiece2Colors([found.colorVariants[0].colorName]);
+        } else {
+          setSetPiece2Colors([]);
+        }
       }
     }
   };
 
   const handleSizeTypeChange = (type: SizeType) => {
     setItemSizeType(type);
-    setSelectedSizes(getDefaultSizesForType(type));
+    setSelectedSizes(getPresetsForSizeType(type));
     setPerSizeRawQuantities({});
     setCustomSizeInput('');
   };
@@ -638,6 +698,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       .map((s) => normalizeSizeEntry(s, itemSizeType))
       .filter(Boolean);
     if (rawParts.length === 0) return;
+
+    for (const part of rawParts) {
+      registerCustomSizePreset(itemSizeType, part);
+    }
 
     setSelectedSizes((prev) => {
       const next = [...prev];
@@ -659,7 +723,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           (c) => c.colorName.toLowerCase() !== colorName.toLowerCase()
         );
       }
-      const defaultType: SizeType = itemDept === 'kids' ? 'cm' : itemSizeType;
+      const defaultType: SizeType =
+        itemDept === 'kids'
+          ? itemCategory.toLowerCase().includes('1 to 5')
+            ? 'months'
+            : 'years'
+          : itemSizeType;
       const resolvedHex =
         explicitHex ||
         customColorHexMap[colorName.toLowerCase()] ||
@@ -672,7 +741,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           imageUrl: itemUrl.trim(),
           galleryUrls: ['', '', ''],
           sizeType: defaultType,
-          sizes: getDefaultSizesForType(defaultType),
+          sizes: getPresetsForSizeType(defaultType),
           rawQuantities: {},
           customSizeInput: '',
         },
@@ -698,7 +767,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       (c) => c.colorName.toLowerCase() === clean.toLowerCase()
     );
     if (!exists) {
-      const defaultType: SizeType = itemDept === 'kids' ? 'cm' : itemSizeType;
+      const defaultType: SizeType =
+        itemDept === 'kids'
+          ? itemCategory.toLowerCase().includes('1 to 5')
+            ? 'months'
+            : 'years'
+          : itemSizeType;
       setDraftColors((prev) => [
         ...prev,
         {
@@ -707,7 +781,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           imageUrl: itemUrl.trim(),
           galleryUrls: ['', '', ''],
           sizeType: defaultType,
-          sizes: getDefaultSizesForType(defaultType),
+          sizes: getPresetsForSizeType(defaultType),
           rawQuantities: {},
           customSizeInput: '',
         },
@@ -753,30 +827,55 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   };
 
   const handleGenerateAiCopy = async () => {
-    if (!itemName.trim()) {
-      setItemFeedback('Enter a Product Name first to generate notes.');
-      return;
-    }
     setAiGeneratingCopy(true);
-    setItemFeedback('');
+    setCopyDraftedNotice(false);
+    const nextVariation = draftVariationIndex + 1;
+    setDraftVariationIndex(nextVariation);
+
+    const activeColors = itemHasColors
+      ? draftColors.map((v) => v.colorName).filter(Boolean)
+      : [];
+    const activeMats = itemHasMaterials ? selectedMaterials : [];
+
+    const fallbackDraft = buildEditorialProductDescription(
+      {
+        name: itemName,
+        department: itemDept,
+        category: itemCategory,
+        style: itemStyle,
+        materials: activeMats,
+        colors: activeColors,
+      },
+      nextVariation - 1
+    );
+
     try {
-      const res = await fetch('/api/ai/admin-copy', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: itemName,
-          department: itemDept,
-          category: itemCategory,
-          style: itemStyle,
-          materials: itemHasMaterials ? selectedMaterials : [],
-        }),
-      });
-      const data = await res.json();
-      if (data.description) {
-        setItemDescription(data.description);
+      if (itemName.trim()) {
+        const res = await fetch('/api/ai/product-copy', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: itemName.trim(),
+            department: itemDept,
+            category: itemCategory,
+            style: itemStyle,
+            materials: activeMats,
+          }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data && typeof data.description === 'string' && data.description.trim()) {
+            setItemDescription(data.description.trim());
+            setCopyDraftedNotice(true);
+            return;
+          }
+        }
       }
+      setItemDescription(fallbackDraft);
+      setCopyDraftedNotice(true);
     } catch {
-      setItemFeedback('Could not reach copy service.');
+      setItemDescription(fallbackDraft);
+      setCopyDraftedNotice(true);
     } finally {
       setAiGeneratingCopy(false);
     }
@@ -791,14 +890,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       setItemFeedback('Product Name is required.');
       return;
     }
-    if (itemHasMaterials && selectedMaterials.length === 0) {
+    if (!isFullSetCategorySelected && itemHasMaterials && selectedMaterials.length === 0) {
       setItemFeedback(
         'Please checkmark at least one Material, or uncheck "Add Material to Product".'
       );
       return;
     }
 
-    const effectiveMaterials = itemHasMaterials ? selectedMaterials : [];
+    const effectiveMaterials =
+      !isFullSetCategorySelected && itemHasMaterials ? selectedMaterials : [];
     const defaultMaterialClause =
       effectiveMaterials.length > 0
         ? ` crafted in ${effectiveMaterials.join(', ')}`
@@ -820,11 +920,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       .filter((u) => Boolean(u) && u !== primaryImage);
 
     // CASE A: 2-PIECE LINKED FULL SET PRODUCT
-    if (isFullSetCategorySelected && linkTwoSetPieces) {
-      const pool =
-        standaloneProductsForDept.length > 0
-          ? standaloneProductsForDept
-          : allStandaloneProducts;
+    if (isFullSetCategorySelected) {
+      const pool = allStandaloneProducts;
       const p1Id = setPiece1ProductId || pool[0]?.id || '';
       const p2Id = setPiece2ProductId || pool[1]?.id || pool[0]?.id || '';
       const prod1 = products.find((p) => p.id === p1Id);
@@ -832,45 +929,103 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
       if (!prod1 || !prod2) {
         setItemFeedback(
-          'Please select two existing store products to link into this Full Set.'
+          'Please select two existing store products from any category to link into this Full Set.'
         );
         return;
       }
 
-      const p1Sizes = setPiece1Sizes.length > 0 ? setPiece1Sizes : prod1.sizes;
-      const p2Sizes = setPiece2Sizes.length > 0 ? setPiece2Sizes : prod2.sizes;
+      const buildPieceSubItem = (
+        linked: ProductItem,
+        chosenColors: string[],
+        fallbackLabel: string
+      ): FullSetSubItem => {
+        const linkedHasColors =
+          Boolean(linked.hasColors) &&
+          Array.isArray(linked.colorVariants) &&
+          linked.colorVariants.length > 0;
 
-      const p1QtyMap: Record<string, number> = {};
-      for (const sz of p1Sizes) {
-        p1QtyMap[sz] = prod1.sizes.includes(sz) ? getSizeQuantity(prod1, sz) : 5;
-      }
+        if (linkedHasColors && linked.colorVariants) {
+          const validChosen = chosenColors.filter((colName) =>
+            linked.colorVariants!.some(
+              (v) =>
+                v.colorName.trim().toLowerCase() === colName.trim().toLowerCase()
+            )
+          );
+          const effectiveColorNames =
+            validChosen.length > 0
+              ? validChosen
+              : [linked.colorVariants[0].colorName];
+          const filteredVariants = linked.colorVariants.filter((v) =>
+            effectiveColorNames.some(
+              (c) => c.trim().toLowerCase() === v.colorName.trim().toLowerCase()
+            )
+          );
+          const leadVar = filteredVariants[0] || linked.colorVariants[0];
+          const leadSizes =
+            Array.isArray(leadVar.sizes) && leadVar.sizes.length > 0
+              ? [...leadVar.sizes]
+              : [...linked.sizes];
+          const leadQtyMap = buildSizeQuantitiesMap(
+            leadSizes,
+            leadVar.sizeQuantities
+          );
+          return {
+            productId: linked.id,
+            productName: linked.name,
+            pieceLabel: fallbackLabel.trim() || linked.category || 'Piece',
+            sizeType: leadVar.sizeType || linked.sizeType,
+            sizes: leadSizes,
+            sizeQuantities: leadQtyMap,
+            selectedColors: filteredVariants.map((v) => v.colorName),
+            colorVariants: filteredVariants.map((v) => ({
+              ...v,
+              sizes: [...v.sizes],
+              sizeQuantities: { ...v.sizeQuantities },
+            })),
+          };
+        }
 
-      const p2QtyMap: Record<string, number> = {};
-      for (const sz of p2Sizes) {
-        p2QtyMap[sz] = prod2.sizes.includes(sz) ? getSizeQuantity(prod2, sz) : 5;
-      }
+        const pSizes = [...linked.sizes];
+        const pQtyMap: Record<string, number> = {};
+        for (const sz of pSizes) {
+          pQtyMap[sz] = getSizeQuantity(linked, sz);
+        }
+        return {
+          productId: linked.id,
+          productName: linked.name,
+          pieceLabel: fallbackLabel.trim() || linked.category || 'Piece',
+          sizeType: linked.sizeType,
+          sizes: pSizes,
+          sizeQuantities: pQtyMap,
+          selectedColors: [],
+          colorVariants: [],
+        };
+      };
 
-      const setItemsPayload: FullSetSubItem[] = [
-        {
-          productId: prod1.id,
-          productName: prod1.name,
-          pieceLabel: setPiece1Label.trim() || prod1.category || 'Piece 1',
-          sizeType: setPiece1SizeType,
-          sizes: p1Sizes,
-          sizeQuantities: p1QtyMap,
-        },
-        {
-          productId: prod2.id,
-          productName: prod2.name,
-          pieceLabel: setPiece2Label.trim() || prod2.category || 'Piece 2',
-          sizeType: setPiece2SizeType,
-          sizes: p2Sizes,
-          sizeQuantities: p2QtyMap,
-        },
-      ];
+      const sub1 = buildPieceSubItem(
+        prod1,
+        setPiece1Colors,
+        setPiece1Label || prod1.category || 'Shirt / Top'
+      );
+      const sub2 = buildPieceSubItem(
+        prod2,
+        setPiece2Colors,
+        setPiece2Label || prod2.category || 'Trousers / Bottom'
+      );
+      const setItemsPayload: FullSetSubItem[] = [sub1, sub2];
 
-      const total1 = sumSizeQuantities(p1Sizes, p1QtyMap);
-      const total2 = sumSizeQuantities(p2Sizes, p2QtyMap);
+      const computeSubTotal = (sub: FullSetSubItem): number => {
+        if (Array.isArray(sub.colorVariants) && sub.colorVariants.length > 0) {
+          return sub.colorVariants.reduce(
+            (acc, v) => acc + sumSizeQuantities(v.sizes, v.sizeQuantities),
+            0
+          );
+        }
+        return sumSizeQuantities(sub.sizes, sub.sizeQuantities);
+      };
+
+      const total1 = computeSubTotal(sub1);
+      const total2 = computeSubTotal(sub2);
       const minSetTotal = Math.min(total1, total2);
 
       const autoGallery =
@@ -887,7 +1042,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         style: itemStyle,
         price: numericPrice,
         quantity: minSetTotal,
-        sizeQuantities: p1QtyMap,
+        sizeQuantities: sub1.sizeQuantities,
         hasColors: false,
         colorVariants: [],
         isFullSet: true,
@@ -897,9 +1052,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         discountValue: numericDiscountVal,
         imageUrl: itemUrl.trim() || prod1.imageUrl || fallbackStudioUri,
         galleryUrls: autoGallery.slice(0, 3),
-        sizeType: setPiece1SizeType,
-        sizes: p1Sizes,
-        materials: effectiveMaterials,
+        sizeType: sub1.sizeType,
+        sizes: sub1.sizes,
+        materials: [],
         description:
           itemDescription.trim() ||
           `${cleanName} — Coordinated 2-piece SAMO Full Set linking ${prod1.name} and ${prod2.name}.`,
@@ -1545,14 +1700,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             >
               Sign In with Google (Authorized Admin)
             </button>
-
-            <button
-              type="button"
-              onClick={onUnlockAiAdmin}
-              className="w-full py-3.5 px-4 bg-zinc-800 text-white border border-zinc-700 rounded-xl text-xs font-bold tracking-[0.12em] uppercase hover:bg-zinc-700 transition-colors cursor-pointer"
-            >
-              Enter as Authorized Owner Session
-            </button>
           </div>
 
           <p className="text-[11px] text-zinc-500 leading-relaxed">
@@ -2006,6 +2153,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </div>
                 </div>
               </div>
+
+              <button
+                type="button"
+                onClick={onSignOut}
+                data-testid="admin-header-logout-btn"
+                title="Log Out of Admin Dashboard"
+                className="px-3 py-1.5 rounded-lg bg-zinc-900 hover:bg-red-950/80 text-zinc-200 hover:text-red-200 border border-zinc-800 hover:border-red-800/70 text-[11px] font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                <span>Log Out</span>
+              </button>
             </div>
           </div>
         </header>
@@ -2130,6 +2288,73 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </button>
                 </div>
               </div>
+
+              {/* Product Section Toggle: Show "1 left / 2 left" Low-Stock Indicator on Live Product Pop-Up (ONLY in Products section, OFF by default) */}
+              {activeTab === 'items' && (
+                <div className="bg-[#18181C] border border-zinc-800/90 rounded-2xl p-4 sm:px-5 sm:py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="flex items-start sm:items-center gap-3.5">
+                    <div className="w-9 h-9 rounded-xl bg-zinc-900 border border-zinc-700 flex items-center justify-center text-white shrink-0">
+                      <Package className="w-4 h-4" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-xs sm:text-sm font-bold text-white">
+                          Show &ldquo;1 Left / 2 Left&rdquo; on Product Pop-Up
+                        </span>
+                        <span
+                          className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+                            showLowStockCount
+                              ? 'bg-emerald-950/90 text-emerald-300 border border-emerald-700/70'
+                              : 'bg-zinc-800 text-zinc-400 border border-zinc-700'
+                          }`}
+                        >
+                          {showLowStockCount
+                            ? 'ON · Showing on Live Website'
+                            : 'OFF · Hidden on Live Website'}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-zinc-400 mt-0.5">
+                        {showLowStockCount
+                          ? 'Sizes with only 1 or 2 pieces remaining display "1 left" or "2 left" inside the customer product pop-up.'
+                          : 'Currently OFF — "1 left" and "2 left" low-stock counts are hidden from customers on the live website product pop-up.'}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between sm:justify-end gap-3 pt-2 sm:pt-0 border-t sm:border-t-0 border-zinc-800/80 shrink-0">
+                    <span className="text-xs font-semibold text-zinc-300">
+                      {showLowStockCount
+                        ? '1 Left / 2 Left ON'
+                        : '1 Left / 2 Left OFF'}
+                    </span>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={showLowStockCount}
+                      data-testid="toggle-show-low-stock"
+                      aria-label="Toggle 1 left and 2 left indicator on product pop-up"
+                      onClick={() => {
+                        if (onToggleShowLowStockCount) {
+                          onToggleShowLowStockCount(!showLowStockCount);
+                        }
+                      }}
+                      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border transition-colors duration-200 items-center ${
+                        showLowStockCount
+                          ? 'bg-white border-white'
+                          : 'bg-zinc-800 border-zinc-700'
+                      }`}
+                    >
+                      <span
+                        className={`inline-block h-4 w-4 transform rounded-full transition-transform duration-200 ${
+                          showLowStockCount
+                            ? 'translate-x-5 bg-zinc-950'
+                            : 'translate-x-1 bg-zinc-400'
+                        }`}
+                      />
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {/* Quick Categories Row (Matches Reference Image + Edit Category Name Button) */}
               <div className="space-y-2.5">
@@ -4570,6 +4795,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
             {(() => {
               const prod = editingProduct;
+              const isEditingFullSet =
+                prod.department === 'women' &&
+                (Boolean(prod.isFullSet) ||
+                  prod.category.trim().toLowerCase() === 'full set');
               const hasColors =
                 Boolean(prod.hasColors) &&
                 Array.isArray(prod.colorVariants) &&
@@ -4706,11 +4935,75 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       </div>
                     </div>
 
+                    {/* Show in New Arrivals Checkbox (Keep in original category & toggle New Arrivals showcase) */}
+                    <div className="p-3 bg-white border border-zinc-300 rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <label className="flex items-start sm:items-center gap-2.5 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(prod.isNewArrival)}
+                          onChange={(e) =>
+                            onUpdateProductMeta(prod.id, {
+                              isNewArrival: e.target.checked,
+                              featured: e.target.checked,
+                            })
+                          }
+                          className="w-4 h-4 mt-0.5 sm:mt-0 accent-zinc-950 cursor-pointer shrink-0"
+                        />
+                        <div>
+                          <span className="block text-xs font-bold uppercase tracking-wider text-zinc-950">
+                            Show in New Arrivals (/new-arrivals)
+                          </span>
+                          <span className="block text-[11px] text-zinc-500">
+                            Uncheck to remove this product from New Arrivals while keeping it in its category ({prod.category}).
+                          </span>
+                        </div>
+                      </label>
+                      <span
+                        className={`px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider self-start sm:self-center shrink-0 ${
+                          prod.isNewArrival
+                            ? 'bg-zinc-950 text-white'
+                            : 'bg-zinc-100 text-zinc-500 border border-zinc-300'
+                        }`}
+                      >
+                        {prod.isNewArrival ? 'In New Arrivals' : `${prod.category} Only`}
+                      </span>
+                    </div>
+
                     {/* Description Editor */}
                     <div>
-                      <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-700 mb-1">
-                        Product Notes / Description
-                      </label>
+                      <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-700">
+                          Product Notes / Description
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const nextVar = draftVariationIndex + 1;
+                            setDraftVariationIndex(nextVar);
+                            const drafted = buildEditorialProductDescription(
+                              {
+                                name: prod.name,
+                                department: prod.department,
+                                category: prod.category,
+                                style: prod.style,
+                                materials: prod.materials || [],
+                                colors:
+                                  prod.hasColors && Array.isArray(prod.colorVariants)
+                                    ? prod.colorVariants.map((v) => v.colorName)
+                                    : [],
+                              },
+                              nextVar - 1
+                            );
+                            onUpdateProductMeta(prod.id, {
+                              description: drafted,
+                            });
+                          }}
+                          className="px-2.5 py-1 rounded-md bg-zinc-950 text-white hover:bg-zinc-800 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 cursor-pointer"
+                        >
+                          <Sparkles className="w-3 h-3" />
+                          <span>Auto-Draft Editorial Notes</span>
+                        </button>
+                      </div>
                       <textarea
                         rows={2}
                         value={prod.description || ''}
@@ -4725,156 +5018,132 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       />
                     </div>
 
-                    {/* Materials Editor (With Checkbox to Add / Hide Material on Website) */}
-                    <div className="space-y-2.5 pt-2 border-t border-zinc-200">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <label className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-zinc-950 cursor-pointer select-none">
-                          <input
-                            type="checkbox"
-                            checked={(prod.materials || []).length > 0}
-                            onChange={(e) => {
-                              const checked = e.target.checked;
-                              if (checked) {
-                                const defaultMat =
-                                  allMaterials[0] || 'Cow Leather';
-                                onUpdateProductMeta(prod.id, {
-                                  materials: [defaultMat],
-                                });
-                              } else {
-                                onUpdateProductMeta(prod.id, {
-                                  materials: [],
-                                });
-                              }
-                            }}
-                            className="w-4 h-4 accent-zinc-950 cursor-pointer"
-                          />
-                          <span>Add / Show Material on Website</span>
-                        </label>
-                        {(prod.materials || []).length > 0 && (
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">
-                            {(prod.materials || []).length} Selected
-                          </span>
-                        )}
-                      </div>
-
-                      {(prod.materials || []).length > 0 && (
-                        <>
-                          <div className="flex flex-wrap gap-1.5">
-                            {allMaterials.map((mat) => {
-                              const active = (prod.materials || []).includes(
-                                mat
-                              );
-                              return (
-                                <button
-                                  key={mat}
-                                  type="button"
-                                  onClick={() => {
-                                    const currentMats = prod.materials || [];
-                                    const nextMats = active
-                                      ? currentMats.filter((m) => m !== mat)
-                                      : [...currentMats, mat];
-                                    onUpdateProductMeta(prod.id, {
-                                      materials: nextMats,
-                                    });
-                                  }}
-                                  className={`px-2 py-1 text-[10px] font-semibold border flex items-center gap-1 cursor-pointer ${
-                                    active
-                                      ? 'bg-zinc-950 text-white border-zinc-950'
-                                      : 'bg-white text-zinc-700 border-zinc-300'
-                                  }`}
-                                >
-                                  {active && <Check className="w-2.5 h-2.5" />}
-                                  <span>{mat}</span>
-                                </button>
-                              );
-                            })}
-                          </div>
-                          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-1.5">
+                    {/* Materials Editor (With Checkbox to Add / Hide Material on Website) — Hidden for Full Set */}
+                    {!isEditingFullSet && (
+                      <div className="space-y-2.5 pt-2 border-t border-zinc-200">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <label className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-zinc-950 cursor-pointer select-none">
                             <input
-                              type="text"
-                              value={editProdNewMaterialInput}
-                              onChange={(e) =>
-                                setEditProdNewMaterialInput(e.target.value)
-                              }
-                              placeholder="Add custom material..."
-                              className="w-full sm:flex-1 min-w-0 px-2.5 py-1.5 text-xs bg-white border border-zinc-300"
-                            />
-                            <button
-                              type="button"
-                              onClick={async () => {
-                                const clean = editProdNewMaterialInput.trim();
-                                if (!clean) return;
-                                await onAddCustomMaterial(clean);
-                                const currentMats = prod.materials || [];
-                                if (!currentMats.includes(clean)) {
-                                  await onUpdateProductMeta(prod.id, {
-                                    materials: [...currentMats, clean],
+                              type="checkbox"
+                              checked={(prod.materials || []).length > 0}
+                              onChange={(e) => {
+                                const checked = e.target.checked;
+                                if (checked) {
+                                  const defaultMat =
+                                    allMaterials[0] || 'Cow Leather';
+                                  onUpdateProductMeta(prod.id, {
+                                    materials: [defaultMat],
+                                  });
+                                } else {
+                                  onUpdateProductMeta(prod.id, {
+                                    materials: [],
                                   });
                                 }
-                                setEditProdNewMaterialInput('');
                               }}
-                              className="px-3 py-1.5 bg-zinc-900 text-white text-[10px] font-bold uppercase cursor-pointer whitespace-nowrap shrink-0"
-                            >
-                              + Add Material
-                            </button>
-                          </div>
-                        </>
-                      )}
-                    </div>
+                              className="w-4 h-4 accent-zinc-950 cursor-pointer"
+                            />
+                            <span>Add / Show Material on Website</span>
+                          </label>
+                          {(prod.materials || []).length > 0 && (
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">
+                              {(prod.materials || []).length} Selected
+                            </span>
+                          )}
+                        </div>
+
+                        {(prod.materials || []).length > 0 && (
+                          <>
+                            <div className="flex flex-wrap gap-1.5">
+                              {allMaterials.map((mat) => {
+                                const active = (prod.materials || []).includes(
+                                  mat
+                                );
+                                return (
+                                  <button
+                                    key={mat}
+                                    type="button"
+                                    onClick={() => {
+                                      const currentMats = prod.materials || [];
+                                      const nextMats = active
+                                        ? currentMats.filter((m) => m !== mat)
+                                        : [...currentMats, mat];
+                                      onUpdateProductMeta(prod.id, {
+                                        materials: nextMats,
+                                      });
+                                    }}
+                                    className={`px-2 py-1 text-[10px] font-semibold border flex items-center gap-1 cursor-pointer ${
+                                      active
+                                        ? 'bg-zinc-950 text-white border-zinc-950'
+                                        : 'bg-white text-zinc-700 border-zinc-300'
+                                    }`}
+                                  >
+                                    {active && <Check className="w-2.5 h-2.5" />}
+                                    <span>{mat}</span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-1.5">
+                              <input
+                                type="text"
+                                value={editProdNewMaterialInput}
+                                onChange={(e) =>
+                                  setEditProdNewMaterialInput(e.target.value)
+                                }
+                                placeholder="Add custom material..."
+                                className="w-full sm:flex-1 min-w-0 px-2.5 py-1.5 text-xs bg-white border border-zinc-300"
+                              />
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  const clean = editProdNewMaterialInput.trim();
+                                  if (!clean) return;
+                                  await onAddCustomMaterial(clean);
+                                  const currentMats = prod.materials || [];
+                                  if (!currentMats.includes(clean)) {
+                                    await onUpdateProductMeta(prod.id, {
+                                      materials: [...currentMats, clean],
+                                    });
+                                  }
+                                  setEditProdNewMaterialInput('');
+                                }}
+                                className="px-3 py-1.5 bg-zinc-900 text-white text-[10px] font-bold uppercase cursor-pointer whitespace-nowrap shrink-0"
+                              >
+                                + Add Material
+                              </button>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   {/* Placement Checkboxes & Color Variant Toggle */}
-                  <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 bg-zinc-50 border border-zinc-200 rounded-xl">
-                    <label className="flex items-center gap-2 font-bold uppercase tracking-wider text-zinc-900 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={hasColors}
-                        onChange={(e) =>
-                          handleToggleCatalogProductColorMode(
-                            prod,
-                            e.target.checked
-                          )
-                        }
-                        className="w-4 h-4 accent-zinc-950 cursor-pointer"
-                      />
-                      <span>Enable Multi-Color Variants</span>
-                    </label>
+                  {!isEditingFullSet && (
+                    <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 bg-zinc-50 border border-zinc-200 rounded-xl">
+                      <label className="flex items-center gap-2 font-bold uppercase tracking-wider text-zinc-900 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={hasColors}
+                          onChange={(e) =>
+                            handleToggleCatalogProductColorMode(
+                              prod,
+                              e.target.checked
+                            )
+                          }
+                          className="w-4 h-4 accent-zinc-950 cursor-pointer"
+                        />
+                        <span>Enable Multi-Color Variants</span>
+                      </label>
 
-                    <div className="flex flex-wrap items-center gap-4">
-                      {prod.department === 'women' && (
-                        <label className="flex items-center gap-1.5 font-bold uppercase tracking-wider text-zinc-800 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={Boolean(
-                              prod.isFullSet ||
-                                prod.category.trim().toLowerCase() ===
-                                  'full set'
-                            )}
-                            onChange={(e) => {
-                              const checked = e.target.checked;
-                              onUpdateProductMeta(prod.id, {
-                                isFullSet: checked,
-                                ...(checked
-                                  ? { category: 'Full Set' }
-                                  : prod.category.trim().toLowerCase() ===
-                                    'full set'
-                                  ? { category: 'Jacket' }
-                                  : {}),
-                              });
-                            }}
-                            className="w-4 h-4 accent-zinc-950 cursor-pointer"
-                          />
-                          <span>Show in Full Set</span>
-                        </label>
-                      )}
-
-                      <label className="flex items-center gap-1.5 font-bold uppercase tracking-wider text-zinc-800 cursor-pointer">
+                      <label className="flex items-center gap-1.5 font-bold uppercase tracking-wider text-zinc-800 cursor-pointer select-none">
                         <input
                           type="checkbox"
                           checked={Boolean(prod.isNewArrival)}
                           onChange={(e) =>
                             onUpdateProductMeta(prod.id, {
                               isNewArrival: e.target.checked,
+                              featured: e.target.checked,
                             })
                           }
                           className="w-4 h-4 accent-zinc-950 cursor-pointer"
@@ -4882,10 +5151,346 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         <span>Show in New Arrivals</span>
                       </label>
                     </div>
-                  </div>
+                  )}
+
+                  {/* 2-Piece Full Set Linked Items & Colors Editor */}
+                  {isEditingFullSet && (
+                    <div className="p-4 bg-zinc-50 border-2 border-zinc-950 rounded-xl space-y-4">
+                      <div className="flex items-center justify-between border-b border-zinc-200 pb-2.5">
+                        <div>
+                          <div className="text-xs font-extrabold uppercase tracking-wider text-zinc-950 flex items-center gap-1.5">
+                            <Layers className="w-4 h-4" />
+                            <span>
+                              2-Piece Full Set Linked Items &amp; Colors
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-zinc-600 mt-0.5">
+                            Sizes, colors, and stock quantities are synced from
+                            the two linked store items below. When a customer
+                            buys this Full Set, stock is deducted from both
+                            original items.
+                          </p>
+                        </div>
+                      </div>
+
+                      {[0, 1].map((pieceIdx) => {
+                        const currentSetItems: FullSetSubItem[] =
+                          Array.isArray(prod.setItems) &&
+                          prod.setItems.length >= 2
+                            ? prod.setItems
+                            : [
+                                prod.setItems?.[0] || {
+                                  productId:
+                                    allStandaloneProducts[0]?.id || '',
+                                  productName:
+                                    allStandaloneProducts[0]?.name ||
+                                    'Piece 1',
+                                  pieceLabel: 'Top / Shirt',
+                                  sizeType:
+                                    allStandaloneProducts[0]?.sizeType ||
+                                    'letter',
+                                  sizes:
+                                    allStandaloneProducts[0]?.sizes || ['S', 'M'],
+                                  sizeQuantities:
+                                    allStandaloneProducts[0]?.sizeQuantities ||
+                                    {},
+                                },
+                                prod.setItems?.[1] || {
+                                  productId:
+                                    allStandaloneProducts[1]?.id ||
+                                    allStandaloneProducts[0]?.id ||
+                                    '',
+                                  productName:
+                                    allStandaloneProducts[1]?.name ||
+                                    'Piece 2',
+                                  pieceLabel: 'Bottom / Trousers',
+                                  sizeType:
+                                    allStandaloneProducts[1]?.sizeType ||
+                                    'numeric',
+                                  sizes:
+                                    allStandaloneProducts[1]?.sizes || [
+                                      '36',
+                                      '38',
+                                    ],
+                                  sizeQuantities:
+                                    allStandaloneProducts[1]?.sizeQuantities ||
+                                    {},
+                                },
+                              ];
+
+                        const piece = currentSetItems[pieceIdx];
+                        const linkedProd =
+                          allStandaloneProducts.find(
+                            (p) => p.id === piece?.productId
+                          ) ||
+                          allStandaloneProducts[pieceIdx] ||
+                          allStandaloneProducts[0];
+
+                        const linkedHasColors =
+                          Boolean(linkedProd?.hasColors) &&
+                          Array.isArray(linkedProd?.colorVariants) &&
+                          linkedProd!.colorVariants!.length > 0;
+
+                        const activeColorNames: string[] = linkedHasColors
+                          ? Array.isArray(piece?.selectedColors) &&
+                            piece.selectedColors.length > 0
+                            ? piece.selectedColors
+                            : [linkedProd!.colorVariants![0].colorName]
+                          : [];
+
+                        const handleUpdateEditFullSetPiece = (
+                          nextProd: ProductItem,
+                          nextLabel: string,
+                          nextColorNames: string[]
+                        ) => {
+                          const nextHasColors =
+                            Boolean(nextProd.hasColors) &&
+                            Array.isArray(nextProd.colorVariants) &&
+                            nextProd.colorVariants.length > 0;
+                          const resolvedColors = nextHasColors
+                            ? nextColorNames.length > 0
+                              ? nextColorNames
+                              : [nextProd.colorVariants![0].colorName]
+                            : [];
+                          const filteredVars = nextHasColors
+                            ? nextProd.colorVariants!.filter((v) =>
+                                resolvedColors.some(
+                                  (c) =>
+                                    c.trim().toLowerCase() ===
+                                    v.colorName.trim().toLowerCase()
+                                )
+                              )
+                            : [];
+                          const leadVar =
+                            filteredVars[0] || nextProd.colorVariants?.[0];
+                          const nextSizes =
+                            nextHasColors && leadVar
+                              ? [...leadVar.sizes]
+                              : [...nextProd.sizes];
+                          const nextQtyMap =
+                            nextHasColors && leadVar
+                              ? buildSizeQuantitiesMap(
+                                  nextSizes,
+                                  leadVar.sizeQuantities
+                                )
+                              : buildSizeQuantitiesMap(
+                                  nextSizes,
+                                  nextProd.sizeQuantities
+                                );
+
+                          const updatedSub: FullSetSubItem = {
+                            productId: nextProd.id,
+                            productName: nextProd.name,
+                            pieceLabel:
+                              nextLabel.trim() ||
+                              nextProd.category ||
+                              `Piece ${pieceIdx + 1}`,
+                            sizeType:
+                              (nextHasColors && leadVar?.sizeType) ||
+                              nextProd.sizeType,
+                            sizes: nextSizes,
+                            sizeQuantities: nextQtyMap,
+                            selectedColors: filteredVars.map(
+                              (v) => v.colorName
+                            ),
+                            colorVariants: filteredVars.map((v) => ({
+                              ...v,
+                              sizes: [...v.sizes],
+                              sizeQuantities: { ...v.sizeQuantities },
+                            })),
+                          };
+
+                          const nextSetItems = [...currentSetItems];
+                          nextSetItems[pieceIdx] = updatedSub;
+                          onUpdateProductMeta(prod.id, {
+                            isFullSet: true,
+                            materials: [],
+                            hasColors: false,
+                            colorVariants: [],
+                            setItems: nextSetItems,
+                          });
+                        };
+
+                        return (
+                          <div
+                            key={pieceIdx}
+                            className="p-3.5 bg-white border border-zinc-300 rounded-lg space-y-3"
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="text-[11px] font-extrabold uppercase tracking-wider text-zinc-950">
+                                Piece {pieceIdx + 1}:{' '}
+                                {pieceIdx === 0
+                                  ? 'Shirt / Top / Jacket'
+                                  : 'Trousers / Skirt / Bottom'}
+                              </span>
+                              {linkedProd && (
+                                <span className="text-[10px] font-mono-tabular text-zinc-500 uppercase">
+                                  Category: {linkedProd.category}
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                              <div>
+                                <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-700 mb-1">
+                                  Select Item from Any Category *
+                                </label>
+                                <select
+                                  value={linkedProd?.id || ''}
+                                  onChange={(e) => {
+                                    const picked = allStandaloneProducts.find(
+                                      (p) => p.id === e.target.value
+                                    );
+                                    if (!picked) return;
+                                    const defaultCols =
+                                      picked.hasColors &&
+                                      picked.colorVariants?.length
+                                        ? [picked.colorVariants[0].colorName]
+                                        : [];
+                                    handleUpdateEditFullSetPiece(
+                                      picked,
+                                      picked.category ||
+                                        `Piece ${pieceIdx + 1}`,
+                                      defaultCols
+                                    );
+                                  }}
+                                  className="w-full px-2.5 py-1.5 text-xs bg-white border border-zinc-300"
+                                >
+                                  {allStandaloneProducts.map((sp) => (
+                                    <option key={sp.id} value={sp.id}>
+                                      [{sp.department.toUpperCase()} ·{' '}
+                                      {sp.category}] {sp.name} (${sp.price})
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+
+                              <div>
+                                <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-700 mb-1">
+                                  Piece Label Shown on Website
+                                </label>
+                                <input
+                                  type="text"
+                                  value={piece?.pieceLabel || ''}
+                                  onChange={(e) => {
+                                    if (!linkedProd) return;
+                                    handleUpdateEditFullSetPiece(
+                                      linkedProd,
+                                      e.target.value,
+                                      activeColorNames
+                                    );
+                                  }}
+                                  placeholder={
+                                    pieceIdx === 0
+                                      ? 'e.g. Shirt / Top'
+                                      : 'e.g. Trousers / Pants'
+                                  }
+                                  className="w-full px-2.5 py-1.5 text-xs bg-white border border-zinc-300"
+                                />
+                              </div>
+                            </div>
+
+                            {linkedHasColors && linkedProd?.colorVariants && (
+                              <div className="p-2.5 bg-zinc-50 border border-zinc-200 rounded space-y-2">
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                  <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-800">
+                                    Colors to Show in Full Set for{' '}
+                                    {linkedProd.name} (Defaults to 1st color if
+                                    none selected):
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const allColNames =
+                                        linkedProd.colorVariants!.map(
+                                          (v) => v.colorName
+                                        );
+                                      handleUpdateEditFullSetPiece(
+                                        linkedProd,
+                                        piece?.pieceLabel ||
+                                          linkedProd.category,
+                                        allColNames
+                                      );
+                                    }}
+                                    className="px-2 py-0.5 bg-zinc-900 text-white text-[10px] font-bold uppercase cursor-pointer"
+                                  >
+                                    Select All Colors
+                                  </button>
+                                </div>
+
+                                <div className="flex flex-wrap gap-1.5">
+                                  {linkedProd.colorVariants.map((cv) => {
+                                    const isColSelected = activeColorNames.some(
+                                      (c) =>
+                                        c.trim().toLowerCase() ===
+                                        cv.colorName.trim().toLowerCase()
+                                    );
+                                    return (
+                                      <button
+                                        key={cv.colorName}
+                                        type="button"
+                                        onClick={() => {
+                                          const exists = activeColorNames.some(
+                                            (c) =>
+                                              c.trim().toLowerCase() ===
+                                              cv.colorName.trim().toLowerCase()
+                                          );
+                                          const nextCols = exists
+                                            ? activeColorNames.filter(
+                                                (c) =>
+                                                  c.trim().toLowerCase() !==
+                                                  cv.colorName
+                                                    .trim()
+                                                    .toLowerCase()
+                                              )
+                                            : [
+                                                ...activeColorNames,
+                                                cv.colorName,
+                                              ];
+                                          handleUpdateEditFullSetPiece(
+                                            linkedProd,
+                                            piece?.pieceLabel ||
+                                              linkedProd.category,
+                                            nextCols.length > 0
+                                              ? nextCols
+                                              : [
+                                                  linkedProd.colorVariants![0]
+                                                    .colorName,
+                                                ]
+                                          );
+                                        }}
+                                        className={`px-2.5 py-1 text-[10px] font-bold uppercase border flex items-center gap-1.5 cursor-pointer ${
+                                          isColSelected
+                                            ? 'bg-zinc-950 text-white border-zinc-950'
+                                            : 'bg-white text-zinc-700 border-zinc-300'
+                                        }`}
+                                      >
+                                        <span
+                                          className="w-2.5 h-2.5 rounded-full border border-zinc-400 shrink-0"
+                                          style={{
+                                            backgroundColor:
+                                              cv.colorHex ||
+                                              getColorSwatchHex(cv.colorName),
+                                          }}
+                                        />
+                                        <span>{cv.colorName}</span>
+                                        {isColSelected && (
+                                          <Check className="w-2.5 h-2.5" />
+                                        )}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
 
                   {/* Per-Size or Per-Color Stock Controls */}
-                  {hasColors && prod.colorVariants ? (
+                  {!isEditingFullSet && (hasColors && prod.colorVariants ? (
                     <div className="p-4 bg-zinc-50 border border-zinc-200 rounded-xl space-y-3">
                       <div className="font-bold uppercase tracking-wider text-zinc-900">
                         Select Active Colors for {prod.name}:
@@ -5038,12 +5643,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             ] ||
                             getColorSwatchHex(variant.colorName);
                           const sizeInputKey = `${prod.id}-${variant.colorName}`;
-                          const presetList =
-                            variant.sizeType === 'letter'
-                              ? LETTER_SIZES
-                              : variant.sizeType === 'numeric'
-                              ? NUMERIC_SIZES
-                              : CM_SIZES;
+                          const presetList = getPresetsForSizeType(
+                            variant.sizeType
+                          );
                           const gUrls = variant.galleryUrls || [];
                           return (
                             <div
@@ -5283,13 +5885,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                 ))}
                               </div>
 
-                              {/* 3 Size Type Buttons for this Color */}
+                              {/* 4 Size Type Buttons for this Color */}
                               <div className="space-y-2">
                                 <span className="block text-[10px] font-bold uppercase tracking-wider text-zinc-800">
                                   Size Type for {variant.colorName} (Choose
-                                  Letter, Number, or Kids CM):
+                                  Letter, Number, Months, or Years):
                                 </span>
-                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5">
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
                                   {(
                                     [
                                       {
@@ -5301,8 +5903,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                         label: '2. Number (36, 38...)',
                                       },
                                       {
-                                        id: 'cm',
-                                        label: '3. Kids CM (100 cm)',
+                                        id: 'months',
+                                        label: '3. Months (Baby)',
+                                      },
+                                      {
+                                        id: 'years',
+                                        label: '4. Years (Kids)',
                                       },
                                     ] as { id: SizeType; label: string }[]
                                   ).map((st) => (
@@ -5311,7 +5917,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                       type="button"
                                       onClick={() => {
                                         const nextSizes =
-                                          getDefaultSizesForType(st.id);
+                                          getPresetsForSizeType(st.id);
                                         handleCatalogVariantChange(
                                           prod,
                                           variant.colorName,
@@ -5385,7 +5991,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                 </div>
                               </div>
 
-                              {/* Per-Size Stock & Custom Size Input */}
+                              {/* Per-Size Stock (Writable Input + Minus/Plus) & Custom Size Input */}
                               <div className="flex flex-wrap items-center gap-1.5 pt-1">
                                 {variant.sizes.map((sz) => {
                                   const q = variant.sizeQuantities?.[sz] ?? 5;
@@ -5417,13 +6023,41 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                             })
                                           )
                                         }
+                                        aria-label={`Decrease quantity for ${prod.name} (${variant.colorName}) size ${sz}`}
                                         className="p-0.5 hover:bg-zinc-200 cursor-pointer"
                                       >
                                         <Minus className="w-2.5 h-2.5" />
                                       </button>
-                                      <span className="px-1 font-bold">
-                                        {q}
-                                      </span>
+                                      <input
+                                        type="number"
+                                        min="0"
+                                        value={q}
+                                        aria-label={`Quantity for ${prod.name} (${variant.colorName}) size ${sz}`}
+                                        onChange={(e) => {
+                                          const rawVal = e.target.value;
+                                          const parsed =
+                                            rawVal === ''
+                                              ? 0
+                                              : Math.max(
+                                                  0,
+                                                  Math.floor(
+                                                    Number(rawVal) || 0
+                                                  )
+                                                );
+                                          handleCatalogVariantChange(
+                                            prod,
+                                            variant.colorName,
+                                            (v) => ({
+                                              ...v,
+                                              sizeQuantities: {
+                                                ...v.sizeQuantities,
+                                                [sz]: parsed,
+                                              },
+                                            })
+                                          );
+                                        }}
+                                        className="w-12 px-1 py-0.5 text-center font-mono-tabular font-bold bg-white border border-zinc-300 text-zinc-950 focus:border-zinc-950 focus:outline-none"
+                                      />
                                       <button
                                         type="button"
                                         onClick={() =>
@@ -5439,6 +6073,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                             })
                                           )
                                         }
+                                        aria-label={`Increase quantity for ${prod.name} (${variant.colorName}) size ${sz}`}
                                         className="p-0.5 hover:bg-zinc-200 cursor-pointer"
                                       >
                                         <Plus className="w-2.5 h-2.5" />
@@ -5460,7 +6095,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                         [sizeInputKey]: e.target.value,
                                       }))
                                     }
-                                    placeholder="Custom size (e.g. 103 cm, 36, XXL)"
+                                    placeholder={
+                                      variant.sizeType === 'months'
+                                        ? 'Custom Months (e.g. 0-3 Months)'
+                                        : variant.sizeType === 'years'
+                                        ? 'Custom Years (e.g. 10-11 Years)'
+                                        : 'Custom size (e.g. 36, XXL)'
+                                    }
                                     className="flex-1 sm:w-44 min-w-0 px-2 py-1 text-[10px] border border-zinc-300"
                                   />
                                   <button
@@ -5476,6 +6117,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                         variant.sizeType
                                       );
                                       if (!normalized) return;
+                                      registerCustomSizePreset(
+                                        variant.sizeType,
+                                        normalized
+                                      );
                                       handleCatalogVariantChange(
                                         prod,
                                         variant.colorName,
@@ -5515,20 +6160,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         {prod.sizeType}):
                       </span>
 
-                      {/* 3 Size Type Buttons for Single-Color Product */}
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5">
+                      {/* 4 Size Type Buttons for Single-Color Product */}
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
                         {(
                           [
                             { id: 'letter', label: '1. Letter (XS–XL)' },
                             { id: 'numeric', label: '2. Number (36, 38...)' },
-                            { id: 'cm', label: '3. Kids CM (100 cm)' },
+                            { id: 'months', label: '3. Months (Baby)' },
+                            { id: 'years', label: '4. Years (Kids)' },
                           ] as { id: SizeType; label: string }[]
                         ).map((st) => (
                           <button
                             key={st.id}
                             type="button"
                             onClick={() => {
-                              const nextSizes = getDefaultSizesForType(st.id);
+                              const nextSizes = getPresetsForSizeType(st.id);
                               onUpdateProductMeta(prod.id, {
                                 sizeType: st.id,
                                 sizes: nextSizes,
@@ -5551,44 +6197,41 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
                       {/* Preset Sizes Toggle for Single-Color Product */}
                       <div className="flex flex-wrap gap-1.5">
-                        {(prod.sizeType === 'letter'
-                          ? LETTER_SIZES
-                          : prod.sizeType === 'numeric'
-                          ? NUMERIC_SIZES
-                          : CM_SIZES
-                        ).map((presetSz) => {
-                          const active = prod.sizes.includes(presetSz);
-                          return (
-                            <button
-                              key={presetSz}
-                              type="button"
-                              onClick={() => {
-                                const nextSizes = active
-                                  ? prod.sizes.filter((s) => s !== presetSz)
-                                  : [...prod.sizes, presetSz];
-                                if (nextSizes.length === 0) return;
-                                onUpdateProductMeta(prod.id, {
-                                  sizes: nextSizes,
-                                  sizeQuantities: buildSizeQuantitiesMap(
-                                    nextSizes,
-                                    prod.sizeQuantities
-                                  ),
-                                });
-                              }}
-                              className={`px-2 py-1 text-[10px] font-mono-tabular font-semibold border flex items-center gap-1 cursor-pointer ${
-                                active
-                                  ? 'bg-zinc-950 text-white border-zinc-950'
-                                  : 'bg-white text-zinc-700 border-zinc-300'
-                              }`}
-                            >
-                              {active && <Check className="w-2.5 h-2.5" />}
-                              <span>{presetSz}</span>
-                            </button>
-                          );
-                        })}
+                        {getPresetsForSizeType(prod.sizeType).map(
+                          (presetSz) => {
+                            const active = prod.sizes.includes(presetSz);
+                            return (
+                              <button
+                                key={presetSz}
+                                type="button"
+                                onClick={() => {
+                                  const nextSizes = active
+                                    ? prod.sizes.filter((s) => s !== presetSz)
+                                    : [...prod.sizes, presetSz];
+                                  if (nextSizes.length === 0) return;
+                                  onUpdateProductMeta(prod.id, {
+                                    sizes: nextSizes,
+                                    sizeQuantities: buildSizeQuantitiesMap(
+                                      nextSizes,
+                                      prod.sizeQuantities
+                                    ),
+                                  });
+                                }}
+                                className={`px-2 py-1 text-[10px] font-mono-tabular font-semibold border flex items-center gap-1 cursor-pointer ${
+                                  active
+                                    ? 'bg-zinc-950 text-white border-zinc-950'
+                                    : 'bg-white text-zinc-700 border-zinc-300'
+                                }`}
+                              >
+                                {active && <Check className="w-2.5 h-2.5" />}
+                                <span>{presetSz}</span>
+                              </button>
+                            );
+                          }
+                        )}
                       </div>
 
-                      {/* Per-Size Quantity Adjusters + Custom Size Input */}
+                      {/* Per-Size Quantity Adjusters (Writable Input + Minus/Plus) + Custom Size Input */}
                       <div className="flex flex-wrap items-center gap-2 pt-1">
                         {prod.sizes.map((sz) => {
                           const szQty = getSizeQuantity(prod, sz);
@@ -5617,7 +6260,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               >
                                 <Minus className="w-3 h-3" />
                               </button>
-                              <span className="px-2 font-bold">{szQty}</span>
+                              <input
+                                type="number"
+                                min="0"
+                                value={szQty}
+                                aria-label={`Quantity for ${prod.name} size ${sz}`}
+                                onChange={(e) => {
+                                  const rawVal = e.target.value;
+                                  const parsed =
+                                    rawVal === ''
+                                      ? 0
+                                      : Math.max(
+                                          0,
+                                          Math.floor(Number(rawVal) || 0)
+                                        );
+                                  onUpdateProductSizeQuantity(
+                                    prod.id,
+                                    sz,
+                                    parsed
+                                  );
+                                }}
+                                className="w-14 px-1 py-0.5 text-center font-mono-tabular font-bold bg-zinc-50 border border-zinc-300 text-zinc-950 focus:border-zinc-950 focus:outline-none"
+                              />
                               <button
                                 type="button"
                                 onClick={() =>
@@ -5643,7 +6307,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             onChange={(e) =>
                               setEditProdCustomSizeInput(e.target.value)
                             }
-                            placeholder="Custom size (e.g. 103 cm, 36, XXL)"
+                            placeholder={
+                              prod.sizeType === 'months'
+                                ? 'Custom Months (e.g. 0-3 Months)'
+                                : prod.sizeType === 'years'
+                                ? 'Custom Years (e.g. 10-11 Years)'
+                                : 'Custom size (e.g. 36, XXL)'
+                            }
                             className="flex-1 sm:w-44 min-w-0 px-2 py-1 text-[10px] bg-white border border-zinc-300"
                           />
                           <button
@@ -5656,6 +6326,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                 prod.sizeType
                               );
                               if (!normalized) return;
+                              registerCustomSizePreset(
+                                prod.sizeType,
+                                normalized
+                              );
                               const nextSizes = prod.sizes.includes(normalized)
                                 ? prod.sizes
                                 : [...prod.sizes, normalized];
@@ -5676,7 +6350,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         </div>
                       </div>
                     </div>
-                  )}
+                  ))}
 
                   {/* Discount Editor */}
                   <div className="p-4 bg-zinc-50 border border-zinc-200 rounded-xl flex flex-wrap items-center gap-3">
@@ -5881,10 +6555,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
                     <button
                       type="button"
-                      onClick={() => setEditingProductId(null)}
-                      className="px-5 sm:px-6 py-2.5 rounded-xl bg-zinc-950 text-white text-xs font-bold uppercase tracking-wider hover:bg-zinc-800 cursor-pointer"
+                      onClick={() => {
+                        setItemFeedback(
+                          `✓ Saved product "${prod.name}" (${prod.department.toUpperCase()} / ${prod.category}${
+                            prod.isNewArrival ? ' · In New Arrivals' : ''
+                          }).`
+                        );
+                        setEditingProductId(null);
+                      }}
+                      className="px-5 sm:px-6 py-2.5 rounded-xl bg-zinc-950 text-white text-xs font-bold uppercase tracking-wider hover:bg-zinc-800 cursor-pointer flex items-center gap-1.5"
                     >
-                      Done Editing
+                      <Check className="w-3.5 h-3.5" />
+                      <span>Save Product</span>
                     </button>
                   </div>
                 </div>
@@ -5995,7 +6677,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </div>
                 </div>
 
-                <div className="flex flex-col sm:flex-row sm:items-center gap-3 pt-1">
+                <div className="pt-1">
                   <label className="flex items-center gap-2.5 cursor-pointer select-none">
                     <input
                       type="checkbox"
@@ -6007,30 +6689,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       Show in New Arrivals (/new-arrivals)
                     </span>
                   </label>
-
-                  {itemDept === 'women' && (
-                    <label className="flex items-center gap-2.5 cursor-pointer select-none">
-                      <input
-                        type="checkbox"
-                        checked={isFullSetCategorySelected}
-                        onChange={(e) => {
-                          const checked = e.target.checked;
-                          setItemIsFullSet(checked);
-                          if (checked) {
-                            setItemCategory('Full Set');
-                          } else if (
-                            itemCategory.trim().toLowerCase() === 'full set'
-                          ) {
-                            setItemCategory('Jacket');
-                          }
-                        }}
-                        className="w-4 h-4 accent-zinc-950 cursor-pointer"
-                      />
-                      <span className="text-xs font-bold uppercase tracking-wider text-zinc-950">
-                        Show in Full Set (Women&apos;s Full Set)
-                      </span>
-                    </label>
-                  )}
+                  <p className="text-[11px] text-zinc-500 mt-0.5 pl-6">
+                    Keep checked to showcase this item in New Arrivals in addition to its selected Category ({itemCategory}).
+                  </p>
                 </div>
               </div>
 
@@ -6054,7 +6715,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       )[0];
                       if (firstCat) setItemCategory(firstCat.name);
                       if (nextDept === 'kids') {
-                        handleSizeTypeChange('cm');
+                        handleSizeTypeChange(
+                          firstCat?.name.toLowerCase().includes('1 to 5')
+                            ? 'months'
+                            : 'years'
+                        );
                       }
                     }}
                     className="w-full px-3 py-2 text-xs border border-zinc-300 bg-white uppercase"
@@ -6073,7 +6738,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     onChange={(e) => {
                       const val = e.target.value;
                       setItemCategory(val);
-                      setItemIsFullSet(val.trim().toLowerCase() === 'full set');
+                      const isFS = val.trim().toLowerCase() === 'full set';
+                      setItemIsFullSet(isFS);
+                      if (isFS && allStandaloneProducts.length > 0) {
+                        const defaultP1 =
+                          products.find((p) => p.id === setPiece1ProductId) ||
+                          allStandaloneProducts[0];
+                        const defaultP2 =
+                          products.find((p) => p.id === setPiece2ProductId) ||
+                          allStandaloneProducts[1] ||
+                          allStandaloneProducts[0];
+                        if (defaultP1 && !setPiece1ProductId) {
+                          handleSelectSetPieceProduct(1, defaultP1.id);
+                        }
+                        if (defaultP2 && !setPiece2ProductId) {
+                          handleSelectSetPieceProduct(2, defaultP2.id);
+                        }
+                      }
                     }}
                     className="w-full px-3 py-2 text-xs border border-zinc-300 bg-white"
                   >
@@ -6288,8 +6969,327 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </div>
               </div>
 
-              {/* MULTI-COLOR TOGGLE & CONFIG */}
-              {!(isFullSetCategorySelected && linkTwoSetPieces) && (
+              {/* 2-PIECE WOMEN FULL SET ITEM & COLOR SELECTOR */}
+              {isFullSetCategorySelected && (
+                <div
+                  data-testid="full-set-builder-section"
+                  className="p-4 bg-zinc-50 border-2 border-zinc-950 space-y-4"
+                >
+                  <div className="border-b border-zinc-200 pb-2.5">
+                    <div className="flex items-center gap-2 text-xs font-extrabold uppercase tracking-wider text-zinc-950">
+                      <Layers className="w-4 h-4" />
+                      <span>
+                        2-Piece Full Set Configuration (Select Shirt/Top &amp;
+                        Trousers/Bottom from Any Category)
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-zinc-600 mt-1">
+                      Size types, sizes, colors, materials, and live inventory
+                      are automatically inherited from the two selected store
+                      products below. When a customer purchases this Full Set,
+                      stock is deducted from each linked product in its original
+                      category.
+                    </p>
+                  </div>
+
+                  {/* PIECE 1 SELECTOR (e.g. Shirt / Top / Jacket) */}
+                  {(() => {
+                    const p1Id =
+                      setPiece1ProductId || allStandaloneProducts[0]?.id || '';
+                    const prod1 = products.find((p) => p.id === p1Id);
+                    const p1HasColors =
+                      Boolean(prod1?.hasColors) &&
+                      Array.isArray(prod1?.colorVariants) &&
+                      prod1!.colorVariants!.length > 0;
+                    const activeP1Colors = p1HasColors
+                      ? setPiece1Colors.length > 0
+                        ? setPiece1Colors
+                        : [prod1!.colorVariants![0].colorName]
+                      : [];
+
+                    return (
+                      <div className="p-3.5 bg-white border border-zinc-300 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-extrabold uppercase tracking-wider text-zinc-950">
+                            1. Select First Item (e.g. Shirt / Top / Jacket)
+                          </span>
+                          {prod1 && (
+                            <span className="text-[10px] font-mono-tabular uppercase text-zinc-500">
+                              Category: {prod1.category} · Sizes:{' '}
+                              {prod1.sizes.join(', ')}
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-700 mb-1">
+                              Choose Product from Any Category *
+                            </label>
+                            <select
+                              aria-label="Select Full Set Piece 1 Product"
+                              value={p1Id}
+                              onChange={(e) =>
+                                handleSelectSetPieceProduct(1, e.target.value)
+                              }
+                              className="w-full px-2.5 py-2 text-xs bg-white border border-zinc-300"
+                            >
+                              {allStandaloneProducts.map((sp) => (
+                                <option key={sp.id} value={sp.id}>
+                                  [{sp.department.toUpperCase()} · {sp.category}
+                                  ] {sp.name} (${sp.price})
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-700 mb-1">
+                              Piece 1 Label on Website (e.g. Shirt / Top)
+                            </label>
+                            <input
+                              type="text"
+                              value={setPiece1Label}
+                              onChange={(e) =>
+                                setSetPiece1Label(e.target.value)
+                              }
+                              placeholder="e.g. Shirt / Top / Jacket"
+                              className="w-full px-2.5 py-2 text-xs bg-white border border-zinc-300"
+                            />
+                          </div>
+                        </div>
+
+                        {p1HasColors && prod1?.colorVariants && (
+                          <div className="p-3 bg-zinc-50 border border-zinc-200 space-y-2">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-800">
+                                Select Colors of &ldquo;{prod1.name}&rdquo; to
+                                Appear in Full Set (Defaults to 1st color if
+                                none selected):
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setSetPiece1Colors(
+                                    prod1.colorVariants!.map((v) => v.colorName)
+                                  )
+                                }
+                                className="px-2.5 py-1 bg-zinc-900 text-white text-[10px] font-bold uppercase cursor-pointer"
+                              >
+                                Select All Colors
+                              </button>
+                            </div>
+                            <div className="flex flex-wrap gap-1.5">
+                              {prod1.colorVariants.map((cv) => {
+                                const isSelected = activeP1Colors.some(
+                                  (c) =>
+                                    c.trim().toLowerCase() ===
+                                    cv.colorName.trim().toLowerCase()
+                                );
+                                return (
+                                  <button
+                                    key={cv.colorName}
+                                    type="button"
+                                    onClick={() => {
+                                      const exists = activeP1Colors.some(
+                                        (c) =>
+                                          c.trim().toLowerCase() ===
+                                          cv.colorName.trim().toLowerCase()
+                                      );
+                                      const next = exists
+                                        ? activeP1Colors.filter(
+                                            (c) =>
+                                              c.trim().toLowerCase() !==
+                                              cv.colorName.trim().toLowerCase()
+                                          )
+                                        : [...activeP1Colors, cv.colorName];
+                                      setSetPiece1Colors(
+                                        next.length > 0
+                                          ? next
+                                          : [prod1.colorVariants![0].colorName]
+                                      );
+                                    }}
+                                    className={`px-2.5 py-1 text-[10px] font-bold uppercase border flex items-center gap-1.5 cursor-pointer ${
+                                      isSelected
+                                        ? 'bg-zinc-950 text-white border-zinc-950'
+                                        : 'bg-white text-zinc-700 border-zinc-300'
+                                    }`}
+                                  >
+                                    <span
+                                      className="w-2.5 h-2.5 rounded-full border border-zinc-400 shrink-0"
+                                      style={{
+                                        backgroundColor:
+                                          cv.colorHex ||
+                                          getColorSwatchHex(cv.colorName),
+                                      }}
+                                    />
+                                    <span>{cv.colorName}</span>
+                                    {isSelected && (
+                                      <Check className="w-2.5 h-2.5" />
+                                    )}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+
+                  {/* PIECE 2 SELECTOR (e.g. Trousers / Pants / Skirt) */}
+                  {(() => {
+                    const p2Id =
+                      setPiece2ProductId ||
+                      allStandaloneProducts[1]?.id ||
+                      allStandaloneProducts[0]?.id ||
+                      '';
+                    const prod2 = products.find((p) => p.id === p2Id);
+                    const p2HasColors =
+                      Boolean(prod2?.hasColors) &&
+                      Array.isArray(prod2?.colorVariants) &&
+                      prod2!.colorVariants!.length > 0;
+                    const activeP2Colors = p2HasColors
+                      ? setPiece2Colors.length > 0
+                        ? setPiece2Colors
+                        : [prod2!.colorVariants![0].colorName]
+                      : [];
+
+                    return (
+                      <div className="p-3.5 bg-white border border-zinc-300 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-extrabold uppercase tracking-wider text-zinc-950">
+                            2. Select Second Item (e.g. Trousers / Pants /
+                            Skirt)
+                          </span>
+                          {prod2 && (
+                            <span className="text-[10px] font-mono-tabular uppercase text-zinc-500">
+                              Category: {prod2.category} · Sizes:{' '}
+                              {prod2.sizes.join(', ')}
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-700 mb-1">
+                              Choose Product from Any Category *
+                            </label>
+                            <select
+                              aria-label="Select Full Set Piece 2 Product"
+                              value={p2Id}
+                              onChange={(e) =>
+                                handleSelectSetPieceProduct(2, e.target.value)
+                              }
+                              className="w-full px-2.5 py-2 text-xs bg-white border border-zinc-300"
+                            >
+                              {allStandaloneProducts.map((sp) => (
+                                <option key={sp.id} value={sp.id}>
+                                  [{sp.department.toUpperCase()} · {sp.category}
+                                  ] {sp.name} (${sp.price})
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-700 mb-1">
+                              Piece 2 Label on Website (e.g. Trousers / Bottom)
+                            </label>
+                            <input
+                              type="text"
+                              value={setPiece2Label}
+                              onChange={(e) =>
+                                setSetPiece2Label(e.target.value)
+                              }
+                              placeholder="e.g. Trousers / Pants / Skirt"
+                              className="w-full px-2.5 py-2 text-xs bg-white border border-zinc-300"
+                            />
+                          </div>
+                        </div>
+
+                        {p2HasColors && prod2?.colorVariants && (
+                          <div className="p-3 bg-zinc-50 border border-zinc-200 space-y-2">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-800">
+                                Select Colors of &ldquo;{prod2.name}&rdquo; to
+                                Appear in Full Set (Defaults to 1st color if
+                                none selected):
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setSetPiece2Colors(
+                                    prod2.colorVariants!.map((v) => v.colorName)
+                                  )
+                                }
+                                className="px-2.5 py-1 bg-zinc-900 text-white text-[10px] font-bold uppercase cursor-pointer"
+                              >
+                                Select All Colors
+                              </button>
+                            </div>
+                            <div className="flex flex-wrap gap-1.5">
+                              {prod2.colorVariants.map((cv) => {
+                                const isSelected = activeP2Colors.some(
+                                  (c) =>
+                                    c.trim().toLowerCase() ===
+                                    cv.colorName.trim().toLowerCase()
+                                );
+                                return (
+                                  <button
+                                    key={cv.colorName}
+                                    type="button"
+                                    onClick={() => {
+                                      const exists = activeP2Colors.some(
+                                        (c) =>
+                                          c.trim().toLowerCase() ===
+                                          cv.colorName.trim().toLowerCase()
+                                      );
+                                      const next = exists
+                                        ? activeP2Colors.filter(
+                                            (c) =>
+                                              c.trim().toLowerCase() !==
+                                              cv.colorName.trim().toLowerCase()
+                                          )
+                                        : [...activeP2Colors, cv.colorName];
+                                      setSetPiece2Colors(
+                                        next.length > 0
+                                          ? next
+                                          : [prod2.colorVariants![0].colorName]
+                                      );
+                                    }}
+                                    className={`px-2.5 py-1 text-[10px] font-bold uppercase border flex items-center gap-1.5 cursor-pointer ${
+                                      isSelected
+                                        ? 'bg-zinc-950 text-white border-zinc-950'
+                                        : 'bg-white text-zinc-700 border-zinc-300'
+                                    }`}
+                                  >
+                                    <span
+                                      className="w-2.5 h-2.5 rounded-full border border-zinc-400 shrink-0"
+                                      style={{
+                                        backgroundColor:
+                                          cv.colorHex ||
+                                          getColorSwatchHex(cv.colorName),
+                                      }}
+                                    />
+                                    <span>{cv.colorName}</span>
+                                    {isSelected && (
+                                      <Check className="w-2.5 h-2.5" />
+                                    )}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+
+              {/* MULTI-COLOR TOGGLE & CONFIG (Hidden when Full Set is selected) */}
+              {!isFullSetCategorySelected && (
                 <div className="p-4 bg-zinc-50 border border-zinc-300 space-y-4">
                   <div className="flex items-center justify-between border-b border-zinc-200 pb-2.5">
                     <label className="flex items-center gap-2.5 cursor-pointer select-none">
@@ -6436,12 +7436,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           dc.colorHex ||
                           customColorHexMap[dc.colorName.toLowerCase()] ||
                           getColorSwatchHex(dc.colorName);
-                        const presetList =
-                          dc.sizeType === 'letter'
-                            ? LETTER_SIZES
-                            : dc.sizeType === 'numeric'
-                            ? NUMERIC_SIZES
-                            : CM_SIZES;
+                        const presetList = getPresetsForSizeType(dc.sizeType);
                         const gUrls = dc.galleryUrls || ['', '', ''];
 
                         return (
@@ -6681,13 +7676,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               ))}
                             </div>
 
-                            {/* 3 SIZE TYPE OPTIONS FOR THIS COLOR (Letter / Number / Kids CM) */}
+                            {/* 4 SIZE TYPE OPTIONS FOR THIS COLOR (Letter / Number / Months / Years) */}
                             <div className="space-y-2.5">
                               <span className="block text-[10px] font-bold uppercase tracking-wider text-zinc-900">
                                 Size Type &amp; Sizes for {dc.colorName} (Choose
-                                Letter, Number, or Kids CM):
+                                Letter, Number, Months, or Years):
                               </span>
-                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                                 <button
                                   type="button"
                                   onClick={() =>
@@ -6737,19 +7732,40 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                       dc.colorName,
                                       (prev) => ({
                                         ...prev,
-                                        sizeType: 'cm',
-                                        sizes: [...CM_SIZES],
+                                        sizeType: 'months',
+                                        sizes: getPresetsForSizeType('months'),
                                         rawQuantities: {},
                                       })
                                     )
                                   }
                                   className={`py-2 px-2 text-[11px] font-bold uppercase border cursor-pointer ${
-                                    dc.sizeType === 'cm'
+                                    dc.sizeType === 'months'
                                       ? 'bg-zinc-950 text-white border-zinc-950'
                                       : 'bg-white text-zinc-700 border-zinc-300'
                                   }`}
                                 >
-                                  3. Kids CM (100 cm)
+                                  3. Months (Baby)
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    updateDraftColorField(
+                                      dc.colorName,
+                                      (prev) => ({
+                                        ...prev,
+                                        sizeType: 'years',
+                                        sizes: getPresetsForSizeType('years'),
+                                        rawQuantities: {},
+                                      })
+                                    )
+                                  }
+                                  className={`py-2 px-2 text-[11px] font-bold uppercase border cursor-pointer ${
+                                    dc.sizeType === 'years'
+                                      ? 'bg-zinc-950 text-white border-zinc-950'
+                                      : 'bg-white text-zinc-700 border-zinc-300'
+                                  }`}
+                                >
+                                  4. Years (Kids)
                                 </button>
                               </div>
 
@@ -6790,7 +7806,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                 })}
                               </div>
 
-                              {/* Custom Size Input (e.g. 103 cm, 36, XXL) */}
+                              {/* Custom Size Input (e.g. 0-3 Months, 10-11 Years, 36, XXL) */}
                               <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                                 <input
                                   type="text"
@@ -6805,8 +7821,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                     )
                                   }
                                   placeholder={
-                                    dc.sizeType === 'cm'
-                                      ? 'Add custom CM size (e.g. 103 cm)'
+                                    dc.sizeType === 'months'
+                                      ? 'Add new Months size (e.g. 0-3 Months, 24-36 Months)'
+                                      : dc.sizeType === 'years'
+                                      ? 'Add new Years size (e.g. 10-11 Years, 12-13 Years)'
                                       : dc.sizeType === 'numeric'
                                       ? 'Add custom numeric size (e.g. 36, 46)'
                                       : 'Add custom size (e.g. XXL, One Size)'
@@ -6825,6 +7843,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                       dc.sizeType
                                     );
                                     if (!normalized) return;
+                                    registerCustomSizePreset(
+                                      dc.sizeType,
+                                      normalized
+                                    );
                                     updateDraftColorField(
                                       dc.colorName,
                                       (prev) => {
@@ -6901,203 +7923,250 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </div>
               )}
 
-              {/* SINGLE PRODUCT SIZES & QUANTITIES */}
-              {!itemHasColors &&
-                !(isFullSetCategorySelected && linkTwoSetPieces) && (
-                  <div className="p-4 bg-zinc-50 border border-zinc-200 space-y-3">
-                    <label className="block text-[11px] font-bold uppercase tracking-wider text-zinc-950">
-                      Sizes &amp; Per-Size Quantity Configuration (Defaults to 5
-                      per size) *
-                    </label>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                      <button
-                        type="button"
-                        onClick={() => handleSizeTypeChange('letter')}
-                        className={`py-2 px-2 text-[11px] font-bold uppercase border cursor-pointer ${
-                          itemSizeType === 'letter'
-                            ? 'bg-zinc-950 text-white border-zinc-950'
-                            : 'bg-white text-zinc-700 border-zinc-300'
-                        }`}
-                      >
-                        1. Letter (XS–XL)
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleSizeTypeChange('numeric')}
-                        className={`py-2 px-2 text-[11px] font-bold uppercase border cursor-pointer ${
-                          itemSizeType === 'numeric'
-                            ? 'bg-zinc-950 text-white border-zinc-950'
-                            : 'bg-white text-zinc-700 border-zinc-300'
-                        }`}
-                      >
-                        2. Number (36, 38...)
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleSizeTypeChange('cm')}
-                        className={`py-2 px-2 text-[11px] font-bold uppercase border cursor-pointer ${
-                          itemSizeType === 'cm'
-                            ? 'bg-zinc-950 text-white border-zinc-950'
-                            : 'bg-white text-zinc-700 border-zinc-300'
-                        }`}
-                      >
-                        3. Kids CM (100 cm)
-                      </button>
-                    </div>
-
-                    <div className="flex flex-wrap gap-1.5 pt-1">
-                      {(itemSizeType === 'letter'
-                        ? LETTER_SIZES
-                        : itemSizeType === 'numeric'
-                        ? NUMERIC_SIZES
-                        : CM_SIZES
-                      ).map((presetSize) => {
-                        const active = selectedSizes.includes(presetSize);
-                        return (
-                          <button
-                            key={presetSize}
-                            type="button"
-                            onClick={() => toggleSize(presetSize)}
-                            className={`px-2.5 py-1 text-xs font-mono-tabular font-semibold border flex items-center gap-1 cursor-pointer ${
-                              active
-                                ? 'bg-zinc-950 text-white border-zinc-950'
-                                : 'bg-white text-zinc-700 border-zinc-300'
-                            }`}
-                          >
-                            {active && <Check className="w-3 h-3" />}
-                            <span>{presetSize}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-
-                    {selectedSizes.length > 0 && (
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-2">
-                        {selectedSizes.map((sz) => (
-                          <div
-                            key={sz}
-                            className="flex items-center justify-between gap-2 bg-white border border-zinc-300 px-2.5 py-1.5"
-                          >
-                            <span className="text-xs font-mono-tabular font-bold text-zinc-950">
-                              {sz}
-                            </span>
-                            <input
-                              type="number"
-                              min="0"
-                              value={perSizeRawQuantities[sz] ?? ''}
-                              onChange={(e) =>
-                                setPerSizeRawQuantities((prev) => ({
-                                  ...prev,
-                                  [sz]: e.target.value,
-                                }))
-                              }
-                              placeholder="Default: 5"
-                              aria-label={`Quantity for size ${sz}`}
-                              className="w-20 px-2 py-1 text-xs font-mono-tabular border border-zinc-200 text-right"
-                            />
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-
-              {/* MATERIALS CHECKMARK SELECTOR (OPTIONAL VIA CHECKBOX) */}
-              <div className="p-4 bg-zinc-50 border border-zinc-300 space-y-3">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <label className="flex items-center gap-2.5 cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      checked={itemHasMaterials}
-                      onChange={(e) => {
-                        const checked = e.target.checked;
-                        setItemHasMaterials(checked);
-                        if (checked && selectedMaterials.length === 0) {
-                          setSelectedMaterials([
-                            allMaterials[0] || 'Cow Leather',
-                          ]);
-                        }
-                      }}
-                      className="w-4 h-4 accent-zinc-950 cursor-pointer"
-                    />
-                    <span className="text-xs font-extrabold uppercase tracking-wider text-zinc-950">
-                      Add Material to Product (Show Material Type on Website)
-                    </span>
+              {/* SINGLE PRODUCT SIZES & QUANTITIES (Hidden when Full Set is selected) */}
+              {!itemHasColors && !isFullSetCategorySelected && (
+                <div className="p-4 bg-zinc-50 border border-zinc-200 space-y-3">
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-zinc-950">
+                    Sizes &amp; Per-Size Quantity Configuration (Defaults to 5
+                    per size) *
                   </label>
-                  {itemHasMaterials && (
-                    <span className="text-[11px] text-zinc-500">
-                      {selectedMaterials.length} Checkmarked
-                    </span>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleSizeTypeChange('letter')}
+                      className={`py-2 px-2 text-[11px] font-bold uppercase border cursor-pointer ${
+                        itemSizeType === 'letter'
+                          ? 'bg-zinc-950 text-white border-zinc-950'
+                          : 'bg-white text-zinc-700 border-zinc-300'
+                      }`}
+                    >
+                      1. Letter (XS–XL)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleSizeTypeChange('numeric')}
+                      className={`py-2 px-2 text-[11px] font-bold uppercase border cursor-pointer ${
+                        itemSizeType === 'numeric'
+                          ? 'bg-zinc-950 text-white border-zinc-950'
+                          : 'bg-white text-zinc-700 border-zinc-300'
+                      }`}
+                    >
+                      2. Number (36, 38...)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleSizeTypeChange('months')}
+                      className={`py-2 px-2 text-[11px] font-bold uppercase border cursor-pointer ${
+                        itemSizeType === 'months'
+                          ? 'bg-zinc-950 text-white border-zinc-950'
+                          : 'bg-white text-zinc-700 border-zinc-300'
+                      }`}
+                    >
+                      3. Months (Baby)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleSizeTypeChange('years')}
+                      className={`py-2 px-2 text-[11px] font-bold uppercase border cursor-pointer ${
+                        itemSizeType === 'years'
+                          ? 'bg-zinc-950 text-white border-zinc-950'
+                          : 'bg-white text-zinc-700 border-zinc-300'
+                      }`}
+                    >
+                      4. Years (Kids)
+                    </button>
+                  </div>
+
+                  <div className="flex flex-wrap gap-1.5 pt-1">
+                    {getPresetsForSizeType(itemSizeType).map((presetSize) => {
+                      const active = selectedSizes.includes(presetSize);
+                      return (
+                        <button
+                          key={presetSize}
+                          type="button"
+                          onClick={() => toggleSize(presetSize)}
+                          className={`px-2.5 py-1 text-xs font-mono-tabular font-semibold border flex items-center gap-1 cursor-pointer ${
+                            active
+                              ? 'bg-zinc-950 text-white border-zinc-950'
+                              : 'bg-white text-zinc-700 border-zinc-300'
+                          }`}
+                        >
+                          {active && <Check className="w-3 h-3" />}
+                          <span>{presetSize}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Add Custom Size Input for Single-Color Product (Months, Years, Numeric, Letter) */}
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 pt-1">
+                    <input
+                      type="text"
+                      value={customSizeInput}
+                      onChange={(e) => setCustomSizeInput(e.target.value)}
+                      placeholder={
+                        itemSizeType === 'months'
+                          ? 'Add new Months size (e.g. 0-3 Months, 24-36 Months)'
+                          : itemSizeType === 'years'
+                          ? 'Add new Years size (e.g. 10-11 Years, 12-13 Years)'
+                          : itemSizeType === 'numeric'
+                          ? 'Add custom numeric size (e.g. 36, 46)'
+                          : 'Add custom size (e.g. XXL, One Size)'
+                      }
+                      aria-label="Add custom size for product"
+                      className="w-full sm:flex-1 min-w-0 px-2.5 py-1.5 text-xs bg-white border border-zinc-300"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleAddCustomSize}
+                      className="px-3 py-1.5 bg-zinc-900 text-white text-xs font-bold uppercase cursor-pointer whitespace-nowrap shrink-0"
+                    >
+                      + Add Size
+                    </button>
+                  </div>
+
+                  {selectedSizes.length > 0 && (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-2">
+                      {selectedSizes.map((sz) => (
+                        <div
+                          key={sz}
+                          className="flex items-center justify-between gap-2 bg-white border border-zinc-300 px-2.5 py-1.5"
+                        >
+                          <span className="text-xs font-mono-tabular font-bold text-zinc-950">
+                            {sz}
+                          </span>
+                          <input
+                            type="number"
+                            min="0"
+                            value={perSizeRawQuantities[sz] ?? ''}
+                            onChange={(e) =>
+                              setPerSizeRawQuantities((prev) => ({
+                                ...prev,
+                                [sz]: e.target.value,
+                              }))
+                            }
+                            placeholder="Default: 5"
+                            aria-label={`Quantity for size ${sz}`}
+                            className="w-20 px-2 py-1 text-xs font-mono-tabular border border-zinc-200 text-right"
+                          />
+                        </div>
+                      ))}
+                    </div>
                   )}
                 </div>
+              )}
 
-                {itemHasMaterials && (
-                  <div className="space-y-3 pt-2 border-t border-zinc-200">
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                      {allMaterials.map((mat) => {
-                        const checked = selectedMaterials.includes(mat);
-                        return (
-                          <button
-                            key={mat}
-                            type="button"
-                            onClick={() => toggleMaterial(mat)}
-                            aria-pressed={checked}
-                            className={`px-2.5 py-2 text-xs font-medium border text-left flex items-center justify-between transition-colors cursor-pointer ${
-                              checked
-                                ? 'bg-zinc-950 text-white border-zinc-950 font-bold'
-                                : 'bg-white text-zinc-800 border-zinc-300'
-                            }`}
-                          >
-                            <span className="truncate">{mat}</span>
-                            {checked && <Check className="w-3 h-3" />}
-                          </button>
-                        );
-                      })}
-                    </div>
-
-                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 pt-1">
+              {/* MATERIALS CHECKMARK SELECTOR (OPTIONAL VIA CHECKBOX — Hidden when Full Set is selected) */}
+              {!isFullSetCategorySelected && (
+                <div className="p-4 bg-zinc-50 border border-zinc-300 space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <label className="flex items-center gap-2.5 cursor-pointer select-none">
                       <input
-                        type="text"
-                        value={newMaterialInput}
-                        onChange={(e) => setNewMaterialInput(e.target.value)}
-                        placeholder="Add custom material (e.g. Calfskin)..."
-                        className="w-full sm:flex-1 min-w-0 px-3 py-1.5 text-xs bg-white border border-zinc-300"
+                        type="checkbox"
+                        checked={itemHasMaterials}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          setItemHasMaterials(checked);
+                          if (checked && selectedMaterials.length === 0) {
+                            setSelectedMaterials([
+                              allMaterials[0] || 'Cow Leather',
+                            ]);
+                          }
+                        }}
+                        className="w-4 h-4 accent-zinc-950 cursor-pointer"
                       />
-                      <button
-                        type="button"
-                        onClick={handleAddAndCheckCustomMaterial}
-                        className="px-3 py-1.5 bg-zinc-900 text-white text-xs font-bold uppercase tracking-wider cursor-pointer whitespace-nowrap shrink-0"
-                      >
-                        + Add &amp; Check
-                      </button>
-                    </div>
+                      <span className="text-xs font-extrabold uppercase tracking-wider text-zinc-950">
+                        Add Material to Product (Show Material Type on Website)
+                      </span>
+                    </label>
+                    {itemHasMaterials && (
+                      <span className="text-[11px] text-zinc-500">
+                        {selectedMaterials.length} Checkmarked
+                      </span>
+                    )}
                   </div>
-                )}
-              </div>
+
+                  {itemHasMaterials && (
+                    <div className="space-y-3 pt-2 border-t border-zinc-200">
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                        {allMaterials.map((mat) => {
+                          const checked = selectedMaterials.includes(mat);
+                          return (
+                            <button
+                              key={mat}
+                              type="button"
+                              onClick={() => toggleMaterial(mat)}
+                              aria-pressed={checked}
+                              className={`px-2.5 py-2 text-xs font-medium border text-left flex items-center justify-between transition-colors cursor-pointer ${
+                                checked
+                                  ? 'bg-zinc-950 text-white border-zinc-950 font-bold'
+                                  : 'bg-white text-zinc-800 border-zinc-300'
+                              }`}
+                            >
+                              <span className="truncate">{mat}</span>
+                              {checked && <Check className="w-3 h-3" />}
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 pt-1">
+                        <input
+                          type="text"
+                          value={newMaterialInput}
+                          onChange={(e) => setNewMaterialInput(e.target.value)}
+                          placeholder="Add custom material (e.g. Calfskin)..."
+                          className="w-full sm:flex-1 min-w-0 px-3 py-1.5 text-xs bg-white border border-zinc-300"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleAddAndCheckCustomMaterial}
+                          className="px-3 py-1.5 bg-zinc-900 text-white text-xs font-bold uppercase tracking-wider cursor-pointer whitespace-nowrap shrink-0"
+                        >
+                          + Add &amp; Check
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Editorial Notes */}
               <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="text-[11px] font-bold uppercase tracking-wider text-zinc-900">
-                    Product Notes / Description
-                  </label>
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5">
+                  <div className="flex items-center gap-2">
+                    <label className="text-[11px] font-bold uppercase tracking-wider text-zinc-900">
+                      Product Notes / Description
+                    </label>
+                    {copyDraftedNotice && (
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded">
+                        ✓ Description Drafted
+                      </span>
+                    )}
+                  </div>
                   <button
                     type="button"
                     onClick={handleGenerateAiCopy}
                     disabled={aiGeneratingCopy}
-                    className="text-[11px] font-bold uppercase tracking-wider text-zinc-800 hover:text-zinc-950 underline cursor-pointer"
+                    className="px-2.5 py-1 rounded-md bg-zinc-950 text-white hover:bg-zinc-800 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                   >
-                    {aiGeneratingCopy
-                      ? 'Drafting...'
-                      : 'Auto-Draft Editorial Notes'}
+                    <Sparkles className="w-3 h-3" />
+                    <span>
+                      {aiGeneratingCopy
+                        ? 'Drafting Description...'
+                        : 'Auto-Draft Editorial Notes'}
+                    </span>
                   </button>
                 </div>
                 <textarea
                   rows={2}
                   value={itemDescription}
-                  onChange={(e) => setItemDescription(e.target.value)}
-                  placeholder="Optional silhouette and construction notes..."
+                  onChange={(e) => {
+                    setItemDescription(e.target.value);
+                    if (copyDraftedNotice) setCopyDraftedNotice(false);
+                  }}
+                  placeholder="Optional silhouette and construction notes (or click Auto-Draft Editorial Notes above to generate automatically)..."
                   className="w-full px-3 py-2 text-xs border border-zinc-300"
                 />
               </div>

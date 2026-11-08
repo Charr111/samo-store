@@ -31,6 +31,7 @@ interface PersistedCatalogState {
   admins?: unknown[];
   siteBanners?: Record<string, unknown>;
   autoAcceptOrders?: boolean;
+  showLowStockCount?: boolean;
 }
 
 const R2_CORS_HEADERS: Record<string, string> = {
@@ -238,6 +239,9 @@ async function startServer() {
         : {}),
       ...(typeof body.autoAcceptOrders === 'boolean'
         ? { autoAcceptOrders: body.autoAcceptOrders }
+        : {}),
+      ...(typeof body.showLowStockCount === 'boolean'
+        ? { showLowStockCount: body.showLowStockCount }
         : {}),
       deletedProductIds: mergedDeletedProducts,
       deletedCategoryIds: mergedDeletedCategories,
@@ -490,7 +494,7 @@ ${catalogContext}`;
   });
 
   // 2. General Task: Admin Product Editorial Copy & Material Generator (gemini-3.8-flash)
-  app.post('/api/ai/product-copy', async (req, res) => {
+  app.post(['/api/ai/product-copy', '/api/ai/admin-copy'], async (req, res) => {
     try {
       const { name, department, category, style, materials } = req.body || {};
       if (!name) {

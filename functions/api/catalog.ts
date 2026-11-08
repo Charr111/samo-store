@@ -117,6 +117,9 @@ export const onRequestPost = async (context: {
         ...(typeof patch.autoAcceptOrders === 'boolean'
           ? { autoAcceptOrders: patch.autoAcceptOrders }
           : {}),
+        ...(typeof patch.showLowStockCount === 'boolean'
+          ? { showLowStockCount: patch.showLowStockCount }
+          : {}),
         deletedProductIds: mergedDeletedProducts,
         deletedCategoryIds: mergedDeletedCategories,
         updatedAt: Date.now(),

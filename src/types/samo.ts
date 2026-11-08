@@ -1,6 +1,6 @@
 export type Department = 'women' | 'kids';
 
-export type SizeType = 'letter' | 'numeric' | 'cm';
+export type SizeType = 'letter' | 'numeric' | 'months' | 'years' | 'cm';
 
 export type StyleType =
   | 'Classic'
@@ -49,6 +49,8 @@ export interface FullSetSubItem {
   sizeType: SizeType;
   sizes: string[];
   sizeQuantities: Record<string, number>;
+  selectedColors?: string[];
+  colorVariants?: ProductColorVariant[];
 }
 
 export interface SelectedSetPieceSize {
@@ -56,6 +58,7 @@ export interface SelectedSetPieceSize {
   productName: string;
   pieceLabel?: string;
   selectedSize: string;
+  selectedColor?: string;
 }
 
 export interface ProductItem {

@@ -170,7 +170,10 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
           const setPiecesPart =
             Array.isArray(ci.selectedSetSizes) && ci.selectedSetSizes.length > 0
               ? `Set Pieces: ${ci.selectedSetSizes
-                  .map((p) => `${p.productName} (${p.selectedSize})`)
+                  .map(
+                    (p) =>
+                      `${p.productName} (${p.selectedColor ? `${p.selectedColor} · ` : ''}${p.selectedSize})`
+                  )
                   .join(' + ')} | `
               : '';
           const materialsPart =

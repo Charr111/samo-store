@@ -48,6 +48,7 @@ interface ProductModalProps {
     selectedColor?: string;
     customerContact: string;
   }) => Promise<void>;
+  showLowStockCount?: boolean;
 }
 
 
@@ -57,10 +58,14 @@ export const ProductModal: React.FC<ProductModalProps> = ({
   onAddToCart,
   onBuyNow,
   onSubmitPreorder,
+  showLowStockCount = false,
 }) => {
   const [selectedColor, setSelectedColor] = useState<string>('');
   const [selectedSize, setSelectedSize] = useState<string>('');
   const [selectedSetPieceSizes, setSelectedSetPieceSizes] = useState<
+    Record<number, string>
+  >({});
+  const [selectedSetPieceColors, setSelectedSetPieceColors] = useState<
     Record<number, string>
   >({});
   const [openSetDrawers, setOpenSetDrawers] = useState<Record<number, boolean>>({
@@ -86,18 +91,35 @@ export const ProductModal: React.FC<ProductModalProps> = ({
 
       if (isFullSet && product.setItems) {
         const initialSetSizes: Record<number, string> = {};
+        const initialSetColors: Record<number, string> = {};
         const initialDrawers: Record<number, boolean> = {};
         product.setItems.forEach((sub, idx) => {
-          const firstAvail =
-            sub.sizes.find((sz) => (sub.sizeQuantities?.[sz] ?? 5) > 0) ||
-            sub.sizes[0] ||
-            'M';
-          initialSetSizes[idx] = firstAvail;
+          const hasSubColors =
+            Array.isArray(sub.colorVariants) && sub.colorVariants.length > 0;
+          if (hasSubColors && sub.colorVariants) {
+            const firstColVar = sub.colorVariants[0];
+            initialSetColors[idx] = firstColVar.colorName;
+            const firstAvail =
+              firstColVar.sizes.find(
+                (sz) => (firstColVar.sizeQuantities?.[sz] ?? 5) > 0
+              ) ||
+              firstColVar.sizes[0] ||
+              'M';
+            initialSetSizes[idx] = firstAvail;
+          } else {
+            const firstAvail =
+              sub.sizes.find((sz) => (sub.sizeQuantities?.[sz] ?? 5) > 0) ||
+              sub.sizes[0] ||
+              'M';
+            initialSetSizes[idx] = firstAvail;
+          }
           initialDrawers[idx] = true;
         });
+        setSelectedSetPieceColors(initialSetColors);
         setSelectedSetPieceSizes(initialSetSizes);
         setOpenSetDrawers(initialDrawers);
       } else {
+        setSelectedSetPieceColors({});
         setSelectedSetPieceSizes({});
       }
 
@@ -195,27 +217,63 @@ export const ProductModal: React.FC<ProductModalProps> = ({
   if (isFullSetProduct && product.setItems) {
     const pieceSelections: SelectedSetPieceSize[] = product.setItems.map(
       (sub, idx) => {
-        const chosen = selectedSetPieceSizes[idx] || sub.sizes[0] || 'M';
+        const subHasColors =
+          Array.isArray(sub.colorVariants) && sub.colorVariants.length > 0;
+        const activeSubColVar = subHasColors
+          ? sub.colorVariants!.find(
+              (v) =>
+                v.colorName.toLowerCase() ===
+                (selectedSetPieceColors[idx] || '').toLowerCase()
+            ) || sub.colorVariants![0]
+          : undefined;
+        const activeSubSizes = activeSubColVar ? activeSubColVar.sizes : sub.sizes;
+        const chosen =
+          selectedSetPieceSizes[idx] &&
+          activeSubSizes.includes(selectedSetPieceSizes[idx])
+            ? selectedSetPieceSizes[idx]
+            : activeSubSizes[0] || 'M';
         return {
           productId: sub.productId,
           productName: sub.productName,
           pieceLabel:
             sub.pieceLabel || (idx === 0 ? 'Piece 1' : `Piece ${idx + 1}`),
           selectedSize: chosen,
+          selectedColor: activeSubColVar?.colorName,
         };
       }
     );
     resolvedSetSizesPayload = pieceSelections;
     effectiveSelectedSizeLabel = pieceSelections
-      .map((ps) => ps.selectedSize)
+      .map((ps) =>
+        ps.selectedColor
+          ? `${ps.selectedColor} (${ps.selectedSize})`
+          : ps.selectedSize
+      )
       .join(' / ');
 
     // Check if product is toggled out-of-stock or any selected piece size has 0 quantity
     isSelectedConfigurationOut =
       !product.inStock ||
       product.setItems.some((sub, idx) => {
-        const chosen = selectedSetPieceSizes[idx] || sub.sizes[0] || '';
-        const q = sub.sizeQuantities?.[chosen];
+        const subHasColors =
+          Array.isArray(sub.colorVariants) && sub.colorVariants.length > 0;
+        const activeSubColVar = subHasColors
+          ? sub.colorVariants!.find(
+              (v) =>
+                v.colorName.toLowerCase() ===
+                (selectedSetPieceColors[idx] || '').toLowerCase()
+            ) || sub.colorVariants![0]
+          : undefined;
+        const activeSubSizes = activeSubColVar ? activeSubColVar.sizes : sub.sizes;
+        const activeSubQtyMap = activeSubColVar
+          ? activeSubColVar.sizeQuantities
+          : sub.sizeQuantities;
+        const chosen =
+          selectedSetPieceSizes[idx] &&
+          activeSubSizes.includes(selectedSetPieceSizes[idx])
+            ? selectedSetPieceSizes[idx]
+            : activeSubSizes[0] || '';
+        const q = activeSubQtyMap?.[chosen];
         const numericQ =
           typeof q === 'number' && !Number.isNaN(q)
             ? Math.max(0, Math.floor(q))
@@ -295,7 +353,11 @@ export const ProductModal: React.FC<ProductModalProps> = ({
   };
 
   const sizeTypeLabel =
-    activeSizeType === 'cm'
+    activeSizeType === 'months'
+      ? 'Baby & Kids Sizing (Months)'
+      : activeSizeType === 'years'
+      ? 'Kids & Junior Sizing (Years)'
+      : activeSizeType === 'cm'
       ? 'Centimeter Sizing (cm)'
       : activeSizeType === 'numeric'
       ? 'European Numeric Sizing'
@@ -567,23 +629,25 @@ export const ProductModal: React.FC<ProductModalProps> = ({
               </div>
             )}
 
-            {/* Materials Section (Only shown when product has materials added) */}
-            {Array.isArray(product.materials) && product.materials.length > 0 && (
-              <div className="pt-4 border-t border-zinc-200">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-zinc-950">
-                    Materials Composition
-                  </span>
-                  <span className="text-[11px] text-zinc-500">
-                    {product.materials.length}{' '}
-                    {product.materials.length === 1 ? 'Material' : 'Materials'}
-                  </span>
+            {/* Materials Section (Only shown when product has materials added and is not a Full Set) */}
+            {!isFullSetProduct &&
+              Array.isArray(product.materials) &&
+              product.materials.length > 0 && (
+                <div className="pt-4 border-t border-zinc-200">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-zinc-950">
+                      Materials Composition
+                    </span>
+                    <span className="text-[11px] text-zinc-500">
+                      {product.materials.length}{' '}
+                      {product.materials.length === 1 ? 'Material' : 'Materials'}
+                    </span>
+                  </div>
+                  <p className="text-xs font-medium text-zinc-800 tracking-wide">
+                    {product.materials.join(' · ')}
+                  </p>
                 </div>
-                <p className="text-xs font-medium text-zinc-800 tracking-wide">
-                  {product.materials.join(' · ')}
-                </p>
-              </div>
-            )}
+              )}
 
             {/* FULL SET: Minimalistic Drawer-Down Box Selector for Each Piece in the Set */}
             {isFullSetProduct && product.setItems ? (
@@ -595,9 +659,29 @@ export const ProductModal: React.FC<ProductModalProps> = ({
                 </div>
 
                 {product.setItems.map((subItem, idx) => {
+                  const subHasColors =
+                    Array.isArray(subItem.colorVariants) &&
+                    subItem.colorVariants.length > 0;
+                  const activeSubColVar = subHasColors
+                    ? subItem.colorVariants!.find(
+                        (v) =>
+                          v.colorName.toLowerCase() ===
+                          (selectedSetPieceColors[idx] || '').toLowerCase()
+                      ) || subItem.colorVariants![0]
+                    : undefined;
+                  const activeSubSizes = activeSubColVar
+                    ? activeSubColVar.sizes
+                    : subItem.sizes;
+                  const activeSubQtyMap = activeSubColVar
+                    ? activeSubColVar.sizeQuantities
+                    : subItem.sizeQuantities;
+
                   const chosenSize =
-                    selectedSetPieceSizes[idx] || subItem.sizes[0] || '';
-                  const chosenQty = subItem.sizeQuantities?.[chosenSize] ?? 5;
+                    selectedSetPieceSizes[idx] &&
+                    activeSubSizes.includes(selectedSetPieceSizes[idx])
+                      ? selectedSetPieceSizes[idx]
+                      : activeSubSizes[0] || '';
+                  const chosenQty = activeSubQtyMap?.[chosenSize] ?? 5;
                   const isPieceChosenOut = chosenQty <= 0;
                   const isOpen = openSetDrawers[idx] ?? true;
 
@@ -628,6 +712,11 @@ export const ProductModal: React.FC<ProductModalProps> = ({
                         </div>
 
                         <div className="flex items-center gap-2 shrink-0">
+                          {activeSubColVar && (
+                            <span className="px-2 py-0.5 border border-zinc-300 bg-zinc-100 text-zinc-800 text-[10px] font-mono-tabular font-bold uppercase">
+                              {activeSubColVar.colorName}
+                            </span>
+                          )}
                           <span className="px-2 py-0.5 border border-zinc-950 bg-zinc-950 text-white text-[11px] font-mono-tabular font-bold uppercase">
                             {chosenSize}
                           </span>
@@ -644,13 +733,79 @@ export const ProductModal: React.FC<ProductModalProps> = ({
                         </div>
                       </button>
 
-                      {/* Drawer-Down Size Grid for this Piece */}
+                      {/* Drawer-Down Color & Size Grid for this Piece */}
                       {isOpen && (
-                        <div className="p-3 border-t border-zinc-200 bg-zinc-50/70 space-y-2">
+                        <div className="p-3 border-t border-zinc-200 bg-zinc-50/70 space-y-2.5">
+                          {/* Color Selector for this Set Piece (when the linked product has colors) */}
+                          {subHasColors && subItem.colorVariants && (
+                            <div className="space-y-1.5">
+                              <div className="flex items-center justify-between">
+                                <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-600">
+                                  Color
+                                </span>
+                                <span className="text-[10px] font-mono-tabular uppercase text-zinc-800 font-semibold">
+                                  {activeSubColVar?.colorName}
+                                </span>
+                              </div>
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                {subItem.colorVariants.map((colVar) => {
+                                  const isColSelected =
+                                    activeSubColVar?.colorName.toLowerCase() ===
+                                    colVar.colorName.toLowerCase();
+                                  const hex =
+                                    colVar.colorHex ||
+                                    getColorSwatchHex(colVar.colorName);
+                                  return (
+                                    <button
+                                      key={colVar.colorName}
+                                      type="button"
+                                      onClick={() => {
+                                        setSelectedSetPieceColors((prev) => ({
+                                          ...prev,
+                                          [idx]: colVar.colorName,
+                                        }));
+                                        if (!colVar.sizes.includes(chosenSize)) {
+                                          const nextSz =
+                                            colVar.sizes.find(
+                                              (s) =>
+                                                (colVar.sizeQuantities?.[s] ??
+                                                  5) > 0
+                                            ) ||
+                                            colVar.sizes[0] ||
+                                            '';
+                                          setSelectedSetPieceSizes((prev) => ({
+                                            ...prev,
+                                            [idx]: nextSz,
+                                          }));
+                                        }
+                                        setPreorderSubmitted(false);
+                                        setPreorderError('');
+                                      }}
+                                      aria-pressed={isColSelected}
+                                      className={`flex items-center gap-1.5 px-2.5 py-1 border text-[10px] uppercase tracking-wider cursor-pointer transition-colors ${
+                                        isColSelected
+                                          ? 'bg-zinc-950 text-white border-zinc-950 font-bold'
+                                          : 'bg-white text-zinc-800 border-zinc-300 hover:border-zinc-950'
+                                      }`}
+                                    >
+                                      <span
+                                        className="w-2.5 h-2.5 border border-zinc-400 shrink-0"
+                                        style={{ backgroundColor: hex }}
+                                      />
+                                      <span>{colVar.colorName}</span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+
                           <div className="grid grid-cols-3 sm:grid-cols-4 gap-1.5">
-                            {subItem.sizes.map((sz) => {
-                              const szQty = subItem.sizeQuantities?.[sz] ?? 5;
+                            {activeSubSizes.map((sz) => {
+                              const szQty = activeSubQtyMap?.[sz] ?? 5;
                               const isZeroQty = szQty <= 0;
+                              const isLowQty =
+                                showLowStockCount && (szQty === 1 || szQty === 2);
                               const isSelected = chosenSize === sz;
                               return (
                                 <button
@@ -670,7 +825,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({
                                       ? `${subItem.productName} size ${sz} (Out of stock — click to preorder)`
                                       : `${subItem.productName} size ${sz}`
                                   }
-                                  className={`relative py-2 px-2 text-xs font-mono-tabular font-bold uppercase border transition-colors whitespace-nowrap shrink-0 overflow-hidden cursor-pointer ${
+                                  className={`relative py-2 px-2 text-xs font-mono-tabular font-bold uppercase border transition-colors whitespace-nowrap shrink-0 overflow-hidden cursor-pointer flex flex-col items-center justify-center ${
                                     isSelected && isZeroQty
                                       ? 'bg-red-950 text-white border-red-800 ring-1 ring-red-700'
                                       : isSelected
@@ -683,6 +838,15 @@ export const ProductModal: React.FC<ProductModalProps> = ({
                                   <span className={isZeroQty && !isSelected ? 'opacity-60' : ''}>
                                     {sz}
                                   </span>
+                                  {isLowQty && (
+                                    <span
+                                      className={`text-[9px] font-semibold leading-none mt-0.5 ${
+                                        isSelected ? 'text-amber-300' : 'text-amber-700'
+                                      }`}
+                                    >
+                                      {szQty} left
+                                    </span>
+                                  )}
                                   {isZeroQty && (
                                     <span
                                       aria-hidden="true"
@@ -732,6 +896,8 @@ export const ProductModal: React.FC<ProductModalProps> = ({
                   {activeSizes.map((size) => {
                     const sizeQty = getActiveSizeQty(size);
                     const isZeroQty = sizeQty <= 0;
+                    const isLowQty =
+                      showLowStockCount && (sizeQty === 1 || sizeQty === 2);
                     const isSelected = selectedSize === size;
                     return (
                       <button
@@ -748,7 +914,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({
                             ? `Size ${size} (Out of stock — click to preorder)`
                             : `Size ${size}`
                         }
-                        className={`relative py-2.5 px-2 text-xs font-mono-tabular font-bold uppercase border transition-colors whitespace-nowrap shrink-0 overflow-hidden cursor-pointer ${
+                        className={`relative py-2.5 px-2 text-xs font-mono-tabular font-bold uppercase border transition-colors whitespace-nowrap shrink-0 overflow-hidden cursor-pointer flex flex-col items-center justify-center ${
                           isSelected && isZeroQty
                             ? 'bg-red-950 text-white border-red-800 ring-1 ring-red-700'
                             : isSelected
@@ -761,6 +927,15 @@ export const ProductModal: React.FC<ProductModalProps> = ({
                         <span className={isZeroQty && !isSelected ? 'opacity-60' : ''}>
                           {size}
                         </span>
+                        {isLowQty && (
+                          <span
+                            className={`text-[9px] font-semibold leading-none mt-0.5 ${
+                              isSelected ? 'text-amber-300' : 'text-amber-700'
+                            }`}
+                          >
+                            {sizeQty} left
+                          </span>
+                        )}
                         {isZeroQty && (
                           <span
                             aria-hidden="true"
