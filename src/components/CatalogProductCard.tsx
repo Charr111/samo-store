@@ -128,7 +128,7 @@ export const CatalogProductCard: React.FC<CatalogProductCardProps> = ({
   return (
     <article
       onClick={() => onSelectProduct(product)}
-      className="group cursor-pointer bg-white flex flex-col justify-between"
+      className="group cursor-pointer bg-white flex flex-col justify-start"
     >
       {/* 4:5 Studio Image Container with Horizontal Touch/Trackpad Swipe & Pagination Dots */}
       <div className="relative aspect-[4/5] w-full bg-white overflow-hidden">
@@ -221,15 +221,15 @@ export const CatalogProductCard: React.FC<CatalogProductCardProps> = ({
       {/* Clean Editorial Footer below 4:5 Image (Title, Price, Color Swatch Circles) */}
       <div className="px-3 sm:px-3.5 pt-2.5 pb-4 bg-white">
         <div className="flex items-baseline justify-between gap-2">
-          <h3 className="text-[12px] sm:text-[13px] font-semibold text-zinc-950 leading-snug truncate">
+          <h3 className="text-[12px] sm:text-[13px] font-bold text-zinc-950 leading-snug truncate">
             {formattedName}
           </h3>
-          <div className="flex items-center gap-1 font-mono-tabular shrink-0">
-            <span className="text-[11px] sm:text-[12px] font-semibold text-zinc-900">
+          <div className="flex items-baseline gap-1 font-mono-tabular shrink-0">
+            <span className="text-[12.5px] sm:text-[14px] font-bold text-zinc-950">
               ${pricing.effectivePrice.toLocaleString()}
             </span>
             {pricing.hasDiscount && (
-              <span className="text-[10px] text-zinc-400 line-through">
+              <span className="text-[10.5px] sm:text-[11.5px] text-zinc-400 line-through">
                 ${pricing.originalPrice.toLocaleString()}
               </span>
             )}
