@@ -409,16 +409,6 @@ export const ProductModal: React.FC<ProductModalProps> = ({
     }
   };
 
-  const sizeTypeLabel =
-    activeSizeType === 'months'
-      ? 'Baby & Kids Sizing (Months)'
-      : activeSizeType === 'years'
-      ? 'Kids & Junior Sizing (Years)'
-      : activeSizeType === 'cm'
-      ? 'Centimeter Sizing (cm)'
-      : activeSizeType === 'numeric'
-      ? 'European Numeric Sizing'
-      : 'International Letter Sizing';
 
   const handleAdd = () => {
     if (isSelectedConfigurationOut) return;
@@ -971,9 +961,6 @@ export const ProductModal: React.FC<ProductModalProps> = ({
                       </button>
                     )}
                   </div>
-                  <span className="text-[11px] text-zinc-500 uppercase tracking-wider">
-                    {sizeTypeLabel}
-                  </span>
                 </div>
                 <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
                   {activeSizes.map((size) => {

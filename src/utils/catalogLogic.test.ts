@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   buildSizeQuantitiesMap,
   calculateOrderTotals,
+  createSafeSlug,
   decrementStockForAcceptedOrder,
   filterGiftsProducts,
   filterNewArrivalProducts,
@@ -1300,5 +1301,152 @@ test('restoreStockForCanceledOrder restores exact stock quantities for standard 
   assert.equal(setAfterCancel.setItems![1].sizeQuantities['38'], 2);
   assert.equal(setAfterCancel.setItems![2].sizeQuantities['S'], 1);
 });
+
+import {
+  buildCategoryUrl,
+  buildProductUrl,
+  findCategoryBySlug,
+  findProductBySlug,
+  parseCatalogUrlState,
+} from './catalogLogic';
+
+test('buildCategoryUrl and buildProductUrl generate clean shareable URLs for standard and dynamically added categories/products', () => {
+  // Category URLs
+  assert.equal(buildCategoryUrl('women', 'Jacket'), '/women/jacket');
+  assert.equal(buildCategoryUrl('women', 'Full Set'), '/women/full-set');
+  assert.equal(buildCategoryUrl('/women', 'all'), '/women');
+  assert.equal(buildCategoryUrl('kids', 'MINIS 1 To 5'), '/kids/minis-1-to-5');
+  assert.equal(buildCategoryUrl('kids', 'Baby'), '/kids/minis-1-to-5');
+  assert.equal(buildCategoryUrl('/kids', 'all'), '/kids');
+  assert.equal(buildCategoryUrl('/new-arrivals'), '/new-arrivals');
+  assert.equal(buildCategoryUrl('/gifts'), '/gifts');
+  assert.equal(buildCategoryUrl('/home'), '/home');
+
+  // Dynamically generated URL for newly created custom category in Admin Dashboard
+  assert.equal(buildCategoryUrl('women', 'Silk Dresses'), '/women/silk-dresses');
+  assert.equal(buildCategoryUrl('kids', 'Teen Outerwear'), '/kids/teen-outerwear');
+
+  // Product URLs
+  const sampleProduct = INITIAL_PRODUCTS[0];
+  const prodUrl = buildProductUrl(sampleProduct);
+  assert.equal(
+    prodUrl,
+    `/women/jacket/${createSafeSlug(sampleProduct.name)}`
+  );
+
+  // Dynamically generated URL for newly added custom product
+  const customProduct: ProductItem = {
+    id: 'samo-women-custom-gown-9999',
+    name: 'EMBROIDERED COUTURE SILK GOWN',
+    department: 'women',
+    category: 'Silk Dresses',
+    style: 'Classic',
+    price: 3600,
+    quantity: 5,
+    sizeQuantities: { M: 5 },
+    isNewArrival: true,
+    imageUrl: 'https://images.samoweave.com/gown.webp',
+    galleryUrls: [],
+    sizeType: 'letter',
+    sizes: ['M'],
+    materials: ['Silk'],
+    description: 'Bespoke gown.',
+    inStock: true,
+    featured: true,
+  };
+
+  assert.equal(
+    buildProductUrl(customProduct),
+    '/women/silk-dresses/embroidered-couture-silk-gown'
+  );
+});
+
+test('parseCatalogUrlState parses category URLs and direct product popup modal URLs cleanly', () => {
+  // 1. Category URL: /women/jacket -> selects Women department & Jacket category
+  const womenJacketState = parseCatalogUrlState(
+    '/women/jacket',
+    INITIAL_CATEGORIES,
+    INITIAL_PRODUCTS
+  );
+  assert.equal(womenJacketState.route, '/women');
+  assert.equal(womenJacketState.selectedCategory, 'Jacket');
+  assert.equal(womenJacketState.matchedProduct, null);
+
+  // 2. Direct Product Pop-Up URL: /women/jacket/avenue-heavy-cow-leather-biker-jacket -> loads category in background and resolves product
+  const targetProduct = INITIAL_PRODUCTS[0];
+  const prodSlug = createSafeSlug(targetProduct.name);
+  const directProductState = parseCatalogUrlState(
+    `/women/jacket/${prodSlug}`,
+    INITIAL_CATEGORIES,
+    INITIAL_PRODUCTS
+  );
+  assert.equal(directProductState.route, '/women');
+  assert.equal(directProductState.selectedCategory, 'Jacket');
+  assert.equal(directProductState.matchedProduct?.id, targetProduct.id);
+
+  // 3. Kids Category URL: /kids/minis-1-to-5
+  const kidsMinisState = parseCatalogUrlState(
+    '/kids/minis-1-to-5',
+    INITIAL_CATEGORIES,
+    INITIAL_PRODUCTS
+  );
+  assert.equal(kidsMinisState.route, '/kids');
+  assert.equal(kidsMinisState.selectedCategory, 'MINIS 1 To 5');
+
+  // 4. Custom Category & Product created dynamically in Admin Dashboard
+  const customCategories = [
+    ...INITIAL_CATEGORIES,
+    {
+      id: 'women-silk-dresses',
+      name: 'Silk Dresses',
+      slug: 'silk-dresses',
+      department: 'women' as const,
+      description: 'Couture dresses',
+      sortOrder: 12,
+    },
+  ];
+  const customProduct: ProductItem = {
+    id: 'samo-women-silk-slip-8888',
+    name: 'BIAS CUT SILK SLIP DRESS',
+    department: 'women',
+    category: 'Silk Dresses',
+    style: 'Classic',
+    price: 1800,
+    quantity: 4,
+    sizeQuantities: { M: 4 },
+    isNewArrival: true,
+    imageUrl: 'slip.webp',
+    galleryUrls: [],
+    sizeType: 'letter',
+    sizes: ['M'],
+    materials: ['Silk'],
+    description: 'Slip dress.',
+    inStock: true,
+    featured: true,
+  };
+  const customCatalog = [...INITIAL_PRODUCTS, customProduct];
+
+  const customState = parseCatalogUrlState(
+    '/women/silk-dresses/bias-cut-silk-slip-dress',
+    customCategories,
+    customCatalog
+  );
+  assert.equal(customState.route, '/women');
+  assert.equal(customState.selectedCategory, 'Silk Dresses');
+  assert.equal(customState.matchedProduct?.id, 'samo-women-silk-slip-8888');
+
+  // 5. Root /home and /gifts
+  const homeState = parseCatalogUrlState('/', INITIAL_CATEGORIES, INITIAL_PRODUCTS);
+  assert.equal(homeState.route, '/home');
+  assert.equal(homeState.selectedCategory, 'all');
+
+  const giftsState = parseCatalogUrlState(
+    '/gifts',
+    INITIAL_CATEGORIES,
+    INITIAL_PRODUCTS
+  );
+  assert.equal(giftsState.route, '/gifts');
+});
+
 
 

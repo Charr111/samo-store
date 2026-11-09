@@ -178,6 +178,291 @@ export function createSafeSlug(input: string): string {
 }
 
 /**
+ * Returns a URL-friendly slug for a product based on its name (e.g. 'avenue-heavy-cow-leather-biker-jacket').
+ */
+export function getProductSlug(product: Pick<ProductItem, 'name' | 'id'>): string {
+  return createSafeSlug(product.name || product.id);
+}
+
+/**
+ * Builds a clean category URL path, e.g.:
+ * - /women/jacket
+ * - /women/full-set
+ * - /kids/minis-1-to-5
+ * - /women (when categoryName is 'all' or empty)
+ * - /new-arrivals
+ * - /gifts
+ * - /home
+ */
+export function buildCategoryUrl(
+  routeOrDept: RoutePath | Department | string,
+  categoryName?: string
+): string {
+  const rawClean = (routeOrDept || '').trim().toLowerCase();
+  const withLeadingSlash = rawClean.startsWith('/') ? rawClean : `/${rawClean}`;
+  const cleanRoute = parsePathnameToRoute(withLeadingSlash);
+  if (cleanRoute === '/admin' || cleanRoute === '/showroom') {
+    return cleanRoute;
+  }
+  if (cleanRoute === '/new-arrivals' || cleanRoute === '/gifts') {
+    return cleanRoute;
+  }
+  if (cleanRoute === '/women' || cleanRoute === '/kids') {
+    const dept = cleanRoute === '/kids' ? 'kids' : 'women';
+    const cat = (categoryName || 'all').trim();
+    if (!cat || cat.toLowerCase() === 'all') {
+      return `/${dept}`;
+    }
+    const normalized =
+      dept === 'kids' ? normalizeKidsCategoryName(cat) : cat;
+    return `/${dept}/${createSafeSlug(normalized)}`;
+  }
+  return '/home';
+}
+
+/**
+ * Builds a clean, shareable product URL path, e.g.:
+ * - /women/jacket/avenue-heavy-cow-leather-biker-jacket
+ * - /kids/minis-1-to-5/baby-cashmere-knit-set
+ */
+export function buildProductUrl(
+  product: ProductItem,
+  _fallbackRoute?: RoutePath,
+  fallbackCategory?: string
+): string {
+  const dept = product.department === 'kids' ? 'kids' : 'women';
+  const rawCat = product.category || fallbackCategory || 'all';
+  const normalizedCat =
+    dept === 'kids' ? normalizeKidsCategoryName(rawCat) : rawCat.trim();
+  const catSlug =
+    normalizedCat.toLowerCase() === 'all'
+      ? 'item'
+      : createSafeSlug(normalizedCat);
+  const prodSlug = getProductSlug(product);
+
+  return `/${dept}/${catSlug}/${prodSlug}`;
+}
+
+/**
+ * Finds a matching CategoryItem by slug or normalized name in a given department.
+ */
+export function findCategoryBySlug(
+  categories: CategoryItem[],
+  slugOrName: string,
+  department?: Department
+): CategoryItem | undefined {
+  const rawClean = (slugOrName || '').trim();
+  if (!rawClean) return undefined;
+  const targetSlug = createSafeSlug(rawClean);
+
+  return categories.find((c) => {
+    if (department && c.department !== department) return false;
+    const catSlug = c.slug ? c.slug.toLowerCase() : createSafeSlug(c.name);
+    if (catSlug === targetSlug) return true;
+    if (createSafeSlug(c.name) === targetSlug) return true;
+    if (c.name.trim().toLowerCase() === rawClean.toLowerCase()) return true;
+
+    if (department === 'kids' || c.department === 'kids') {
+      const norm = normalizeKidsCategoryName(c.name);
+      if (createSafeSlug(norm) === targetSlug) return true;
+      const targetNorm = normalizeKidsCategoryName(rawClean);
+      if (norm.toLowerCase() === targetNorm.toLowerCase()) return true;
+    }
+    return false;
+  });
+}
+
+/**
+ * Finds a matching ProductItem by slug, name, or ID.
+ */
+export function findProductBySlug(
+  products: ProductItem[],
+  slugOrId: string,
+  department?: Department
+): ProductItem | undefined {
+  const rawClean = (slugOrId || '').trim();
+  if (!rawClean) return undefined;
+  const targetSlug = createSafeSlug(rawClean);
+
+  // 1. Exact ID match (case-sensitive then insensitive)
+  const byId = products.find(
+    (p) => p.id === rawClean || p.id.toLowerCase() === rawClean.toLowerCase()
+  );
+  if (byId) return byId;
+
+  // 2. Slug match within department (if provided)
+  if (department) {
+    const deptMatch = products.find(
+      (p) =>
+        p.department === department &&
+        (getProductSlug(p) === targetSlug || createSafeSlug(p.name) === targetSlug)
+    );
+    if (deptMatch) return deptMatch;
+  }
+
+  // 3. Slug match across all products
+  return products.find(
+    (p) => getProductSlug(p) === targetSlug || createSafeSlug(p.name) === targetSlug
+  );
+}
+
+export interface ParsedCatalogUrlState {
+  route: RoutePath;
+  selectedCategory: string;
+  matchedProduct: ProductItem | null;
+  productSlugCandidate?: string;
+}
+
+/**
+ * Parses any incoming URL path (e.g. /women/jacket, /women/jacket/biker-jacket, /kids/minis-1-to-5)
+ * and resolves the matching route, category, and direct product pop-up state.
+ */
+export function parseCatalogUrlState(
+  pathname: string,
+  categories: CategoryItem[],
+  products: ProductItem[],
+  searchParams?: URLSearchParams
+): ParsedCatalogUrlState {
+  const cleanPath = (pathname || '').trim().replace(/\/+$/, '');
+  const segments = cleanPath.split('/').filter(Boolean);
+
+  if (segments.length === 0) {
+    return {
+      route: '/home',
+      selectedCategory: 'all',
+      matchedProduct: null,
+    };
+  }
+
+  const firstSeg = segments[0].toLowerCase();
+
+  if (firstSeg === 'admin') {
+    return { route: '/admin', selectedCategory: 'all', matchedProduct: null };
+  }
+  if (firstSeg === 'showroom') {
+    return { route: '/showroom', selectedCategory: 'all', matchedProduct: null };
+  }
+  if (firstSeg === 'home') {
+    const prodSlug = segments[1];
+    const matched = prodSlug ? findProductBySlug(products, prodSlug) : null;
+    return {
+      route: '/home',
+      selectedCategory: 'all',
+      matchedProduct: matched || null,
+      productSlugCandidate: prodSlug,
+    };
+  }
+  if (firstSeg === 'new-arrivals') {
+    const prodSlug = segments[1];
+    const matched = prodSlug ? findProductBySlug(products, prodSlug) : null;
+    return {
+      route: '/new-arrivals',
+      selectedCategory: 'all',
+      matchedProduct: matched || null,
+      productSlugCandidate: prodSlug,
+    };
+  }
+  if (firstSeg === 'gifts') {
+    const prodSlug = segments[1];
+    const matched = prodSlug ? findProductBySlug(products, prodSlug) : null;
+    return {
+      route: '/gifts',
+      selectedCategory: 'all',
+      matchedProduct: matched || null,
+      productSlugCandidate: prodSlug,
+    };
+  }
+
+  if (firstSeg === 'women' || firstSeg === 'kids') {
+    const dept: Department = firstSeg as Department;
+    const route: RoutePath = `/${dept}` as RoutePath;
+
+    // Check query params fallback (e.g. ?category=... or ?product=...)
+    const queryCat = searchParams?.get('category');
+    const queryProd = searchParams?.get('product');
+
+    if (segments.length === 1) {
+      let matchedProd: ProductItem | null = null;
+      let matchedCategory = 'all';
+
+      if (queryCat) {
+        const foundCat = findCategoryBySlug(categories, queryCat, dept);
+        if (foundCat) matchedCategory = foundCat.name;
+      }
+      if (queryProd) {
+        matchedProd = findProductBySlug(products, queryProd, dept) || null;
+        if (matchedProd && matchedCategory === 'all') {
+          matchedCategory = matchedProd.category;
+        }
+      }
+
+      return {
+        route,
+        selectedCategory: matchedCategory,
+        matchedProduct: matchedProd,
+      };
+    }
+
+    if (segments.length === 2) {
+      // Could be /women/jacket (category) OR /women/biker-jacket (product)
+      const secondSeg = segments[1];
+      const matchedCat = findCategoryBySlug(categories, secondSeg, dept);
+
+      if (matchedCat) {
+        let matchedProd: ProductItem | null = null;
+        if (queryProd) {
+          matchedProd = findProductBySlug(products, queryProd, dept) || null;
+        }
+        return {
+          route,
+          selectedCategory: matchedCat.name,
+          matchedProduct: matchedProd,
+        };
+      }
+
+      // Check if second segment is a direct product slug
+      const directProd = findProductBySlug(products, secondSeg, dept);
+      if (directProd) {
+        return {
+          route,
+          selectedCategory: directProd.category,
+          matchedProduct: directProd,
+          productSlugCandidate: secondSeg,
+        };
+      }
+
+      // Fallback: treat as category name
+      return {
+        route,
+        selectedCategory: secondSeg,
+        matchedProduct: null,
+      };
+    }
+
+    // segments.length >= 3: /women/jacket/avenue-heavy-cow-leather-biker-jacket
+    const categorySeg = segments[1];
+    const productSeg = segments[2];
+
+    const matchedCat = findCategoryBySlug(categories, categorySeg, dept);
+    const matchedProd = findProductBySlug(products, productSeg, dept);
+
+    return {
+      route,
+      selectedCategory: matchedCat?.name || matchedProd?.category || categorySeg,
+      matchedProduct: matchedProd || null,
+      productSlugCandidate: productSeg,
+    };
+  }
+
+  // Fallback for any unknown root
+  return {
+    route: parsePathnameToRoute(pathname),
+    selectedCategory: 'all',
+    matchedProduct: null,
+  };
+}
+
+/**
  * Normalizes a size string according to the selected SizeType ('letter' | 'numeric' | 'months' | 'years' | 'cm').
  */
 export function normalizeSizeEntry(raw: string, sizeType: SizeType): string {

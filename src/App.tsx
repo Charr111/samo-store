@@ -42,7 +42,9 @@ import {
   INITIAL_PROMO_CODES,
 } from './data/seedCatalog';
 import {
+  buildCategoryUrl,
   buildDefaultCategoryBannerForCategory,
+  buildProductUrl,
   buildSizeQuantitiesMap,
   createSafeSlug,
   decrementStockForAcceptedOrder,
@@ -59,6 +61,7 @@ import {
   mergeSiteBannersConfig,
   moveCategoryInDepartment,
   normalizeKidsCategoryName,
+  parseCatalogUrlState,
   parsePathnameToRoute,
   renumberDepartmentCategoriesSequentially,
   restoreStockForCanceledOrder,
@@ -321,11 +324,23 @@ function normalizeStoredProducts(
 }
 
 export default function App() {
+  // Resolve initial route, category, and direct product from URL (e.g. /women/jacket or /women/jacket/avenue-heavy-cow-leather-biker-jacket)
+  const initialParsedUrl = useMemo(() => {
+    if (typeof window === 'undefined') {
+      return { route: '/home' as RoutePath, selectedCategory: 'all', matchedProduct: null };
+    }
+    const search = new URLSearchParams(window.location.search);
+    return parseCatalogUrlState(
+      window.location.pathname,
+      INITIAL_CATEGORIES,
+      INITIAL_PRODUCTS,
+      search
+    );
+  }, []);
+
   // Route state (/home, /women, /kids, /new-arrivals, /gifts, /showroom, /admin)
-  const [currentRoute, setCurrentRoute] = useState<RoutePath>(() =>
-    parsePathnameToRoute(window.location.pathname)
-  );
-  const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [currentRoute, setCurrentRoute] = useState<RoutePath>(() => initialParsedUrl.route);
+  const [selectedCategory, setSelectedCategory] = useState<string>(() => initialParsedUrl.selectedCategory);
   const [searchQuery, setSearchQuery] = useState<string>('');
 
   const [deletedProductIds, setDeletedProductIds] = useState<string[]>(() =>
@@ -395,7 +410,8 @@ export default function App() {
     loadStored(STORAGE_KEYS.cart, [])
   );
   const [activeProductModal, setActiveProductModal] =
-    useState<ProductItem | null>(null);
+    useState<ProductItem | null>(() => initialParsedUrl.matchedProduct);
+  const directUrlInitializedRef = useRef<boolean>(false);
   const [cartDrawerOpen, setCartDrawerOpen] = useState<boolean>(false);
   const [cartDrawerInitialStep, setCartDrawerInitialStep] = useState<
     'cart' | 'checkout'
@@ -670,11 +686,43 @@ export default function App() {
       window.history.replaceState({}, '', '/home');
     }
     const onPopState = () => {
-      setCurrentRoute(parsePathnameToRoute(window.location.pathname));
+      const search = new URLSearchParams(window.location.search);
+      const parsed = parseCatalogUrlState(
+        window.location.pathname,
+        categories,
+        products,
+        search
+      );
+      setCurrentRoute(parsed.route);
+      setSelectedCategory(parsed.selectedCategory);
+      setActiveProductModal(parsed.matchedProduct);
     };
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
-  }, []);
+  }, [categories, products]);
+
+  // Direct product or category link resolution when catalog products/categories finish loading
+  useEffect(() => {
+    if (!directUrlInitializedRef.current && (products.length > 0 || categories.length > 0)) {
+      const search = new URLSearchParams(window.location.search);
+      const parsed = parseCatalogUrlState(
+        window.location.pathname,
+        categories,
+        products,
+        search
+      );
+      if (parsed.matchedProduct && !activeProductModal) {
+        setActiveProductModal(parsed.matchedProduct);
+      }
+      if (parsed.route && parsed.route !== currentRoute) {
+        setCurrentRoute(parsed.route);
+      }
+      if (parsed.selectedCategory && parsed.selectedCategory !== selectedCategory) {
+        setSelectedCategory(parsed.selectedCategory);
+      }
+      directUrlInitializedRef.current = true;
+    }
+  }, [products, categories]);
 
   // Track Google Auth state for Admin login
   useEffect(() => {
@@ -881,18 +929,49 @@ export default function App() {
     document.body.scrollTop = 0;
   }, [currentRoute, selectedCategory]);
 
-  // Navigation handler updating browser URL
+  // Navigation handler updating browser URL (supporting /<department>/<category-slug>)
   const handleNavigate = (route: RoutePath, categoryName?: string) => {
-    window.history.pushState({}, '', route);
-    setCurrentRoute(route);
-    if (categoryName) {
-      setSelectedCategory(categoryName);
-    } else {
-      setSelectedCategory('all');
+    if (activeProductModal) {
+      setActiveProductModal(null);
     }
+    const targetCategory = categoryName || 'all';
+    const targetUrl = buildCategoryUrl(route, targetCategory);
+    window.history.pushState({}, '', targetUrl);
+    setCurrentRoute(route);
+    setSelectedCategory(targetCategory);
     window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
     document.documentElement.scrollTop = 0;
     document.body.scrollTop = 0;
+  };
+
+  // Category tab selection handler updating URL to /<department>/<category-slug>
+  const handleSelectCategory = (categoryName: string) => {
+    if (activeProductModal) {
+      setActiveProductModal(null);
+    }
+    const cleanCat = categoryName || 'all';
+    setSelectedCategory(cleanCat);
+    const targetUrl = buildCategoryUrl(currentRoute, cleanCat);
+    window.history.pushState({}, '', targetUrl);
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+  };
+
+  // Product Pop-Up Modal open handler updating URL to /<department>/<category-slug>/<product-slug>
+  const handleOpenProductModal = (product: ProductItem) => {
+    const productUrl = buildProductUrl(product, currentRoute, selectedCategory);
+    window.history.pushState({ modalOpen: true, productId: product.id }, '', productUrl);
+    setActiveProductModal(product);
+  };
+
+  // Product Pop-Up Modal close handler returning cleanly to the category URL
+  const handleCloseProductModal = () => {
+    setActiveProductModal(null);
+    const categoryUrl = buildCategoryUrl(currentRoute, selectedCategory);
+    if (window.location.pathname !== categoryUrl) {
+      window.history.pushState({ modalOpen: false }, '', categoryUrl);
+    }
   };
 
   // Cart & Buy Now Handlers (validating per-size, per-color, and 2-piece Full Set stock)
@@ -998,7 +1077,7 @@ export default function App() {
       selectedColorImage,
       selectedSetSizes
     );
-    setActiveProductModal(null);
+    handleCloseProductModal();
     setCartDrawerInitialStep('checkout');
     setCartDrawerOpen(true);
   };
@@ -2210,7 +2289,7 @@ export default function App() {
         womenCategories={womenCategories}
         kidsCategories={kidsCategories}
         selectedCategory={selectedCategory}
-        onSelectCategory={setSelectedCategory}
+        onSelectCategory={handleSelectCategory}
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
         onAiQuickSearch={handleAiQuickSearch}
@@ -2393,7 +2472,7 @@ export default function App() {
                 {/* Section 1: Full-Bleed Campaign Video / Image Hero (Configurable in /admin) */}
                 <HeroVideoSection
                   onNavigate={handleNavigate}
-                  onSelectCategory={setSelectedCategory}
+                  onSelectCategory={handleSelectCategory}
                   mediaType={siteBanners.homeHeroMediaType}
                   videoUrl={siteBanners.homeHeroVideoUrl}
                   imageUrl={siteBanners.homeHeroImageUrl}
@@ -2609,7 +2688,7 @@ export default function App() {
                       {homeNewArrivalsProducts.map((product) => (
                         <article
                           key={product.id}
-                          onClick={() => setActiveProductModal(product)}
+                          onClick={() => handleOpenProductModal(product)}
                           className="w-[62vw] sm:w-[40vw] lg:w-[calc(25%-1.5px)] shrink-0 snap-start cursor-pointer group bg-white flex flex-col"
                         >
                           <div className="aspect-[4/5] max-h-[310px] sm:max-h-[340px] lg:max-h-[360px] w-full bg-[#EFEFEF] overflow-hidden relative">
@@ -2743,7 +2822,7 @@ export default function App() {
                             <CatalogProductCard
                               key={product.id}
                               product={product}
-                              onSelectProduct={(prod) => setActiveProductModal(prod)}
+                              onSelectProduct={handleOpenProductModal}
                             />
                           ))}
 
@@ -2790,7 +2869,7 @@ export default function App() {
                             <CatalogProductCard
                               key={product.id}
                               product={product}
-                              onSelectProduct={(prod) => setActiveProductModal(prod)}
+                              onSelectProduct={handleOpenProductModal}
                             />
                           ))}
                       </>
@@ -2799,7 +2878,7 @@ export default function App() {
                         <CatalogProductCard
                           key={product.id}
                           product={product}
-                          onSelectProduct={(prod) => setActiveProductModal(prod)}
+                          onSelectProduct={handleOpenProductModal}
                         />
                       ))
                     )}
@@ -2944,7 +3023,7 @@ export default function App() {
       {/* SOLE ITEM POP-UP MODAL */}
       <ProductModal
         product={activeProductModal}
-        onClose={() => setActiveProductModal(null)}
+        onClose={handleCloseProductModal}
         onAddToCart={handleAddToCart}
         onBuyNow={handleBuyNow}
         onSubmitPreorder={handleSubmitPreorder}
@@ -2962,7 +3041,7 @@ export default function App() {
         onUpdateQuantity={handleUpdateCartQuantity}
         onRemoveItem={handleRemoveCartItem}
         onAddToCart={handleAddToCart}
-        onSelectProduct={(prod) => setActiveProductModal(prod)}
+        onSelectProduct={handleOpenProductModal}
         onSubmitOrder={handleSubmitOrder}
       />
 

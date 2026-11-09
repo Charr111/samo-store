@@ -7,6 +7,8 @@ import {
   SiteBannersConfig,
 } from '../types/samo';
 import {
+  buildCategoryUrl,
+  buildProductUrl,
   createSafeSlug,
   getCategoriesByDepartment,
   getEffectiveProductPrice,
@@ -118,7 +120,7 @@ export function generateCatalogSeoSnapshot(
         : cat.name.trim();
     const slug = createSafeSlug(cleanName);
     const key = `${cat.department}:${slug}`;
-    const canonicalPath = `/${cat.department}?category=${encodeURIComponent(cleanName)}`;
+    const canonicalPath = buildCategoryUrl(cat.department, cleanName);
 
     const matchingProducts = products.filter(
       (p) =>
@@ -225,7 +227,7 @@ export function generateCatalogSeoSnapshot(
       description,
       keywords,
       imageAlt,
-      canonicalPath: `/${prod.department}?product=${encodeURIComponent(prod.id)}`,
+      canonicalPath: buildProductUrl(prod),
     };
 
     if (prod.imageUrl) totalImagesIndexed += 1;
@@ -325,8 +327,8 @@ export function buildDynamicPageSeo(params: {
       ...(activeProduct.materials || []),
       ...LUXURY_FASHION_CORE_KEYWORDS.slice(0, 6),
     ];
-    const canonicalUrl = `${SAMO_CANONICAL_DOMAIN}/${activeProduct.department}?product=${encodeURIComponent(
-      activeProduct.id
+    const canonicalUrl = `${SAMO_CANONICAL_DOMAIN}${buildProductUrl(
+      activeProduct
     )}`;
     const productImg =
       activeProduct.imageUrl && activeProduct.imageUrl.startsWith('http')
@@ -429,7 +431,8 @@ export function buildDynamicPageSeo(params: {
         ...LUXURY_FASHION_CORE_KEYWORDS.slice(0, 8),
       ]
     ).join(', ');
-    const canonicalUrl = `${SAMO_CANONICAL_DOMAIN}/${dept}?category=${encodeURIComponent(
+    const canonicalUrl = `${SAMO_CANONICAL_DOMAIN}${buildCategoryUrl(
+      dept,
       cleanCat
     )}`;
 
