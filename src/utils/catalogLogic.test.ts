@@ -890,3 +890,415 @@ test('Full Set with multi-color linked pieces defaults to first color if none se
   assert.equal(fsShirtNoir.sizeQuantities.M, 4);
   assert.equal(updatedFullSet.setItems![1].sizeQuantities['38'], 3);
 });
+
+import {
+  moveCategoryInDepartment,
+  renumberDepartmentCategoriesSequentially,
+  updateCategorySortOrder,
+  validateNewsletterPopupInputs,
+} from './catalogLogic';
+import {
+  buildDynamicPageSeo,
+  buildProductImageSeoAlt,
+  generateCatalogSeoSnapshot,
+} from './seoLogic';
+import { INITIAL_PRODUCTS } from '../data/seedCatalog';
+
+test('Category ordering supports 1,2,3... numbering, decimal insertion (e.g. 1.5, 2.5), Move Up/Down, and Clean Numbering', () => {
+  const womenDefault = getCategoriesByDepartment(INITIAL_CATEGORIES, 'women');
+  assert.equal(womenDefault[0].name, 'Jacket');
+  assert.equal(womenDefault[0].sortOrder, 1);
+  assert.equal(womenDefault[1].name, 'Trousers');
+  assert.equal(womenDefault[1].sortOrder, 2);
+
+  // Insert 'Fur' (currently #9) between #1 (Jacket) and #2 (Trousers) by setting sortOrder = 1.5
+  const withDecimal = updateCategorySortOrder(
+    INITIAL_CATEGORIES,
+    'women-fur',
+    1.5
+  );
+  const sortedAfterDecimal = getCategoriesByDepartment(withDecimal, 'women');
+  assert.equal(sortedAfterDecimal[0].name, 'Jacket');
+  assert.equal(sortedAfterDecimal[1].name, 'Fur');
+  assert.equal(sortedAfterDecimal[1].sortOrder, 1.5);
+  assert.equal(sortedAfterDecimal[2].name, 'Trousers');
+
+  // Move 'Trousers' up one slot (swaps with 'Fur')
+  const afterMoveUp = moveCategoryInDepartment(
+    withDecimal,
+    'women',
+    'women-trousers',
+    'up'
+  );
+  const sortedAfterMove = getCategoriesByDepartment(afterMoveUp, 'women');
+  assert.equal(sortedAfterMove[1].name, 'Trousers');
+  assert.equal(sortedAfterMove[2].name, 'Fur');
+
+  // Clean Numbering re-normalizes 1, 2, 3, 4...
+  const cleaned = renumberDepartmentCategoriesSequentially(afterMoveUp, 'women');
+  const sortedCleaned = getCategoriesByDepartment(cleaned, 'women');
+  assert.deepEqual(
+    sortedCleaned.slice(0, 3).map((c) => c.sortOrder),
+    [1, 2, 3]
+  );
+});
+
+test('validateNewsletterPopupInputs supports single-box Email Or Number (e.g. johndoe@gmail.com, 70 123 456) and 2-argument calls', () => {
+  // 2-argument legacy call
+  const invalidEmail = validateNewsletterPopupInputs(
+    'client@domain.org',
+    '+961 70 123 456'
+  );
+  assert.equal(invalidEmail.valid, false);
+  assert.equal(invalidEmail.emailValid, false);
+  assert.equal(invalidEmail.phoneValid, true);
+
+  const validBoth = validateNewsletterPopupInputs(
+    'client@samoweave.com',
+    '+961 71 234 567'
+  );
+  assert.equal(validBoth.valid, true);
+  assert.equal(validBoth.emailValid, true);
+  assert.equal(validBoth.phoneValid, true);
+
+  // Single-box input: email only
+  const singleEmail = validateNewsletterPopupInputs('johndoe@gmail.com');
+  assert.equal(singleEmail.valid, true);
+  assert.equal(singleEmail.emailValid, true);
+  assert.equal(singleEmail.cleanEmail, 'johndoe@gmail.com');
+
+  // Single-box input: Lebanese phone number without +961
+  const singlePhone = validateNewsletterPopupInputs('70 123 456');
+  assert.equal(singlePhone.valid, true);
+  assert.equal(singlePhone.phoneValid, true);
+  assert.equal(singlePhone.cleanPhone, '70 123 456');
+
+  // Single-box input: combined email and phone separated by comma
+  const combinedBoth = validateNewsletterPopupInputs(
+    'johndoe@gmail.com, 70 123 456'
+  );
+  assert.equal(combinedBoth.valid, true);
+  assert.equal(combinedBoth.emailValid, true);
+  assert.equal(combinedBoth.phoneValid, true);
+  assert.equal(combinedBoth.cleanEmail, 'johndoe@gmail.com');
+  assert.equal(combinedBoth.cleanPhone, '70 123 456');
+
+  // Single-box input: too short phone and no email
+  const invalidSingle = validateNewsletterPopupInputs('1234');
+  assert.equal(invalidSingle.valid, false);
+});
+
+test('buildProductImageSeoAlt, generateCatalogSeoSnapshot (with customKeywords), and buildDynamicPageSeo generate luxury fashion SEO metadata', () => {
+  const altText = buildProductImageSeoAlt({
+    alt: 'Biker Jacket',
+    category: 'Jacket',
+    style: 'Fine Leather',
+    department: 'women',
+  });
+  assert.equal(altText.includes('SAMO'), true);
+  assert.equal(altText.includes('Jacket'), true);
+  assert.equal(altText.includes('SAMO Atelier'), false);
+
+  const customKeywords = ['SAMO Weave', 'bespoke leather coat', 'Beirut luxury house'];
+  const snapshot = generateCatalogSeoSnapshot(
+    INITIAL_PRODUCTS,
+    INITIAL_CATEGORIES,
+    undefined,
+    customKeywords
+  );
+  assert.equal(snapshot.indexedProductsCount, INITIAL_PRODUCTS.length);
+  assert.equal(snapshot.indexedImagesCount >= INITIAL_PRODUCTS.length, true);
+  assert.deepEqual(snapshot.defaultKeywords, customKeywords);
+  assert.deepEqual(snapshot.customKeywords, customKeywords);
+
+  const homeSeo = buildDynamicPageSeo({
+    route: '/home',
+    selectedCategory: 'all',
+    activeProduct: null,
+    categories: INITIAL_CATEGORIES,
+    products: INITIAL_PRODUCTS,
+    seoConfig: snapshot,
+  });
+  assert.equal(homeSeo.title.includes('SAMO'), true);
+  assert.equal(homeSeo.canonicalUrl, 'https://samoweave.com/home');
+  assert.equal(homeSeo.keywords.includes('bespoke leather coat'), true);
+
+  const productSeo = buildDynamicPageSeo({
+    route: '/women',
+    selectedCategory: 'Jacket',
+    activeProduct: INITIAL_PRODUCTS[0],
+    categories: INITIAL_CATEGORIES,
+    products: INITIAL_PRODUCTS,
+    seoConfig: snapshot,
+  });
+  assert.equal(productSeo.title.includes(INITIAL_PRODUCTS[0].name), true);
+  assert.equal(
+    Array.isArray((productSeo.jsonLd as Record<string, unknown>)['@graph']),
+    true
+  );
+});
+
+import { restoreStockForCanceledOrder } from './catalogLogic';
+
+test('restoreStockForCanceledOrder restores exact stock quantities for standard products, color variants, and Full Sets (including re-enabling inStock)', () => {
+  // 1. Standard product that reaches 0 stock when accepted, then returns to original stock & inStock=true when canceled
+  const standardJacket: ProductItem = {
+    id: 'std-jkt-1',
+    name: 'ATELIER BIKER JACKET',
+    department: 'women',
+    category: 'Jacket',
+    style: 'Fine Leather',
+    price: 2500,
+    quantity: 2,
+    sizeQuantities: { S: 0, M: 2 },
+    isNewArrival: true,
+    imageUrl: 'studio://women-jacket-black-leather-biker',
+    galleryUrls: [],
+    sizeType: 'letter',
+    sizes: ['S', 'M'],
+    materials: ['Cow Leather'],
+    description: 'desc',
+    inStock: true,
+    featured: true,
+  };
+
+  const stdOrder: OrderItem = {
+    id: 'ord-std-cancel',
+    orderNumber: 'SAMO-5501',
+    customerName: 'Nadia',
+    customerEmail: 'nadia@test.com',
+    customerPhone: '70123456',
+    shippingLocation: 'Beirut',
+    deliveryMethod: 'Standard Delivery',
+    deliveryFee: 0,
+    subtotal: 5000,
+    totalPrice: 5000,
+    itemsSummary: '2x ATELIER BIKER JACKET',
+    itemsCount: 2,
+    primaryProductName: 'ATELIER BIKER JACKET',
+    primaryProductSize: 'M',
+    primaryProductImage: 'studio://women-jacket-black-leather-biker',
+    orderedItems: [
+      {
+        productId: 'std-jkt-1',
+        productName: 'ATELIER BIKER JACKET',
+        selectedSize: 'M',
+        quantity: 2,
+      },
+    ],
+    status: 'accepted',
+    createdAt: '2026-11-09T00:00:00Z',
+  };
+
+  const afterAcceptStd = decrementStockForAcceptedOrder([standardJacket], stdOrder);
+  assert.equal(afterAcceptStd[0].sizeQuantities.M, 0);
+  assert.equal(afterAcceptStd[0].quantity, 0);
+  assert.equal(afterAcceptStd[0].inStock, false);
+
+  const afterCancelStd = restoreStockForCanceledOrder(afterAcceptStd, stdOrder);
+  assert.equal(afterCancelStd[0].sizeQuantities.M, 2);
+  assert.equal(afterCancelStd[0].quantity, 2);
+  assert.equal(afterCancelStd[0].inStock, true);
+
+  // 2. Multi-color product + 3-piece Full Set stock deduction and restoration
+  const multiColorTop: ProductItem = {
+    id: 'top-3p',
+    name: 'SILK DRAPE TOP',
+    department: 'women',
+    category: 'Tops',
+    style: 'Classic',
+    price: 850,
+    quantity: 6,
+    sizeQuantities: { S: 3, M: 3 },
+    hasColors: true,
+    colorVariants: [
+      {
+        colorName: 'Ivory',
+        imageUrl: 'ivory.jpg',
+        sizeType: 'letter',
+        sizes: ['S', 'M'],
+        sizeQuantities: { S: 1, M: 2 },
+      },
+      {
+        colorName: 'Black',
+        imageUrl: 'black.jpg',
+        sizeType: 'letter',
+        sizes: ['S', 'M'],
+        sizeQuantities: { S: 2, M: 1 },
+      },
+    ],
+    isNewArrival: true,
+    imageUrl: 'ivory.jpg',
+    galleryUrls: [],
+    sizeType: 'letter',
+    sizes: ['S', 'M'],
+    materials: ['Silk'],
+    description: 'desc',
+    inStock: true,
+    featured: true,
+  };
+
+  const pantsPiece: ProductItem = {
+    id: 'pants-3p',
+    name: 'WIDE LEATHER PANTS',
+    department: 'women',
+    category: 'Pants',
+    style: 'Fine Leather',
+    price: 1400,
+    quantity: 4,
+    sizeQuantities: { '36': 2, '38': 2 },
+    isNewArrival: true,
+    imageUrl: 'pants.jpg',
+    galleryUrls: [],
+    sizeType: 'numeric',
+    sizes: ['36', '38'],
+    materials: ['Cow Leather'],
+    description: 'desc',
+    inStock: true,
+    featured: true,
+  };
+
+  const beltPiece: ProductItem = {
+    id: 'belt-3p',
+    name: 'DOUBLE BUCKLE BELT',
+    department: 'women',
+    category: 'Belts',
+    style: 'Fine Leather',
+    price: 450,
+    quantity: 3,
+    sizeQuantities: { S: 1, M: 2 },
+    isNewArrival: true,
+    imageUrl: 'belt.jpg',
+    galleryUrls: [],
+    sizeType: 'letter',
+    sizes: ['S', 'M'],
+    materials: ['Cow Leather'],
+    description: 'desc',
+    inStock: true,
+    featured: true,
+  };
+
+  const threePieceSet: ProductItem = {
+    id: 'set-3p',
+    name: 'THREE PIECE ATELIER SET',
+    department: 'women',
+    category: 'Full Set',
+    style: 'Fine Leather',
+    price: 2400,
+    quantity: 3,
+    sizeQuantities: { S: 1, M: 2 },
+    isFullSet: true,
+    setItems: [
+      {
+        productId: 'top-3p',
+        productName: 'SILK DRAPE TOP',
+        pieceLabel: 'Top',
+        sizeType: 'letter',
+        sizes: ['S', 'M'],
+        sizeQuantities: { S: 1, M: 2 },
+        selectedColors: ['Ivory', 'Black'],
+      },
+      {
+        productId: 'pants-3p',
+        productName: 'WIDE LEATHER PANTS',
+        pieceLabel: 'Pants',
+        sizeType: 'numeric',
+        sizes: ['36', '38'],
+        sizeQuantities: { '36': 2, '38': 2 },
+      },
+      {
+        productId: 'belt-3p',
+        productName: 'DOUBLE BUCKLE BELT',
+        pieceLabel: 'Belt',
+        sizeType: 'letter',
+        sizes: ['S', 'M'],
+        sizeQuantities: { S: 1, M: 2 },
+      },
+    ],
+    isNewArrival: true,
+    imageUrl: 'set3p.jpg',
+    galleryUrls: [],
+    sizeType: 'letter',
+    sizes: ['S', 'M'],
+    materials: ['Cow Leather', 'Silk'],
+    description: 'desc',
+    inStock: true,
+    featured: true,
+  };
+
+  const initialCatalog = syncFullSetsWithCatalog([
+    multiColorTop,
+    pantsPiece,
+    beltPiece,
+    threePieceSet,
+  ]);
+
+  const setOrder: OrderItem = {
+    id: 'ord-3p-set',
+    orderNumber: 'SAMO-5502',
+    customerName: 'Lara',
+    customerEmail: 'lara@test.com',
+    customerPhone: '03111222',
+    shippingLocation: 'Beirut',
+    deliveryMethod: 'Standard Delivery',
+    deliveryFee: 0,
+    subtotal: 2400,
+    totalPrice: 2400,
+    itemsSummary: '1x THREE PIECE ATELIER SET',
+    itemsCount: 1,
+    primaryProductName: 'THREE PIECE ATELIER SET',
+    primaryProductSize: 'Black (M) / 38 / S',
+    primaryProductImage: 'set3p.jpg',
+    orderedItems: [
+      {
+        productId: 'set-3p',
+        productName: 'THREE PIECE ATELIER SET',
+        selectedSize: 'Black (M) / 38 / S',
+        selectedSetSizes: [
+          {
+            productId: 'top-3p',
+            productName: 'SILK DRAPE TOP',
+            selectedSize: 'M',
+            selectedColor: 'Black',
+          },
+          {
+            productId: 'pants-3p',
+            productName: 'WIDE LEATHER PANTS',
+            selectedSize: '38',
+          },
+          {
+            productId: 'belt-3p',
+            productName: 'DOUBLE BUCKLE BELT',
+            selectedSize: 'S',
+          },
+        ],
+        quantity: 1,
+      },
+    ],
+    status: 'accepted',
+    createdAt: '2026-11-09T00:00:00Z',
+  };
+
+  const afterSetAccepted = decrementStockForAcceptedOrder(initialCatalog, setOrder);
+  const topAfterAccept = afterSetAccepted.find((p) => p.id === 'top-3p')!;
+  const pantsAfterAccept = afterSetAccepted.find((p) => p.id === 'pants-3p')!;
+  const beltAfterAccept = afterSetAccepted.find((p) => p.id === 'belt-3p')!;
+
+  assert.equal(getSizeQuantity(topAfterAccept, 'M', 'Black'), 0);
+  assert.equal(pantsAfterAccept.sizeQuantities['38'], 1);
+  assert.equal(beltAfterAccept.sizeQuantities['S'], 0);
+
+  const afterSetCanceled = restoreStockForCanceledOrder(afterSetAccepted, setOrder);
+  const topAfterCancel = afterSetCanceled.find((p) => p.id === 'top-3p')!;
+  const pantsAfterCancel = afterSetCanceled.find((p) => p.id === 'pants-3p')!;
+  const beltAfterCancel = afterSetCanceled.find((p) => p.id === 'belt-3p')!;
+  const setAfterCancel = afterSetCanceled.find((p) => p.id === 'set-3p')!;
+
+  assert.equal(getSizeQuantity(topAfterCancel, 'M', 'Black'), 1);
+  assert.equal(pantsAfterCancel.sizeQuantities['38'], 2);
+  assert.equal(beltAfterCancel.sizeQuantities['S'], 1);
+  assert.equal(setAfterCancel.setItems![1].sizeQuantities['38'], 2);
+  assert.equal(setAfterCancel.setItems![2].sizeQuantities['S'], 1);
+});
+
+

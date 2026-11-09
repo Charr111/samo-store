@@ -21,7 +21,7 @@ export const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({
   mediaType = 'video',
   videoUrl = DEFAULT_HERO_VIDEO,
   imageUrl = 'studio://women-jacket-black-leather-biker',
-  kicker = 'SAMO ATELIER · CLASSIC · SPORT CHIC · FINE LEATHER · SUEDE · FUR',
+  kicker = 'SAMO WEAVE · CLASSIC · SPORT CHIC · FINE LEATHER · SUEDE · FUR',
   title = 'NEW ARRIVALS',
 }) => {
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -86,7 +86,7 @@ export const HeroVideoSection: React.FC<HeroVideoSectionProps> = ({
             }
           }}
           onError={(e) => {
-            console.warn('[SAMO Atelier] Hero video playback notice:', e);
+            console.warn('[SAMO Weave] Hero video playback notice:', e);
             if (!effectiveVideoUrl || effectiveVideoUrl === '') {
               setCustomVideoFailed(true);
             }

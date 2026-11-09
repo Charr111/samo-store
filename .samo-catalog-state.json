@@ -1,5 +1,5 @@
 {
-  "updatedAt": 1794171597981,
+  "updatedAt": 1794236448916,
   "siteBanners": {
     "homeHeroMediaType": "video",
     "homeHeroVideoUrl": "https://images.samoweave.com/banners/1793837590618-copy-0698c90b-a323-4c4f-a4f4-b4cc32d2d791.mp4",
@@ -490,41 +490,34 @@
     },
     {
       "id": "samo-w-trousers-01",
-      "name": "ARCHITECTURAL DOUBLE-PLEAT WOOL TROUSERS",
+      "name": "ARC TROUSERS",
       "department": "women",
       "category": "Trousers",
-      "style": "Classic",
-      "price": 1290,
-      "quantity": 25,
+      "style": "Sport Chic",
+      "price": 55,
+      "quantity": 3,
       "sizeQuantities": {
-        "34": 5,
-        "36": 5,
-        "38": 0,
-        "40": 5,
-        "42": 5,
-        "44": 5
+        "36": 1,
+        "38": 1,
+        "40": 1
       },
       "isNewArrival": false,
       "discountType": "none",
       "discountValue": 0,
-      "imageUrl": "studio://women-trousers-wool-pleat",
+      "imageUrl": "https://images.samoweave.com/products/1794178163079-0420a303-662c-4027-8e09-8ca612bdf501.png",
       "galleryUrls": [
-        "studio://women-trousers-wool-pleat-profile"
+        "https://images.samoweave.com/products/1794178200041-img-7347.jpg",
+        "https://images.samoweave.com/products/1794178214728-382753da-b23f-4bc9-b19b-1b34df88aa89.png",
+        "https://images.samoweave.com/products/1794178231383-bcf7738f-eb35-4cff-ba96-bcd4b26eebce.jpg"
       ],
       "sizeType": "numeric",
       "sizes": [
-        "34",
         "36",
         "38",
-        "40",
-        "42",
-        "44"
+        "40"
       ],
-      "materials": [
-        "Wool",
-        "Silk"
-      ],
-      "description": "Floor-grazing wide-leg tailored trousers in virgin cold-wool cavalry twill with sharp front knife pleats and waist tabs.",
+      "materials": [],
+      "description": "Mint green high-waisted trousers featuring a double-pleated front, wide-leg silhouette, and structured waistband with a matching adjustable belt. Designed with a concealed front fastening and softly draped fabric that falls into a fluid, full-length shape. Finished with clean, tailored hems.",
       "inStock": true,
       "featured": false,
       "hasColors": false,
@@ -705,79 +698,76 @@
     },
     {
       "id": "samo-w-fullset-01",
-      "name": "",
+      "name": "IVORY & MINT SET",
       "department": "women",
       "category": "Full Set",
       "style": "Classic",
-      "price": 45,
-      "quantity": 11,
+      "price": 93,
+      "quantity": 3,
       "sizeQuantities": {
-        "XS": 5,
-        "S": 2,
-        "M": 2,
-        "L": 2
+        "S": 1,
+        "M": 1,
+        "L": 2,
+        "XL": 1
       },
       "isFullSet": true,
       "setItems": [
         {
-          "productId": "samo-w-tops-01",
-          "productName": "SCULPTED COWL SATIN & LACE ATELIER TOP",
-          "pieceLabel": "Top / Shirt",
+          "productId": "samo-women-ivory-pleated-top-2575",
+          "productName": "IVORY PLEATED TOP",
+          "pieceLabel": "Tops",
           "sizeType": "letter",
           "sizes": [
-            "XS",
             "S",
             "M",
-            "L"
+            "L",
+            "XL"
           ],
           "sizeQuantities": {
-            "XS": 5,
-            "S": 2,
-            "M": 2,
-            "L": 2
-          }
+            "S": 1,
+            "M": 1,
+            "L": 2,
+            "XL": 1
+          },
+          "selectedColors": [],
+          "colorVariants": []
         },
         {
           "productId": "samo-w-trousers-01",
-          "productName": "ARCHITECTURAL DOUBLE-PLEAT WOOL TROUSERS",
-          "pieceLabel": "Trousers / Bottom",
+          "productName": "ARC TROUSERS",
+          "pieceLabel": "Trousers",
           "sizeType": "numeric",
           "sizes": [
-            "34",
             "36",
             "38",
-            "40",
-            "42",
-            "44"
+            "40"
           ],
           "sizeQuantities": {
-            "34": 5,
-            "36": 5,
-            "38": 0,
-            "40": 5,
-            "42": 5,
-            "44": 5
-          }
+            "36": 1,
+            "38": 1,
+            "40": 1
+          },
+          "selectedColors": [],
+          "colorVariants": []
         }
       ],
       "isNewArrival": true,
-      "discountType": "none",
-      "discountValue": 0,
-      "imageUrl": "studio://women-fullset-suede-monolith",
+      "discountType": "fixed",
+      "discountValue": 10,
+      "imageUrl": "https://images.samoweave.com/products/1794178954353-img-7347.jpg",
       "galleryUrls": [
-        "studio://women-fullset-suede-monolith-profile",
-        "studio://women-tops-satin-cowl",
-        "studio://women-trousers-wool-pleat"
+        "https://images.samoweave.com/products/1794178967453-382753da-b23f-4bc9-b19b-1b34df88aa89.png",
+        "https://images.samoweave.com/products/1794178984734-bcf7738f-eb35-4cff-ba96-bcd4b26eebce.jpg"
       ],
       "sizeType": "letter",
       "sizes": [
-        "XS",
         "S",
         "M",
-        "L"
+        "L",
+        "XL"
       ],
       "materials": [],
-      "description": "Two-piece runway ensemble pairing our Sculpted Cowl Satin & Lace Atelier Top (Letter sizing) with Architectural Double-Pleat Wool Trousers (Numeric sizing). Stock is synchronized with both standalone pieces.",
+      "description": "Two-piece set featuring an ivory satin top with a pointed collar, button-front closure, long sleeves, and structured waist pleating. Paired with mint green high-waisted trousers featuring double front pleats, a wide-leg silhouette, and a matching adjustable belt.",
       "inStock": true,
       "featured": true,
       "hasColors": false,
@@ -1210,5 +1200,787 @@
     }
   ],
   "autoAcceptOrders": false,
-  "newsletterSubscribers": []
+  "newsletterSubscribers": [
+    {
+      "id": "sub_1794172502369_5vwp9",
+      "email": "amunr211@gmail.com",
+      "subscribedAt": "2026-11-08T21:15:02.369Z"
+    }
+  ],
+  "newsletterPopupImpressions": {
+    "185.184.84.74": {
+      "date": "2026-11-09",
+      "count": 2
+    }
+  },
+  "categories": [
+    {
+      "id": "women-jacket",
+      "name": "Jacket",
+      "slug": "jacket",
+      "department": "women",
+      "description": "Architectural biker, bomber, and structured shoulder silhouettes in grained leather and wool.",
+      "sortOrder": 1
+    },
+    {
+      "id": "women-skirts",
+      "name": "Skirts",
+      "slug": "skirts",
+      "department": "women",
+      "description": "Asymmetric midi, wrap leather, and sculptural maxi column skirts.",
+      "sortOrder": 2
+    },
+    {
+      "id": "women-trousers",
+      "name": "Trousers",
+      "slug": "trousers",
+      "department": "women",
+      "description": "Tailored high-waist and elongated pleated wool and leather trousers.",
+      "sortOrder": 3
+    },
+    {
+      "id": "women-pants",
+      "name": "Pants",
+      "slug": "pants",
+      "department": "women",
+      "description": "Relaxed sport-chic track pants, cargo silhouettes, and flared suede styles.",
+      "sortOrder": 4
+    },
+    {
+      "id": "women-denim",
+      "name": "Denim",
+      "slug": "denim",
+      "department": "women",
+      "description": "Japanese raw selvedge, baggy couture-wash jeans, and structured denim outerwear.",
+      "sortOrder": 5
+    },
+    {
+      "id": "women-tops",
+      "name": "Tops",
+      "slug": "tops",
+      "department": "women",
+      "description": "Draped silk blouses, heavy jersey hoodies, and second-skin satin tops.",
+      "sortOrder": 6
+    },
+    {
+      "id": "women-full-set",
+      "name": "Full Set",
+      "slug": "full-set",
+      "department": "women",
+      "description": "Coordinated two-piece tailoring, suede ensembles, and sport-chic monolith sets.",
+      "sortOrder": 7
+    },
+    {
+      "id": "women-trench-coat",
+      "name": "Trench Coat",
+      "slug": "trench-coat",
+      "department": "women",
+      "description": "Floor-sweeping double-breasted storm-flap coats in calfskin, suede, and gabardine.",
+      "sortOrder": 8
+    },
+    {
+      "id": "women-fur",
+      "name": "Fur",
+      "slug": "fur",
+      "department": "women",
+      "description": "Voluminous shearling, plush faux-fur opera coats, and cropped winter statements.",
+      "sortOrder": 9
+    },
+    {
+      "id": "women-bags",
+      "name": "Bags",
+      "slug": "bags",
+      "department": "women",
+      "description": "Signature Hourglass-inspired top-handle bags, Rodeo totes, and Le City Moto styles.",
+      "sortOrder": 10
+    },
+    {
+      "id": "women-belts",
+      "name": "Belts",
+      "slug": "belts",
+      "department": "women",
+      "description": "Heavy brass hardware waist belts and grained Italian cow leather straps.",
+      "sortOrder": 11
+    },
+    {
+      "id": "kids-minis",
+      "name": "MINIS 1 To 5",
+      "slug": "minis-1-to-5",
+      "department": "kids",
+      "description": "Ultra-soft cashmere, organic cotton, and mini shearling pieces for ages 1 to 5 (80 cm – 110 cm).",
+      "sortOrder": 1
+    },
+    {
+      "id": "kids-children",
+      "name": "CHILDREN 6+",
+      "slug": "children-6",
+      "department": "kids",
+      "description": "Sport-chic sets, mini leather bombers, and tailored denim for children 6+ (110 cm – 140 cm).",
+      "sortOrder": 2
+    },
+    {
+      "id": "kids-teen",
+      "name": "Teen 13+",
+      "slug": "teen-13",
+      "department": "kids",
+      "description": "Runway-proportioned outerwear, wide denim, and suede silhouettes for teens 13+ (140 cm – 165 cm).",
+      "sortOrder": 3
+    },
+    {
+      "id": "kids-minis-1-to-5",
+      "name": "MINIS 1 To 5",
+      "slug": "minis-1-to-5",
+      "department": "kids",
+      "description": "Ultra-soft cashmere, organic cotton, and mini shearling pieces for ages 1 to 5 (80 cm – 110 cm)."
+    },
+    {
+      "id": "kids-children-6",
+      "name": "CHILDREN 6+",
+      "slug": "children-6",
+      "department": "kids",
+      "description": "Sport-chic sets, mini leather bombers, and tailored denim for children 6+ (110 cm – 140 cm)."
+    },
+    {
+      "id": "kids-teen-13",
+      "name": "Teen 13+",
+      "slug": "teen-13",
+      "department": "kids",
+      "description": "Runway-proportioned outerwear, wide denim, and suede silhouettes for teens 13+ (140 cm – 165 cm)."
+    }
+  ],
+  "newsletterPopupConfig": {
+    "enabled": true,
+    "delaySeconds": 1,
+    "maxTimesPerDay": 20,
+    "kicker": "",
+    "title": "Subscribe to Samo Weave",
+    "subtitle": "Enter your email and phone number to join the SAMO Weave private list and immediately unlock your 10% privilege promo code (SAMO1",
+    "buttonText": "UNLOCK 10% PRIV",
+    "promoCode": "SAMO10",
+    "discountText": "10% OFF",
+    "updatedAt": "2026-11-09T15:00:47.174Z"
+  },
+  "seoConfig": {
+    "lastUpdatedAt": "2026-11-09T15:00:48.910Z",
+    "siteTitleSuffix": "SAMO — Architectural Luxury Fashion House | Est. 1999",
+    "defaultDescription": "SAMO (Est. 1999) — Architectural luxury ready-to-wear for Women and Kids. Discover Classic, Sport Chic, Fine Leather, Suede, Fur, Bags, and Belts.",
+    "defaultKeywords": [
+      "SAMO",
+      "SAMO Weave",
+      "luxury fashion house",
+      "architectural ready-to-wear",
+      "Italian cow leather jacket",
+      "calf suede trench coat",
+      "luxury women outerwear",
+      "couture tailoring",
+      "designer leather bags",
+      "luxury kids wear",
+      "precision centimeter sizing",
+      "fine leather atelier",
+      "sport chic luxury",
+      "Beirut Paris Milan luxury fashion"
+    ],
+    "customKeywords": [
+      "SAMO",
+      "SAMO Weave",
+      "luxury fashion house",
+      "architectural ready-to-wear",
+      "Italian cow leather jacket",
+      "calf suede trench coat",
+      "luxury women outerwear",
+      "couture tailoring",
+      "designer leather bags",
+      "luxury kids wear",
+      "precision centimeter sizing",
+      "fine leather atelier",
+      "sport chic luxury",
+      "Beirut Paris Milan luxury fashion"
+    ],
+    "indexedProductsCount": 16,
+    "indexedCategoriesCount": 14,
+    "indexedImagesCount": 84,
+    "productSeoMap": {
+      "samo-women-ivory-pleated-top-2575": {
+        "title": "IVORY PLEATED TOP — SAMO Women Tops | SAMO Weave",
+        "description": "Ivory satin top featuring a pointed collar, dropped shoulders, and long, relaxed sleeves. Defined by structured vertical pleating at the waist, creating a softl",
+        "keywords": [
+          "IVORY PLEATED TOP",
+          "SAMO Tops",
+          "SAMO Women Tops",
+          "Classic Tops",
+          "Satin Tops",
+          "SAMO Weave",
+          "SAMO",
+          "luxury fashion house",
+          "architectural ready-to-wear",
+          "Italian cow leather jacket"
+        ],
+        "imageAlt": "SAMO Women Tops — IVORY PLEATED TOP — Crafted in Satin — Classic Luxury Ready-to-Wear — SAMO Weave (Est. 1999)",
+        "canonicalPath": "/women?product=samo-women-ivory-pleated-top-2575"
+      },
+      "samo-w-jacket-01": {
+        "title": "FUCHSIA MINK JACKET — SAMO Women Jacket | SAMO Weave",
+        "description": "Fuchsia mink fur jacket featuring a voluminous silhouette, round neckline, and three-quarter-length sleeves. Crafted with a richly textured fur exterior, tonal ",
+        "keywords": [
+          "FUCHSIA MINK JACKET",
+          "SAMO Jacket",
+          "SAMO Women Jacket",
+          "Fur Jacket",
+          "Mink fur Jacket",
+          "SAMO Weave",
+          "SAMO",
+          "luxury fashion house",
+          "architectural ready-to-wear",
+          "Italian cow leather jacket"
+        ],
+        "imageAlt": "SAMO Women Jacket — FUCHSIA MINK JACKET — Crafted in Mink fur — Fur Luxury Ready-to-Wear — SAMO Weave (Est. 1999)",
+        "canonicalPath": "/women?product=samo-w-jacket-01"
+      },
+      "samo-w-trench-01": {
+        "title": "RODEO OVERSIZED SUEDE TRENCH COAT — SAMO Women Trench Coat | SAMO Weave",
+        "description": "Full-length double-breasted trench coat cut from velvety cognac-espresso calf suede with storm flaps, belted cuffs, and an exaggerated storm collar. $3,890 · Su",
+        "keywords": [
+          "RODEO OVERSIZED SUEDE TRENCH COAT",
+          "SAMO Trench Coat",
+          "SAMO Women Trench Coat",
+          "Suede Trench Coat",
+          "Silk Trench Coat",
+          "Cotton Trench Coat",
+          "Brown RODEO OVERSIZED SUEDE TRENCH COAT",
+          "Camel RODEO OVERSIZED SUEDE TRENCH COAT",
+          "SAMO Weave",
+          "SAMO",
+          "luxury fashion house",
+          "architectural ready-to-wear",
+          "Italian cow leather jacket"
+        ],
+        "imageAlt": "SAMO Women Trench Coat — RODEO OVERSIZED SUEDE TRENCH COAT (Brown) — Crafted in Suede, Silk, Cotton — Suede Luxury Ready-to-Wear — SAMO Weave (Est. 1999)",
+        "canonicalPath": "/women?product=samo-w-trench-01"
+      },
+      "samo-w-bags-01": {
+        "title": "LE CITY CONCAVE TOP-HANDLE BAG — SAMO Women Bags | SAMO Weave",
+        "description": "Curvilinear sculptural base crafted from high-gloss box cow leather in deep oxblood crimson with aged brass SAMO monogram hardware and removable crossbody strap",
+        "keywords": [
+          "LE CITY CONCAVE TOP-HANDLE BAG",
+          "SAMO Bags",
+          "SAMO Women Bags",
+          "Accessories Bags",
+          "Cow Leather Bags",
+          "Suede Bags",
+          "Burgundy LE CITY CONCAVE TOP-HANDLE BAG",
+          "Black LE CITY CONCAVE TOP-HANDLE BAG",
+          "Ivory LE CITY CONCAVE TOP-HANDLE BAG",
+          "SAMO Weave",
+          "SAMO",
+          "luxury fashion house",
+          "architectural ready-to-wear",
+          "Italian cow leather jacket"
+        ],
+        "imageAlt": "SAMO Women Bags — LE CITY CONCAVE TOP-HANDLE BAG (Burgundy) — Crafted in Cow Leather, Suede — Accessories Luxury Ready-to-Wear — SAMO Weave (Est. 1999)",
+        "canonicalPath": "/women?product=samo-w-bags-01"
+      },
+      "samo-w-fur-01": {
+        "title": "WINTER 26 OPERA COCOON FUR COAT — SAMO Women Fur | SAMO Weave",
+        "description": "High-volume enveloping winter coat featuring dense plush shearling-fur texture, concealed hook closures, and a silk satin interior. $4,200 · Cashmere, Silk, Woo",
+        "keywords": [
+          "WINTER 26 OPERA COCOON FUR COAT",
+          "SAMO Fur",
+          "SAMO Women Fur",
+          "Fur Fur",
+          "Cashmere Fur",
+          "Silk Fur",
+          "Wool Fur",
+          "SAMO Weave",
+          "SAMO",
+          "luxury fashion house",
+          "architectural ready-to-wear",
+          "Italian cow leather jacket"
+        ],
+        "imageAlt": "SAMO Women Fur — WINTER 26 OPERA COCOON FUR COAT — Crafted in Cashmere, Silk, Wool — Fur Luxury Ready-to-Wear — SAMO Weave (Est. 1999)",
+        "canonicalPath": "/women?product=samo-w-fur-01"
+      },
+      "samo-w-trousers-01": {
+        "title": "ARC TROUSERS — SAMO Women Trousers | SAMO Weave",
+        "description": "Mint green high-waisted trousers featuring a double-pleated front, wide-leg silhouette, and structured waistband with a matching adjustable belt. Designed with ",
+        "keywords": [
+          "ARC TROUSERS",
+          "SAMO Trousers",
+          "SAMO Women Trousers",
+          "Sport Chic Trousers",
+          "SAMO Weave",
+          "SAMO",
+          "luxury fashion house",
+          "architectural ready-to-wear",
+          "Italian cow leather jacket"
+        ],
+        "imageAlt": "SAMO Women Trousers — ARC TROUSERS — Sport Chic Luxury Ready-to-Wear — SAMO Weave (Est. 1999)",
+        "canonicalPath": "/women?product=samo-w-trousers-01"
+      },
+      "samo-w-pants-01": {
+        "title": "TRACK MONOLITH PIPED LEATHER PANTS — SAMO Women Pants | SAMO Weave",
+        "description": "Relaxed athletic silhouette reimagined in supple nappa cow leather with contrast ivory side piping and zippered ankle gussets. $1,850 · Cow Leather, Cotton. Sho",
+        "keywords": [
+          "TRACK MONOLITH PIPED LEATHER PANTS",
+          "SAMO Pants",
+          "SAMO Women Pants",
+          "Sport Chic Pants",
+          "Cow Leather Pants",
+          "Cotton Pants",
+          "SAMO Weave",
+          "SAMO",
+          "luxury fashion house",
+          "architectural ready-to-wear",
+          "Italian cow leather jacket"
+        ],
+        "imageAlt": "SAMO Women Pants — TRACK MONOLITH PIPED LEATHER PANTS — Crafted in Cow Leather, Cotton — Sport Chic Luxury Ready-to-Wear — SAMO Weave (Est. 1999)",
+        "canonicalPath": "/women?product=samo-w-pants-01"
+      },
+      "samo-w-skirts-01": {
+        "title": "ASYMMETRIC DRAPED SUEDE MAXI SKIRT — SAMO Women Skirts | SAMO Weave",
+        "description": "Column maxi skirt featuring an architectural wrap waist, raw-edge laser hemline, and satin-backed interior for fluid movement. $1,580 · Suede, Satin. Shop authe",
+        "keywords": [
+          "ASYMMETRIC DRAPED SUEDE MAXI SKIRT",
+          "SAMO Skirts",
+          "SAMO Women Skirts",
+          "Suede Skirts",
+          "Satin Skirts",
+          "SAMO Weave",
+          "SAMO",
+          "luxury fashion house",
+          "architectural ready-to-wear",
+          "Italian cow leather jacket"
+        ],
+        "imageAlt": "SAMO Women Skirts — ASYMMETRIC DRAPED SUEDE MAXI SKIRT — Crafted in Suede, Satin — Suede Luxury Ready-to-Wear — SAMO Weave (Est. 1999)",
+        "canonicalPath": "/women?product=samo-w-skirts-01"
+      },
+      "samo-w-denim-01": {
+        "title": "COUTURE RING SELVEDGE BAGGY DENIM — SAMO Women Denim | SAMO Weave",
+        "description": "15oz Japanese indigo ring-spun denim treated with an artisanal charcoal overwash and embossed cow leather back waist plaque. $1,150 · Denim, Cotton, Cow Leather",
+        "keywords": [
+          "COUTURE RING SELVEDGE BAGGY DENIM",
+          "SAMO Denim",
+          "SAMO Women Denim",
+          "Sport Chic Denim",
+          "Denim Denim",
+          "Cotton Denim",
+          "Cow Leather Denim",
+          "SAMO Weave",
+          "SAMO",
+          "luxury fashion house",
+          "architectural ready-to-wear",
+          "Italian cow leather jacket"
+        ],
+        "imageAlt": "SAMO Women Denim — COUTURE RING SELVEDGE BAGGY DENIM — Crafted in Denim, Cotton, Cow Leather — Sport Chic Luxury Ready-to-Wear — SAMO Weave (Est. 1999)",
+        "canonicalPath": "/women?product=samo-w-denim-01"
+      },
+      "samo-w-tops-01": {
+        "title": "BLUE KNIT — SAMO Women Tops | SAMO Weave",
+        "description": "Light blue fine-knit sweater with a relaxed silhouette, wide round neckline, dropped shoulders, and long sleeves finished with ribbed cuffs. Softly textured fab",
+        "keywords": [
+          "BLUE KNIT",
+          "SAMO Tops",
+          "SAMO Women Tops",
+          "Sport Chic Tops",
+          "Cotton Tops",
+          "Black BLUE KNIT",
+          "SAMO Weave",
+          "SAMO",
+          "luxury fashion house",
+          "architectural ready-to-wear",
+          "Italian cow leather jacket"
+        ],
+        "imageAlt": "SAMO Women Tops — BLUE KNIT (Black) — Crafted in Cotton — Sport Chic Luxury Ready-to-Wear — SAMO Weave (Est. 1999)",
+        "canonicalPath": "/women?product=samo-w-tops-01"
+      },
+      "samo-w-fullset-01": {
+        "title": "IVORY & MINT SET — SAMO Women Full Set | SAMO Weave",
+        "description": "Two-piece set featuring an ivory satin top with a pointed collar, button-front closure, long sleeves, and structured waist pleating. Paired with mint green high",
+        "keywords": [
+          "IVORY & MINT SET",
+          "SAMO Full Set",
+          "SAMO Women Full Set",
+          "Classic Full Set",
+          "SAMO Weave",
+          "SAMO",
+          "luxury fashion house",
+          "architectural ready-to-wear",
+          "Italian cow leather jacket"
+        ],
+        "imageAlt": "SAMO Women Full Set — IVORY & MINT SET — Classic Luxury Ready-to-Wear — SAMO Weave (Est. 1999)",
+        "canonicalPath": "/women?product=samo-w-fullset-01"
+      },
+      "samo-w-belts-01": {
+        "title": "ARCHIVES DOUBLE-RING COW LEATHER BELT — SAMO Women Belts | SAMO Weave",
+        "description": "40mm full-grain bridle cow leather strap finished with sculptural interlocking brushed-gold rings inspired by the house archive. $590 · Cow Leather. Shop authen",
+        "keywords": [
+          "ARCHIVES DOUBLE-RING COW LEATHER BELT",
+          "SAMO Belts",
+          "SAMO Women Belts",
+          "Accessories Belts",
+          "Cow Leather Belts",
+          "SAMO Weave",
+          "SAMO",
+          "luxury fashion house",
+          "architectural ready-to-wear",
+          "Italian cow leather jacket"
+        ],
+        "imageAlt": "SAMO Women Belts — ARCHIVES DOUBLE-RING COW LEATHER BELT — Crafted in Cow Leather — Accessories Luxury Ready-to-Wear — SAMO Weave (Est. 1999)",
+        "canonicalPath": "/women?product=samo-w-belts-01"
+      },
+      "samo-k-baby-01": {
+        "title": "PETIT ATELIER CASHMERE & COTTON KNIT — SAMO Kids MINIS 1 To 5 | SAMO Weave",
+        "description": "Featherweight knitted cardigan crafted from combed organic cotton and Inner Mongolian cashmere for ages 1 to 5. $540 · Cashmere, Cotton. Shop authentic SAMO Wea",
+        "keywords": [
+          "PETIT ATELIER CASHMERE & COTTON KNIT",
+          "SAMO MINIS 1 To 5",
+          "SAMO Kids MINIS 1 To 5",
+          "Classic MINIS 1 To 5",
+          "Cashmere MINIS 1 To 5",
+          "Cotton MINIS 1 To 5",
+          "Ivory PETIT ATELIER CASHMERE & COTTON KNIT",
+          "Camel PETIT ATELIER CASHMERE & COTTON KNIT",
+          "SAMO Weave",
+          "SAMO",
+          "luxury fashion house",
+          "architectural ready-to-wear",
+          "Italian cow leather jacket"
+        ],
+        "imageAlt": "SAMO Kids MINIS 1 To 5 — PETIT ATELIER CASHMERE & COTTON KNIT (Ivory) — Crafted in Cashmere, Cotton — Classic Luxury Ready-to-Wear — SAMO Weave (Est. 1999)",
+        "canonicalPath": "/kids?product=samo-k-baby-01"
+      },
+      "samo-k-junior-01": {
+        "title": "CHILDREN SPORT CHIC LEATHER & WOOL BOMBER — SAMO Kids CHILDREN 6+ | SAMO Weave",
+        "description": "Varsity-proportioned children 6+ jacket with brushed Melton wool body, supple cow leather sleeves, and ribbed storm cuffs. $890 · Cow Leather, Wool, Cotton. Sho",
+        "keywords": [
+          "CHILDREN SPORT CHIC LEATHER & WOOL BOMBER",
+          "SAMO CHILDREN 6+",
+          "SAMO Kids CHILDREN 6+",
+          "Sport Chic CHILDREN 6+",
+          "Cow Leather CHILDREN 6+",
+          "Wool CHILDREN 6+",
+          "Cotton CHILDREN 6+",
+          "Black CHILDREN SPORT CHIC LEATHER & WOOL BOMBER",
+          "Brown CHILDREN SPORT CHIC LEATHER & WOOL BOMBER",
+          "SAMO Weave",
+          "SAMO",
+          "luxury fashion house",
+          "architectural ready-to-wear",
+          "Italian cow leather jacket"
+        ],
+        "imageAlt": "SAMO Kids CHILDREN 6+ — CHILDREN SPORT CHIC LEATHER & WOOL BOMBER (Black) — Crafted in Cow Leather, Wool, Cotton — Sport Chic Luxury Ready-to-Wear — SAMO Weave (Est. 1999)",
+        "canonicalPath": "/kids?product=samo-k-junior-01"
+      },
+      "samo-k-teen-01": {
+        "title": "TEEN RUNWAY SUEDE & SELVEDGE DENIM JEANS — SAMO Kids Teen 13+ | SAMO Weave",
+        "description": "Architectural teen 13+ silhouette in raw Japanese selvedge denim with suede trim and wide-cut carpenter tailoring. $680 · Suede, Denim, Cotton. Shop authentic S",
+        "keywords": [
+          "TEEN RUNWAY SUEDE & SELVEDGE DENIM JEANS",
+          "SAMO Teen 13+",
+          "SAMO Kids Teen 13+",
+          "Sport Chic Teen 13+",
+          "Suede Teen 13+",
+          "Denim Teen 13+",
+          "Cotton Teen 13+",
+          "Black TEEN RUNWAY SUEDE & SELVEDGE DENIM JEANS",
+          "Burgundy TEEN RUNWAY SUEDE & SELVEDGE DENIM JEANS",
+          "SAMO Weave",
+          "SAMO",
+          "luxury fashion house",
+          "architectural ready-to-wear",
+          "Italian cow leather jacket"
+        ],
+        "imageAlt": "SAMO Kids Teen 13+ — TEEN RUNWAY SUEDE & SELVEDGE DENIM JEANS (Black) — Crafted in Suede, Denim, Cotton — Sport Chic Luxury Ready-to-Wear — SAMO Weave (Est. 1999)",
+        "canonicalPath": "/kids?product=samo-k-teen-01"
+      },
+      "samo-k-children-02": {
+        "title": "ATELIER SHEARLING COLLAR SUEDE JACKET — SAMO Kids CHILDREN 6+ | SAMO Weave",
+        "description": "Tailored suede outerwear for children 6+ with plush shearling collar and brushed palladium snap closures. $960 · Suede, Wool, Cotton. Shop authentic SAMO Weave ",
+        "keywords": [
+          "ATELIER SHEARLING COLLAR SUEDE JACKET",
+          "SAMO CHILDREN 6+",
+          "SAMO Kids CHILDREN 6+",
+          "Suede CHILDREN 6+",
+          "Wool CHILDREN 6+",
+          "Cotton CHILDREN 6+",
+          "Camel ATELIER SHEARLING COLLAR SUEDE JACKET",
+          "Brown ATELIER SHEARLING COLLAR SUEDE JACKET",
+          "SAMO Weave",
+          "SAMO",
+          "luxury fashion house",
+          "architectural ready-to-wear",
+          "Italian cow leather jacket"
+        ],
+        "imageAlt": "SAMO Kids CHILDREN 6+ — ATELIER SHEARLING COLLAR SUEDE JACKET (Camel) — Crafted in Suede, Wool, Cotton — Suede Luxury Ready-to-Wear — SAMO Weave (Est. 1999)",
+        "canonicalPath": "/kids?product=samo-k-children-02"
+      }
+    },
+    "categorySeoMap": {
+      "women:jacket": {
+        "title": "Jacket — SAMO Women Luxury Collection | SAMO Weave (Est. 1999)",
+        "description": "Architectural biker, bomber, and structured shoulder silhouettes in grained leather and wool. Explore 1 pieces in Mink fur at SAMO Weave.",
+        "keywords": [
+          "SAMO Jacket",
+          "SAMO Women Jacket",
+          "luxury jacket",
+          "mink fur jacket",
+          "SAMO Weave",
+          "architectural luxury fashion",
+          "SAMO",
+          "luxury fashion house",
+          "architectural ready-to-wear",
+          "Italian cow leather jacket",
+          "calf suede trench coat"
+        ],
+        "canonicalPath": "/women?category=Jacket"
+      },
+      "women:skirts": {
+        "title": "Skirts — SAMO Women Luxury Collection | SAMO Weave (Est. 1999)",
+        "description": "Asymmetric midi, wrap leather, and sculptural maxi column skirts. Explore 1 pieces in Suede, Satin at SAMO Weave.",
+        "keywords": [
+          "SAMO Skirts",
+          "SAMO Women Skirts",
+          "luxury skirts",
+          "suede skirts",
+          "satin skirts",
+          "SAMO Weave",
+          "architectural luxury fashion",
+          "SAMO",
+          "luxury fashion house",
+          "architectural ready-to-wear",
+          "Italian cow leather jacket",
+          "calf suede trench coat"
+        ],
+        "canonicalPath": "/women?category=Skirts"
+      },
+      "women:trousers": {
+        "title": "Trousers — SAMO Women Luxury Collection | SAMO Weave (Est. 1999)",
+        "description": "Tailored high-waist and elongated pleated wool and leather trousers. Explore 1 pieces in Italian cow leather, suede, cashmere, and silk at SAMO Weave.",
+        "keywords": [
+          "SAMO Trousers",
+          "SAMO Women Trousers",
+          "luxury trousers",
+          "SAMO Weave",
+          "architectural luxury fashion",
+          "SAMO",
+          "luxury fashion house",
+          "architectural ready-to-wear",
+          "Italian cow leather jacket",
+          "calf suede trench coat"
+        ],
+        "canonicalPath": "/women?category=Trousers"
+      },
+      "women:pants": {
+        "title": "Pants — SAMO Women Luxury Collection | SAMO Weave (Est. 1999)",
+        "description": "Relaxed sport-chic track pants, cargo silhouettes, and flared suede styles. Explore 1 pieces in Cow Leather, Cotton at SAMO Weave.",
+        "keywords": [
+          "SAMO Pants",
+          "SAMO Women Pants",
+          "luxury pants",
+          "cow leather pants",
+          "cotton pants",
+          "SAMO Weave",
+          "architectural luxury fashion",
+          "SAMO",
+          "luxury fashion house",
+          "architectural ready-to-wear",
+          "Italian cow leather jacket",
+          "calf suede trench coat"
+        ],
+        "canonicalPath": "/women?category=Pants"
+      },
+      "women:denim": {
+        "title": "Denim — SAMO Women Luxury Collection | SAMO Weave (Est. 1999)",
+        "description": "Japanese raw selvedge, baggy couture-wash jeans, and structured denim outerwear. Explore 1 pieces in Denim, Cotton, Cow Leather at SAMO Weave.",
+        "keywords": [
+          "SAMO Denim",
+          "SAMO Women Denim",
+          "luxury denim",
+          "denim denim",
+          "cotton denim",
+          "cow leather denim",
+          "SAMO Weave",
+          "architectural luxury fashion",
+          "SAMO",
+          "luxury fashion house",
+          "architectural ready-to-wear",
+          "Italian cow leather jacket",
+          "calf suede trench coat"
+        ],
+        "canonicalPath": "/women?category=Denim"
+      },
+      "women:tops": {
+        "title": "Tops — SAMO Women Luxury Collection | SAMO Weave (Est. 1999)",
+        "description": "Draped silk blouses, heavy jersey hoodies, and second-skin satin tops. Explore 2 pieces in Satin, Cotton at SAMO Weave.",
+        "keywords": [
+          "SAMO Tops",
+          "SAMO Women Tops",
+          "luxury tops",
+          "satin tops",
+          "cotton tops",
+          "SAMO Weave",
+          "architectural luxury fashion",
+          "SAMO",
+          "luxury fashion house",
+          "architectural ready-to-wear",
+          "Italian cow leather jacket",
+          "calf suede trench coat"
+        ],
+        "canonicalPath": "/women?category=Tops"
+      },
+      "women:full-set": {
+        "title": "Full Set — SAMO Women Luxury Collection | SAMO Weave (Est. 1999)",
+        "description": "Coordinated two-piece tailoring, suede ensembles, and sport-chic monolith sets. Explore 1 pieces in Italian cow leather, suede, cashmere, and silk at SAMO Weave",
+        "keywords": [
+          "SAMO Full Set",
+          "SAMO Women Full Set",
+          "luxury full set",
+          "SAMO Weave",
+          "architectural luxury fashion",
+          "SAMO",
+          "luxury fashion house",
+          "architectural ready-to-wear",
+          "Italian cow leather jacket",
+          "calf suede trench coat"
+        ],
+        "canonicalPath": "/women?category=Full%20Set"
+      },
+      "women:trench-coat": {
+        "title": "Trench Coat — SAMO Women Luxury Collection | SAMO Weave (Est. 1999)",
+        "description": "Floor-sweeping double-breasted storm-flap coats in calfskin, suede, and gabardine. Explore 1 pieces in Suede, Silk, Cotton at SAMO Weave.",
+        "keywords": [
+          "SAMO Trench Coat",
+          "SAMO Women Trench Coat",
+          "luxury trench coat",
+          "suede trench coat",
+          "silk trench coat",
+          "cotton trench coat",
+          "SAMO Weave",
+          "architectural luxury fashion",
+          "SAMO",
+          "luxury fashion house",
+          "architectural ready-to-wear",
+          "Italian cow leather jacket",
+          "calf suede trench coat"
+        ],
+        "canonicalPath": "/women?category=Trench%20Coat"
+      },
+      "women:fur": {
+        "title": "Fur — SAMO Women Luxury Collection | SAMO Weave (Est. 1999)",
+        "description": "Voluminous shearling, plush faux-fur opera coats, and cropped winter statements. Explore 1 pieces in Cashmere, Silk, Wool at SAMO Weave.",
+        "keywords": [
+          "SAMO Fur",
+          "SAMO Women Fur",
+          "luxury fur",
+          "cashmere fur",
+          "silk fur",
+          "wool fur",
+          "SAMO Weave",
+          "architectural luxury fashion",
+          "SAMO",
+          "luxury fashion house",
+          "architectural ready-to-wear",
+          "Italian cow leather jacket",
+          "calf suede trench coat"
+        ],
+        "canonicalPath": "/women?category=Fur"
+      },
+      "women:bags": {
+        "title": "Bags — SAMO Women Luxury Collection | SAMO Weave (Est. 1999)",
+        "description": "Signature Hourglass-inspired top-handle bags, Rodeo totes, and Le City Moto styles. Explore 1 pieces in Cow Leather, Suede at SAMO Weave.",
+        "keywords": [
+          "SAMO Bags",
+          "SAMO Women Bags",
+          "luxury bags",
+          "cow leather bags",
+          "suede bags",
+          "SAMO Weave",
+          "architectural luxury fashion",
+          "SAMO",
+          "luxury fashion house",
+          "architectural ready-to-wear",
+          "Italian cow leather jacket",
+          "calf suede trench coat"
+        ],
+        "canonicalPath": "/women?category=Bags"
+      },
+      "women:belts": {
+        "title": "Belts — SAMO Women Luxury Collection | SAMO Weave (Est. 1999)",
+        "description": "Heavy brass hardware waist belts and grained Italian cow leather straps. Explore 1 pieces in Cow Leather at SAMO Weave.",
+        "keywords": [
+          "SAMO Belts",
+          "SAMO Women Belts",
+          "luxury belts",
+          "cow leather belts",
+          "SAMO Weave",
+          "architectural luxury fashion",
+          "SAMO",
+          "luxury fashion house",
+          "architectural ready-to-wear",
+          "Italian cow leather jacket",
+          "calf suede trench coat"
+        ],
+        "canonicalPath": "/women?category=Belts"
+      },
+      "kids:minis-1-to-5": {
+        "title": "MINIS 1 To 5 — SAMO Kids Luxury Collection | SAMO Weave (Est. 1999)",
+        "description": "Ultra-soft cashmere, organic cotton, and mini shearling pieces for ages 1 to 5 (80 cm – 110 cm). Explore 1 pieces in Cashmere, Cotton at SAMO Weave.",
+        "keywords": [
+          "SAMO MINIS 1 To 5",
+          "SAMO Kids MINIS 1 To 5",
+          "luxury minis 1 to 5",
+          "cashmere minis 1 to 5",
+          "cotton minis 1 to 5",
+          "SAMO Weave",
+          "architectural luxury fashion",
+          "SAMO",
+          "luxury fashion house",
+          "architectural ready-to-wear",
+          "Italian cow leather jacket",
+          "calf suede trench coat"
+        ],
+        "canonicalPath": "/kids?category=MINIS%201%20To%205"
+      },
+      "kids:children-6": {
+        "title": "CHILDREN 6+ — SAMO Kids Luxury Collection | SAMO Weave (Est. 1999)",
+        "description": "Sport-chic sets, mini leather bombers, and tailored denim for children 6+ (110 cm – 140 cm). Explore 2 pieces in Cow Leather, Wool, Cotton, Suede at SAMO Weave.",
+        "keywords": [
+          "SAMO CHILDREN 6+",
+          "SAMO Kids CHILDREN 6+",
+          "luxury children 6+",
+          "cow leather children 6+",
+          "wool children 6+",
+          "cotton children 6+",
+          "suede children 6+",
+          "SAMO Weave",
+          "architectural luxury fashion",
+          "SAMO",
+          "luxury fashion house",
+          "architectural ready-to-wear",
+          "Italian cow leather jacket",
+          "calf suede trench coat"
+        ],
+        "canonicalPath": "/kids?category=CHILDREN%206%2B"
+      },
+      "kids:teen-13": {
+        "title": "Teen 13+ — SAMO Kids Luxury Collection | SAMO Weave (Est. 1999)",
+        "description": "Runway-proportioned outerwear, wide denim, and suede silhouettes for teens 13+ (140 cm – 165 cm). Explore 1 pieces in Suede, Denim, Cotton at SAMO Weave.",
+        "keywords": [
+          "SAMO Teen 13+",
+          "SAMO Kids Teen 13+",
+          "luxury teen 13+",
+          "suede teen 13+",
+          "denim teen 13+",
+          "cotton teen 13+",
+          "SAMO Weave",
+          "architectural luxury fashion",
+          "SAMO",
+          "luxury fashion house",
+          "architectural ready-to-wear",
+          "Italian cow leather jacket",
+          "calf suede trench coat"
+        ],
+        "canonicalPath": "/kids?category=Teen%2013%2B"
+      }
+    }
+  }
 }

@@ -22,12 +22,14 @@ import {
   OrderStatus,
   PreorderItem,
   PreorderStatus,
+  NewsletterPopupConfig,
   NewsletterSubscriber,
   ProductColorVariant,
   ProductItem,
   PromoCodeItem,
   RoutePath,
   SelectedSetPieceSize,
+  SeoConfigState,
   SiteBannersConfig,
   StyleType,
 } from './types/samo';
@@ -44,6 +46,7 @@ import {
   buildSizeQuantitiesMap,
   createSafeSlug,
   decrementStockForAcceptedOrder,
+  DEFAULT_NEWSLETTER_POPUP_CONFIG,
   filterCatalogProducts,
   filterGiftsProducts,
   filterNewArrivalProducts,
@@ -52,14 +55,24 @@ import {
   getCategoryBannerSplitIndex,
   getSizeQuantity,
   isAuthorizedAdminEmail,
+  mergeNewsletterPopupConfig,
   mergeSiteBannersConfig,
+  moveCategoryInDepartment,
   normalizeKidsCategoryName,
   parsePathnameToRoute,
+  renumberDepartmentCategoriesSequentially,
+  restoreStockForCanceledOrder,
   sumSizeQuantities,
   syncFullSetsWithCatalog,
   syncProductFromColorVariants,
   toggleProductInStockState,
+  updateCategorySortOrder,
 } from './utils/catalogLogic';
+import {
+  applyDocumentSeoTags,
+  buildDynamicPageSeo,
+  generateCatalogSeoSnapshot,
+} from './utils/seoLogic';
 import {
   auth,
   db,
@@ -85,6 +98,7 @@ import { ProductModal } from './components/ProductModal';
 import { CartCheckoutDrawer } from './components/CartCheckoutDrawer';
 import { AdminDashboard } from './components/AdminDashboard';
 import { AiStylistModal } from './components/AiStylistModal';
+import { NewsletterPopupModal } from './components/NewsletterPopupModal';
 
 const STORAGE_KEYS = {
   categories: 'samo_categories_v2',
@@ -102,6 +116,8 @@ const STORAGE_KEYS = {
   siteBanners: 'samo_site_banners_v2',
   autoAcceptOrders: 'samo_auto_accept_orders_v1',
   showLowStockCount: 'samo_show_low_stock_v1',
+  newsletterPopupConfig: 'samo_newsletter_popup_cfg_v1',
+  seoConfig: 'samo_seo_config_v1',
 };
 
 function sanitizeAuthorizedAdmins(list: AdminRecord[]): AdminRecord[] {
@@ -192,12 +208,17 @@ function mergeStoredCategories(
     ) {
       continue;
     }
+    const seedFallback = INITIAL_CATEGORIES.find((ic) => ic.id === c.id);
     const cleanName = c.name.trim();
     const cleanSlug = createSafeSlug(cleanName);
     map.set(c.id, {
       ...c,
       name: cleanName,
       slug: cleanSlug,
+      sortOrder:
+        typeof c.sortOrder === 'number' && Number.isFinite(c.sortOrder)
+          ? c.sortOrder
+          : seedFallback?.sortOrder,
     });
   }
   return Array.from(map.values());
@@ -386,6 +407,22 @@ export default function App() {
   const [newsletterSubscribers, setNewsletterSubscribers] = useState<
     NewsletterSubscriber[]
   >([]);
+  const [newsletterPopupConfig, setNewsletterPopupConfig] =
+    useState<NewsletterPopupConfig>(() =>
+      mergeNewsletterPopupConfig(
+        loadStored<Partial<NewsletterPopupConfig> | null>(
+          STORAGE_KEYS.newsletterPopupConfig,
+          DEFAULT_NEWSLETTER_POPUP_CONFIG
+        )
+      )
+    );
+  const [isNewsletterPopupOpen, setIsNewsletterPopupOpen] =
+    useState<boolean>(false);
+  const [seoConfig, setSeoConfig] = useState<SeoConfigState>(() => {
+    const stored = loadStored<SeoConfigState | null>(STORAGE_KEYS.seoConfig, null);
+    if (stored && stored.siteTitleSuffix) return stored;
+    return generateCatalogSeoSnapshot(products, categories, siteBanners);
+  });
 
   // Home Page Section 2 (Categories Switcher: Women | Kids) & New Arrivals Carousel State
   const [homeCategoryDept, setHomeCategoryDept] = useState<Department>('women');
@@ -518,6 +555,115 @@ export default function App() {
     } catch {}
   }, [cartItems]);
 
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        STORAGE_KEYS.newsletterPopupConfig,
+        JSON.stringify(newsletterPopupConfig)
+      );
+    } catch {}
+  }, [newsletterPopupConfig]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEYS.seoConfig, JSON.stringify(seoConfig));
+    } catch {}
+  }, [seoConfig]);
+
+  // Dynamic Route, Category & Product SEO + Schema.org JSON-LD Updater
+  useEffect(() => {
+    const seoPayload = buildDynamicPageSeo({
+      route: currentRoute,
+      selectedCategory,
+      activeProduct: activeProductModal,
+      categories,
+      products,
+      seoConfig,
+    });
+    applyDocumentSeoTags(seoPayload);
+  }, [
+    currentRoute,
+    selectedCategory,
+    activeProductModal,
+    categories,
+    products,
+    seoConfig,
+  ]);
+
+  // Homepage 10% OFF Newsletter Pop-Up Timer & IP Daily Frequency Cap
+  useEffect(() => {
+    if (currentRoute !== '/home' || !newsletterPopupConfig.enabled) {
+      return;
+    }
+
+    const delayMs =
+      Math.max(1, Math.min(300, Number(newsletterPopupConfig.delaySeconds) || 10)) *
+      1000;
+    const maxPerDay = Math.max(
+      1,
+      Math.min(50, Number(newsletterPopupConfig.maxTimesPerDay) || 1)
+    );
+
+    let cancelled = false;
+    const timerId = window.setTimeout(async () => {
+      if (cancelled) return;
+      try {
+        if (localStorage.getItem('samo_newsletter_popup_subscribed_v1') === '1') {
+          return;
+        }
+      } catch {}
+
+      const todayStr = new Date().toISOString().slice(0, 10);
+      const localCountKey = `samo_popup_imp_${todayStr}`;
+      let localShownToday = 0;
+      try {
+        localShownToday = Number(localStorage.getItem(localCountKey) || '0') || 0;
+      } catch {}
+
+      if (localShownToday >= maxPerDay) {
+        return;
+      }
+
+      let serverEligible = true;
+      try {
+        const res = await fetch(
+          `/api/newsletter/popup-eligibility?maxPerDay=${maxPerDay}`,
+          { cache: 'no-store' }
+        );
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.eligible === false) {
+            serverEligible = false;
+          }
+        }
+      } catch {}
+
+      if (cancelled || !serverEligible) return;
+
+      setIsNewsletterPopupOpen(true);
+      try {
+        localStorage.setItem(localCountKey, String(localShownToday + 1));
+      } catch {}
+      try {
+        await fetch('/api/newsletter/popup-impression', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ maxPerDay }),
+        });
+      } catch {}
+    }, delayMs);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timerId);
+    };
+  }, [
+    currentRoute,
+    newsletterPopupConfig.enabled,
+    newsletterPopupConfig.delaySeconds,
+    newsletterPopupConfig.maxTimesPerDay,
+  ]);
+
   // Normalize initial root path '/' to '/home' and listen for browser back/forward
   useEffect(() => {
     if (window.location.pathname === '/' || window.location.pathname === '') {
@@ -555,6 +701,16 @@ export default function App() {
         }
         if (cfg && typeof cfg.showLowStockCount === 'boolean') {
           setShowLowStockCount(cfg.showLowStockCount);
+        }
+        if (cfg && cfg.newsletterPopupConfig && typeof cfg.newsletterPopupConfig === 'object') {
+          setNewsletterPopupConfig(
+            mergeNewsletterPopupConfig(
+              cfg.newsletterPopupConfig as Partial<NewsletterPopupConfig>
+            )
+          );
+        }
+        if (cfg && cfg.seoConfig && typeof cfg.seoConfig === 'object') {
+          setSeoConfig(cfg.seoConfig as SeoConfigState);
         }
       },
       () => {
@@ -603,6 +759,8 @@ export default function App() {
             autoAcceptOrders,
             showLowStockCount,
             shrinkUploadsEnabled,
+            newsletterPopupConfig,
+            seoConfig,
           });
           return;
         }
@@ -687,6 +845,19 @@ export default function App() {
           setNewsletterSubscribers(
             data.newsletterSubscribers as NewsletterSubscriber[]
           );
+        }
+        if (
+          data.newsletterPopupConfig &&
+          typeof data.newsletterPopupConfig === 'object'
+        ) {
+          setNewsletterPopupConfig(
+            mergeNewsletterPopupConfig(
+              data.newsletterPopupConfig as Partial<NewsletterPopupConfig>
+            )
+          );
+        }
+        if (data.seoConfig && typeof data.seoConfig === 'object') {
+          setSeoConfig(data.seoConfig as SeoConfigState);
         }
       } catch {}
     };
@@ -958,18 +1129,42 @@ export default function App() {
     const id = `${cat.department}-${createSafeSlug(cat.name)}-${Date.now()
       .toString()
       .slice(-4)}`;
-    const newCat: CategoryItem = { ...cat, id };
-    setCategories((prev) => {
-      const next = [...prev, newCat];
-      pushServerCatalogPatch({ categories: next });
-      return next;
+    const deptCategories = getCategoriesByDepartment(categories, cat.department);
+    const defaultSortOrder = deptCategories.length + 1;
+    const newCat: CategoryItem = {
+      ...cat,
+      id,
+      sortOrder:
+        typeof cat.sortOrder === 'number' && Number.isFinite(cat.sortOrder)
+          ? cat.sortOrder
+          : defaultSortOrder,
+    };
+
+    const nextCategories = [...categories, newCat];
+    const bannerKey = getCategoryBannerKey(newCat.department, newCat.name);
+    const nextBanners: SiteBannersConfig = {
+      ...siteBanners,
+      categoryBanners: {
+        ...siteBanners.categoryBanners,
+        [bannerKey]:
+          siteBanners.categoryBanners?.[bannerKey] ||
+          buildDefaultCategoryBannerForCategory(newCat.department, newCat.name),
+      },
+    };
+
+    setCategories(nextCategories);
+    setSiteBanners(nextBanners);
+    await pushServerCatalogPatch({
+      categories: nextCategories,
+      siteBanners: nextBanners,
     });
   };
 
   const handleUpdateCategory = async (
     categoryId: string,
     newName: string,
-    newDescription?: string
+    newDescription?: string,
+    newSortOrder?: number
   ) => {
     const cleanNewName = newName.trim();
     if (!cleanNewName) return;
@@ -989,6 +1184,10 @@ export default function App() {
             slug: createSafeSlug(cleanNewName),
             description:
               newDescription !== undefined ? newDescription : c.description,
+            sortOrder:
+              typeof newSortOrder === 'number' && Number.isFinite(newSortOrder)
+                ? newSortOrder
+                : c.sortOrder,
           }
         : c
     );
@@ -1032,6 +1231,43 @@ export default function App() {
       products: nextProducts,
       siteBanners: nextBanners,
     });
+  };
+
+  const handleUpdateCategorySortOrder = async (
+    categoryId: string,
+    newSortOrder: number
+  ) => {
+    const nextCategories = updateCategorySortOrder(
+      categories,
+      categoryId,
+      newSortOrder
+    );
+    setCategories(nextCategories);
+    await pushServerCatalogPatch({ categories: nextCategories });
+  };
+
+  const handleMoveCategoryOrder = async (
+    department: Department,
+    categoryId: string,
+    direction: 'up' | 'down'
+  ) => {
+    const nextCategories = moveCategoryInDepartment(
+      categories,
+      department,
+      categoryId,
+      direction
+    );
+    setCategories(nextCategories);
+    await pushServerCatalogPatch({ categories: nextCategories });
+  };
+
+  const handleRenumberDepartmentCategories = async (department: Department) => {
+    const nextCategories = renumberDepartmentCategoriesSequentially(
+      categories,
+      department
+    );
+    setCategories(nextCategories);
+    await pushServerCatalogPatch({ categories: nextCategories });
   };
 
   const handleDeleteCategory = async (id: string) => {
@@ -1364,17 +1600,41 @@ export default function App() {
         orders: nextOrders,
         products: updatedCatalog,
       });
+    } else if (targetOrder && wasAlreadyAccepted && status !== 'accepted') {
+      // When admin cancels/rejects (or reverts to pending) an already-accepted order, restore the deducted stock
+      const updatedCatalog = restoreStockForCanceledOrder(
+        products,
+        targetOrder
+      );
+      setProducts(updatedCatalog);
+      await pushServerCatalogPatch({
+        orders: nextOrders,
+        products: updatedCatalog,
+      });
     } else {
       await pushServerCatalogPatch({ orders: nextOrders });
     }
   };
 
   const handleDeleteOrder = async (orderId: string) => {
-    setOrders((prev) => {
-      const next = prev.filter((o) => o.id !== orderId);
-      pushServerCatalogPatch({ orders: next });
-      return next;
-    });
+    const targetOrder = orders.find((o) => o.id === orderId);
+    const wasAccepted = targetOrder?.status === 'accepted';
+    const nextOrders = orders.filter((o) => o.id !== orderId);
+    setOrders(nextOrders);
+
+    if (targetOrder && wasAccepted) {
+      const updatedCatalog = restoreStockForCanceledOrder(
+        products,
+        targetOrder
+      );
+      setProducts(updatedCatalog);
+      await pushServerCatalogPatch({
+        orders: nextOrders,
+        products: updatedCatalog,
+      });
+    } else {
+      await pushServerCatalogPatch({ orders: nextOrders });
+    }
   };
 
   const handleToggleAutoAcceptOrders = async (nextEnabled: boolean) => {
@@ -1485,7 +1745,7 @@ export default function App() {
       const res = await fetch('/api/newsletter/subscribe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: clean }),
+        body: JSON.stringify({ email: clean, source: 'footer' }),
       });
       if (res.ok) {
         const data = await res.json();
@@ -1501,6 +1761,127 @@ export default function App() {
     }
     setNewsletterSubscribed(true);
     setNewsletterEmail('');
+  };
+
+  const handleSubscribePopupNewsletter = async (
+    email: string,
+    phone: string
+  ) => {
+    const cleanEmail = email.trim();
+    const cleanPhone = phone.trim();
+    try {
+      const res = await fetch('/api/newsletter/subscribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: cleanEmail,
+          phone: cleanPhone,
+          source: 'popup',
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data.subscribers)) {
+          setNewsletterSubscribers(data.subscribers as NewsletterSubscriber[]);
+        }
+      }
+    } catch (err) {
+      console.warn(
+        '[SAMO Newsletter Pop-Up] Failed to persist subscription to R2:',
+        err
+      );
+    }
+
+    // Ensure the configured 10% OFF promo code (e.g., SAMO10) is active in promoCodes
+    const codeUpper = (newsletterPopupConfig.promoCode || 'SAMO10')
+      .trim()
+      .toUpperCase();
+    setPromoCodes((prev) => {
+      const existing = prev.find(
+        (p) => p.code.trim().toUpperCase() === codeUpper
+      );
+      if (existing && existing.active) return prev;
+      const nextPromo: PromoCodeItem = {
+        id: existing?.id || `promo-${createSafeSlug(codeUpper)}`,
+        code: codeUpper,
+        discountType: 'percentage',
+        discountValue: 10,
+        active: true,
+        createdAt: existing?.createdAt || new Date().toISOString(),
+      };
+      const next = [
+        nextPromo,
+        ...prev.filter((p) => p.code.trim().toUpperCase() !== codeUpper),
+      ];
+      pushServerCatalogPatch({ promoCodes: next });
+      return next;
+    });
+
+    try {
+      localStorage.setItem('samo_newsletter_popup_subscribed_v1', '1');
+    } catch {}
+    setNewsletterSubscribed(true);
+  };
+
+  const handleUpdateNewsletterPopupConfig = async (
+    nextConfig: NewsletterPopupConfig
+  ) => {
+    const merged = mergeNewsletterPopupConfig(nextConfig);
+    setNewsletterPopupConfig(merged);
+    try {
+      localStorage.setItem(
+        STORAGE_KEYS.newsletterPopupConfig,
+        JSON.stringify(merged)
+      );
+    } catch {}
+    await pushServerCatalogPatch({ newsletterPopupConfig: merged });
+    try {
+      await setDoc(
+        doc(db, 'settings', 'store_config'),
+        {
+          newsletterPopupConfig: merged,
+          updatedAt: new Date().toISOString(),
+        },
+        { merge: true }
+      );
+    } catch {}
+  };
+
+  const handleRefreshSeoMetadata = async (customKeywords?: string[]) => {
+    const activeKeywords =
+      customKeywords ??
+      seoConfig?.customKeywords ??
+      seoConfig?.defaultKeywords;
+    const nextSeo = generateCatalogSeoSnapshot(
+      products,
+      categories,
+      siteBanners,
+      activeKeywords
+    );
+    setSeoConfig(nextSeo);
+    try {
+      localStorage.setItem(STORAGE_KEYS.seoConfig, JSON.stringify(nextSeo));
+    } catch {}
+    const seoPayload = buildDynamicPageSeo({
+      route: currentRoute,
+      selectedCategory,
+      activeProduct: activeProductModal,
+      categories,
+      products,
+      seoConfig: nextSeo,
+    });
+    applyDocumentSeoTags(seoPayload);
+    await pushServerCatalogPatch({ seoConfig: nextSeo });
+    try {
+      await setDoc(
+        doc(db, 'settings', 'store_config'),
+        {
+          seoConfig: nextSeo,
+          updatedAt: new Date().toISOString(),
+        },
+        { merge: true }
+      );
+    } catch {}
   };
 
   const handleDeleteNewsletterSubscriber = async (id: string) => {
@@ -1646,26 +2027,41 @@ export default function App() {
     );
   }, [activeCategoryBanner, displayedProducts.length]);
 
-  // Home Section 2: Category tiles for active department (Women: 4 signature tiles matching Screenshot 1 & 2; Kids: MINIS 1 To 5, CHILDREN 6+, Teen 13+)
+  // Home Section 2: Category tiles for active department (Respects Admin Category Numbering Order; defaults to 4 signature tiles if untouched)
   const homeCategoryTiles = useMemo(() => {
+    const defaultWomenIds = INITIAL_CATEGORIES.filter(
+      (c) => c.department === 'women'
+    ).map((c) => c.id);
+    const hasCustomWomenOrder =
+      womenCategories.length !== defaultWomenIds.length ||
+      womenCategories.some((c, idx) => {
+        const seedCat = INITIAL_CATEGORIES.find((ic) => ic.id === c.id);
+        return (
+          c.id !== defaultWomenIds[idx] ||
+          (seedCat && c.sortOrder !== seedCat.sortOrder)
+        );
+      });
+
     const preferredWomenNames = ['Bags', 'Jacket', 'Trench Coat', 'Full Set'];
     const activeCats =
       homeCategoryDept === 'women'
-        ? [
-            ...preferredWomenNames
-              .map((name) =>
-                womenCategories.find(
-                  (c) => c.name.toLowerCase() === name.toLowerCase()
+        ? hasCustomWomenOrder
+          ? womenCategories.slice(0, 4)
+          : [
+              ...preferredWomenNames
+                .map((name) =>
+                  womenCategories.find(
+                    (c) => c.name.toLowerCase() === name.toLowerCase()
+                  )
                 )
-              )
-              .filter((c): c is CategoryItem => Boolean(c)),
-            ...womenCategories.filter(
-              (c) =>
-                !preferredWomenNames.some(
-                  (n) => n.toLowerCase() === c.name.toLowerCase()
-                )
-            ),
-          ].slice(0, 4)
+                .filter((c): c is CategoryItem => Boolean(c)),
+              ...womenCategories.filter(
+                (c) =>
+                  !preferredWomenNames.some(
+                    (n) => n.toLowerCase() === c.name.toLowerCase()
+                  )
+              ),
+            ].slice(0, 4)
         : kidsCategories;
     const fallbackStudioMap: Record<string, { src: string; style: StyleType }> = {
       bags: { src: 'studio://women-bags-hourglass-burgundy', style: 'Accessories' },
@@ -1769,6 +2165,9 @@ export default function App() {
         onUpdateSiteBanners={handleUpdateSiteBanners}
         onAddCategory={handleAddCategory}
         onUpdateCategory={handleUpdateCategory}
+        onUpdateCategorySortOrder={handleUpdateCategorySortOrder}
+        onMoveCategoryOrder={handleMoveCategoryOrder}
+        onRenumberDepartmentCategories={handleRenumberDepartmentCategories}
         onDeleteCategory={handleDeleteCategory}
         onAddProduct={handleAddProduct}
         onUpdateProductSizeQuantity={handleUpdateProductSizeQuantity}
@@ -1794,6 +2193,10 @@ export default function App() {
         onRemoveAdminByEmail={handleRemoveAdminByEmail}
         newsletterSubscribers={newsletterSubscribers}
         onDeleteNewsletterSubscriber={handleDeleteNewsletterSubscriber}
+        newsletterPopupConfig={newsletterPopupConfig}
+        onUpdateNewsletterPopupConfig={handleUpdateNewsletterPopupConfig}
+        seoConfig={seoConfig}
+        onRefreshSeoMetadata={handleRefreshSeoMetadata}
       />
     );
   }
@@ -1832,7 +2235,7 @@ export default function App() {
                     siteBanners.showroomHeroBannerUrl ||
                     'studio://women-trench-suede-coat'
                   }
-                  alt="SAMO Flagship Showroom & Atelier — Established 1999"
+                  alt="SAMO Flagship Showroom & Weave — Established 1999"
                   category="Trench Coat"
                   styleType="Suede"
                   className="h-full w-full"
@@ -2106,7 +2509,7 @@ export default function App() {
                   <div className="absolute inset-x-0 bottom-10 z-20 flex flex-col items-center px-4 text-center">
                     <p className="text-[11px] font-semibold tracking-[0.25em] uppercase text-zinc-200 mb-2">
                       {siteBanners.homeMiddleKicker ||
-                        'SAMO KIDS ATELIER · MINIS 1 TO 5 (80–100 CM) · CHILDREN 6+ (100–130 CM) · TEEN 13+ (130–160 CM)'}
+                        'SAMO KIDS WEAVE · MINIS 1 TO 5 (80–100 CM) · CHILDREN 6+ (100–130 CM) · TEEN 13+ (130–160 CM)'}
                     </p>
                     <h2
                       className="font-display text-white font-extrabold tracking-[0.14em] uppercase mb-3"
@@ -2366,7 +2769,7 @@ export default function App() {
                             <div className="space-y-1.5">
                               <div className="text-[10px] font-bold uppercase tracking-[0.22em] text-zinc-300">
                                 {activeCategoryBanner.kicker ||
-                                  'SAMO ATELIER CURATION · HAND-FINISHED IN OUR STUDIO'}
+                                  'SAMO WEAVE CURATION · HAND-FINISHED IN OUR STUDIO'}
                               </div>
                               <h2 className="font-display text-lg sm:text-2xl md:text-3xl font-extrabold uppercase tracking-[0.12em] text-white">
                                 {activeCategoryBanner.title ||
@@ -2570,6 +2973,14 @@ export default function App() {
         onSelectDepartment={(dept, cat) => {
           handleNavigate(dept === 'women' ? '/women' : '/kids', cat || 'all');
         }}
+      />
+
+      {/* HOMEPAGE 10% OFF NEWSLETTER POP-UP MODAL */}
+      <NewsletterPopupModal
+        isOpen={isNewsletterPopupOpen}
+        config={newsletterPopupConfig}
+        onClose={() => setIsNewsletterPopupOpen(false)}
+        onSubscribe={handleSubscribePopupNewsletter}
       />
 
       {/* BALENCIAGA-INSPIRED ARCHITECTURAL MULTI-COLUMN FOOTER */}

@@ -5,6 +5,7 @@ import {
   DeliveryMethod,
   Department,
   DiscountType,
+  NewsletterPopupConfig,
   OrderItem,
   ProductColorVariant,
   ProductItem,
@@ -784,6 +785,225 @@ export function decrementStockForAcceptedOrder(
 }
 
 /**
+ * Restores per-size (and per-color when hasColors is true, or all linked pieces when isFullSet is true)
+ * product stock quantities when an already-'accepted' order is canceled ('rejected' / 'pending') or deleted.
+ * Simultaneously restores stock in standalone products and any Full Set referencing them.
+ */
+export function restoreStockForCanceledOrder(
+  products: ProductItem[],
+  order: OrderItem
+): ProductItem[] {
+  const rawLines =
+    Array.isArray(order.orderedItems) && order.orderedItems.length > 0
+      ? order.orderedItems
+      : [
+          {
+            productId: '',
+            productName: order.primaryProductName,
+            selectedSize: order.primaryProductSize,
+            quantity: Math.max(1, order.itemsCount || 1),
+          },
+        ];
+
+  interface ExpandedRestoration {
+    productId: string;
+    productName: string;
+    selectedColor?: string;
+    selectedSize?: string;
+    quantity: number;
+    parentFullSetId?: string;
+    setPieceIndex?: number;
+  }
+
+  const restorations: ExpandedRestoration[] = [];
+
+  for (const line of rawLines) {
+    const qtyRestored = Math.max(1, Math.floor(Number(line.quantity) || 1));
+    const matchedProd = products.find(
+      (p) =>
+        (line.productId && p.id === line.productId) ||
+        (line.productName &&
+          p.name.trim().toLowerCase() === line.productName.trim().toLowerCase())
+    );
+
+    if (Array.isArray(line.selectedSetSizes) && line.selectedSetSizes.length > 0) {
+      for (let i = 0; i < line.selectedSetSizes.length; i++) {
+        const piece = line.selectedSetSizes[i];
+        const fallbackSub = matchedProd?.setItems?.[i];
+        const resolvedColor =
+          piece.selectedColor ||
+          fallbackSub?.selectedColors?.[0] ||
+          fallbackSub?.colorVariants?.[0]?.colorName;
+        restorations.push({
+          productId: piece.productId,
+          productName: piece.productName,
+          selectedColor: resolvedColor,
+          selectedSize: piece.selectedSize,
+          quantity: qtyRestored,
+          parentFullSetId: matchedProd?.id || line.productId,
+          setPieceIndex: i,
+        });
+      }
+    } else if (
+      matchedProd?.isFullSet &&
+      Array.isArray(matchedProd.setItems) &&
+      matchedProd.setItems.length > 0
+    ) {
+      const parts = (line.selectedSize || order.primaryProductSize || '')
+        .split('/')
+        .map((s) => s.trim())
+        .filter(Boolean);
+      matchedProd.setItems.forEach((sub, idx) => {
+        const chosenSz = parts[idx] || sub.sizes[0] || '';
+        const defaultColor =
+          sub.selectedColors?.[0] || sub.colorVariants?.[0]?.colorName;
+        restorations.push({
+          productId: sub.productId,
+          productName: sub.productName,
+          selectedColor: defaultColor,
+          selectedSize: chosenSz,
+          quantity: qtyRestored,
+          parentFullSetId: matchedProd.id,
+          setPieceIndex: idx,
+        });
+      });
+    } else {
+      restorations.push({
+        productId: line.productId,
+        productName: line.productName,
+        selectedColor: line.selectedColor,
+        selectedSize: line.selectedSize,
+        quantity: qtyRestored,
+      });
+    }
+  }
+
+  const afterDirectRestorations = products.map((prod) => {
+    let updatedSetItems = prod.setItems;
+    if (prod.isFullSet && Array.isArray(prod.setItems) && prod.setItems.length > 0) {
+      updatedSetItems = prod.setItems.map((subItem, idx) => {
+        const pieceRestorations = restorations.filter(
+          (r) =>
+            (r.parentFullSetId === prod.id && r.setPieceIndex === idx) ||
+            (r.productId && r.productId === subItem.productId) ||
+            (r.productName &&
+              subItem.productName &&
+              r.productName.trim().toLowerCase() ===
+                subItem.productName.trim().toLowerCase())
+        );
+        if (pieceRestorations.length === 0) return subItem;
+
+        const nextMap = buildSizeQuantitiesMap(subItem.sizes, subItem.sizeQuantities);
+        for (const pr of pieceRestorations) {
+          const targetSz =
+            pr.selectedSize && subItem.sizes.includes(pr.selectedSize)
+              ? pr.selectedSize
+              : subItem.sizes[0];
+          if (targetSz && targetSz in nextMap) {
+            nextMap[targetSz] = Math.max(0, nextMap[targetSz] + pr.quantity);
+          }
+        }
+        return {
+          ...subItem,
+          sizeQuantities: nextMap,
+        };
+      });
+    }
+
+    const matchingLines = restorations.filter((r) => {
+      const idMatches = r.productId && r.productId === prod.id;
+      const nameMatches =
+        !idMatches &&
+        r.productName &&
+        r.productName.trim().toLowerCase() === prod.name.trim().toLowerCase();
+      return Boolean(idMatches || nameMatches);
+    });
+
+    if (matchingLines.length === 0) {
+      return updatedSetItems !== prod.setItems
+        ? { ...prod, setItems: updatedSetItems }
+        : prod;
+    }
+
+    // Multi-color product stock restoration
+    if (prod.hasColors && Array.isArray(prod.colorVariants) && prod.colorVariants.length > 0) {
+      const nextVariants: ProductColorVariant[] = prod.colorVariants.map((v) => ({
+        ...v,
+        sizes: [...v.sizes],
+        sizeQuantities: buildSizeQuantitiesMap(v.sizes, v.sizeQuantities),
+      }));
+
+      for (const line of matchingLines) {
+        const qtyRestored = Math.max(1, Math.floor(Number(line.quantity) || 1));
+        const targetVariant =
+          (line.selectedColor
+            ? nextVariants.find(
+                (v) =>
+                  v.colorName.trim().toLowerCase() ===
+                  line.selectedColor!.trim().toLowerCase()
+              )
+            : undefined) || nextVariants[0];
+
+        if (targetVariant) {
+          const targetSize =
+            (line.selectedSize && targetVariant.sizes.includes(line.selectedSize)
+              ? line.selectedSize
+              : order.primaryProductSize &&
+                targetVariant.sizes.includes(order.primaryProductSize)
+              ? order.primaryProductSize
+              : targetVariant.sizes[0]) || '';
+
+          if (targetSize && targetSize in targetVariant.sizeQuantities) {
+            targetVariant.sizeQuantities[targetSize] = Math.max(
+              0,
+              targetVariant.sizeQuantities[targetSize] + qtyRestored
+            );
+          }
+        }
+      }
+
+      const synced = syncProductFromColorVariants(nextVariants, prod.sizeType);
+      return {
+        ...prod,
+        setItems: updatedSetItems,
+        colorVariants: nextVariants,
+        sizes: synced.sizes,
+        sizeQuantities: synced.sizeQuantities,
+        quantity: synced.quantity,
+        inStock: synced.inStock,
+      };
+    }
+
+    // Standard single-color product stock restoration
+    const currentSizeMap = buildSizeQuantitiesMap(prod.sizes, prod.sizeQuantities);
+    for (const line of matchingLines) {
+      const qtyRestored = Math.max(1, Math.floor(Number(line.quantity) || 1));
+      const targetSize =
+        (line.selectedSize && prod.sizes.includes(line.selectedSize)
+          ? line.selectedSize
+          : order.primaryProductSize && prod.sizes.includes(order.primaryProductSize)
+          ? order.primaryProductSize
+          : prod.sizes[0]) || '';
+
+      if (targetSize && targetSize in currentSizeMap) {
+        currentSizeMap[targetSize] = Math.max(0, currentSizeMap[targetSize] + qtyRestored);
+      }
+    }
+
+    const nextTotalQty = sumSizeQuantities(prod.sizes, currentSizeMap);
+    return {
+      ...prod,
+      setItems: updatedSetItems,
+      sizeQuantities: currentSizeMap,
+      quantity: nextTotalQty,
+      inStock: nextTotalQty > 0,
+    };
+  });
+
+  return syncFullSetsWithCatalog(afterDirectRestorations);
+}
+
+/**
  * Merges prebuilt materials with custom admin-added materials without duplicates.
  */
 export function mergeMaterialsList(customMaterials: string[]): string[] {
@@ -1040,7 +1260,7 @@ export function filterGiftsProducts(products: ProductItem[]): ProductItem[] {
 }
 
 /**
- * Validates categories for a given department.
+ * Validates and sorts categories for a given department by sortOrder (supporting integers and decimals like 1.5, 2.5).
  * For 'kids', normalizes legacy names to 'MINIS 1 To 5', 'CHILDREN 6+', 'Teen 13+'
  * and strictly removes 'Full Set' from the Kids department only.
  */
@@ -1049,7 +1269,7 @@ export function getCategoriesByDepartment(
   department: Department
 ): CategoryItem[] {
   const seen = new Set<string>();
-  const result: CategoryItem[] = [];
+  const rawDeptList: { item: CategoryItem; initialOrder: number }[] = [];
 
   for (const c of categories) {
     if (c.department !== department) continue;
@@ -1064,14 +1284,33 @@ export function getCategoriesByDepartment(
     const key = normalizedName.toLowerCase();
     if (!seen.has(key)) {
       seen.add(key);
-      result.push({
-        ...c,
-        name: normalizedName,
-        slug: createSafeSlug(normalizedName),
+      const fallbackOrder = rawDeptList.length + 1;
+      const numericOrder =
+        typeof c.sortOrder === 'number' && Number.isFinite(c.sortOrder)
+          ? c.sortOrder
+          : fallbackOrder;
+      rawDeptList.push({
+        item: {
+          ...c,
+          name: normalizedName,
+          slug: createSafeSlug(normalizedName),
+          sortOrder: numericOrder,
+        },
+        initialOrder: fallbackOrder,
       });
     }
   }
-  return result;
+
+  rawDeptList.sort((a, b) => {
+    const orderA = a.item.sortOrder ?? a.initialOrder;
+    const orderB = b.item.sortOrder ?? b.initialOrder;
+    if (orderA !== orderB) {
+      return orderA - orderB;
+    }
+    return a.initialOrder - b.initialOrder;
+  });
+
+  return rawDeptList.map((entry) => entry.item);
 }
 
 /**
@@ -1236,7 +1475,7 @@ export function buildDefaultCategoryBannerForCategory(
     department,
     categoryName,
     imageUrl,
-    kicker: `SAMO ATELIER · ${displayCat.toUpperCase()}`,
+    kicker: `SAMO WEAVE · ${displayCat.toUpperCase()}`,
     title: `${displayCat.toUpperCase()} EDITORIAL ARCHIVE`,
     enabled: true,
     insertAfterCount: 4,
@@ -1297,11 +1536,11 @@ export function buildDefaultSiteBanners(
     homeHeroVideoUrl: '/assets/aistudio/recording-2026-10-20_ae756f63.webm',
     homeHeroImageUrl: 'studio://women-jacket-black-leather-biker',
     homeHeroKicker:
-      'SAMO ATELIER · CLASSIC · SPORT CHIC · FINE LEATHER · SUEDE · FUR',
+      'SAMO WEAVE · CLASSIC · SPORT CHIC · FINE LEATHER · SUEDE · FUR',
     homeHeroTitle: 'NEW ARRIVALS',
     homeMiddleBannerUrl: 'studio://kids-junior-leather-bomber',
     homeMiddleKicker:
-      'SAMO KIDS ATELIER · MINIS 1 TO 5 (80–100 CM) · CHILDREN 6+ (100–130 CM) · TEEN 13+ (130–160 CM)',
+      'SAMO KIDS · MINIS 1 TO 5 (80–100 CM) · CHILDREN 6+ (100–130 CM) · TEEN 13+ (130–160 CM)',
     homeMiddleTitle: 'SAMO KIDS COLLECTION',
     homeMiddleSubtitle:
       'Architectural silhouettes in supple cow leather, brushed suede, and combed cashmere graded in precision centimeter sizing.',
@@ -1330,6 +1569,10 @@ export function mergeSiteBannersConfig(
     for (const [key, val] of Object.entries(stored.categoryBanners)) {
       if (val && typeof val === 'object') {
         const fallback = mergedCategoryBanners[key];
+        const rawKicker =
+          typeof val.kicker === 'string'
+            ? val.kicker.replace(/SAMO ATELIER/gi, 'SAMO WEAVE')
+            : fallback?.kicker || 'SAMO WEAVE';
         mergedCategoryBanners[key] = {
           categoryKey: key,
           department: val.department || fallback?.department || 'women',
@@ -1338,10 +1581,7 @@ export function mergeSiteBannersConfig(
             typeof val.imageUrl === 'string'
               ? val.imageUrl
               : fallback?.imageUrl || '',
-          kicker:
-            typeof val.kicker === 'string'
-              ? val.kicker
-              : fallback?.kicker || 'SAMO ATELIER',
+          kicker: rawKicker,
           title:
             typeof val.title === 'string'
               ? val.title
@@ -1378,7 +1618,7 @@ export function mergeSiteBannersConfig(
         : defaults.homeHeroImageUrl,
     homeHeroKicker:
       typeof stored.homeHeroKicker === 'string' && stored.homeHeroKicker.trim()
-        ? stored.homeHeroKicker
+        ? stored.homeHeroKicker.replace(/SAMO ATELIER/gi, 'SAMO WEAVE')
         : defaults.homeHeroKicker,
     homeHeroTitle:
       typeof stored.homeHeroTitle === 'string' && stored.homeHeroTitle.trim()
@@ -1392,7 +1632,7 @@ export function mergeSiteBannersConfig(
     homeMiddleKicker:
       typeof stored.homeMiddleKicker === 'string' &&
       stored.homeMiddleKicker.trim()
-        ? stored.homeMiddleKicker
+        ? stored.homeMiddleKicker.replace(/SAMO KIDS ATELIER/gi, 'SAMO KIDS').replace(/SAMO ATELIER/gi, 'SAMO WEAVE')
         : defaults.homeMiddleKicker,
     homeMiddleTitle:
       typeof stored.homeMiddleTitle === 'string' &&
@@ -1467,7 +1707,7 @@ export function buildEditorialProductDescription(
 ): string {
   const cleanName = (params.name || '').trim();
   const deptLabel = params.department === 'kids' ? 'SAMO Kids' : 'SAMO Women';
-  const categoryLabel = (params.category || 'Atelier Piece').trim();
+  const categoryLabel = (params.category || 'Signature Piece').trim();
   const styleLabel = (params.style || 'Classic').trim();
   const materialsList = Array.isArray(params.materials)
     ? params.materials.map((m) => m.trim()).filter(Boolean)
@@ -1491,14 +1731,342 @@ export function buildEditorialProductDescription(
       : '';
 
   const templates = [
-    `${subjectPhrase}${materialPhrase}. Tailored in the house's signature ${styleLabel.toLowerCase()} proportions with clean architectural lines and precision atelier finishing.${colorPhrase}`,
+    `${subjectPhrase}${materialPhrase}. Tailored in the house's signature ${styleLabel.toLowerCase()} proportions with clean architectural lines and precision finishing.${colorPhrase}`,
     `Designed for the ${deptLabel} collection, this ${categoryLabel.toLowerCase()}${materialPhrase} balances structured ${styleLabel.toLowerCase()} construction with effortless movement and refined hardware details.${colorPhrase}`,
-    `SAMO Atelier ${styleLabel.toLowerCase()} ${categoryLabel.toLowerCase()}${materialPhrase}, cut with a sharp silhouette, tonal seam work, and enduring house craftsmanship.${colorPhrase}`,
+    `SAMO Weave ${styleLabel.toLowerCase()} ${categoryLabel.toLowerCase()}${materialPhrase}, cut with a sharp silhouette, tonal seam work, and enduring house craftsmanship.${colorPhrase}`,
   ];
 
   const idx = Math.abs(variationIndex) % templates.length;
   return templates[idx].slice(0, 950);
 }
+
+/**
+ * Updates a category's sortOrder number (supporting integers like 1, 2, 3 and decimals like 1.5, 2.5).
+ */
+export function updateCategorySortOrder(
+  categories: CategoryItem[],
+  categoryId: string,
+  newSortOrder: number
+): CategoryItem[] {
+  const safeOrder = Number.isFinite(newSortOrder)
+    ? Math.max(0.01, Math.round(newSortOrder * 100) / 100)
+    : 1;
+  return categories.map((cat) =>
+    cat.id === categoryId
+      ? {
+          ...cat,
+          sortOrder: safeOrder,
+        }
+      : cat
+  );
+}
+
+/**
+ * Swaps a category one position up or down within its department (Women or Kids)
+ * and re-assigns clean sequential numbers (1, 2, 3...) to that department.
+ */
+export function moveCategoryInDepartment(
+  categories: CategoryItem[],
+  department: Department,
+  categoryId: string,
+  direction: 'up' | 'down'
+): CategoryItem[] {
+  const deptCategories = getCategoriesByDepartment(categories, department);
+  const currentIndex = deptCategories.findIndex((c) => c.id === categoryId);
+  if (currentIndex === -1) return categories;
+
+  const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+  if (targetIndex < 0 || targetIndex >= deptCategories.length) {
+    return categories;
+  }
+
+  const reordered = [...deptCategories];
+  const [moved] = reordered.splice(currentIndex, 1);
+  reordered.splice(targetIndex, 0, moved);
+
+  const orderById = new Map<string, number>();
+  reordered.forEach((cat, idx) => {
+    orderById.set(cat.id, idx + 1);
+  });
+
+  const updated = categories.map((cat) => {
+    if (cat.department === department && orderById.has(cat.id)) {
+      return {
+        ...cat,
+        sortOrder: orderById.get(cat.id)!,
+      };
+    }
+    return cat;
+  });
+
+  // Also sort the underlying array by department + sortOrder so any direct iteration stays in sync
+  return [...updated].sort((a, b) => {
+    if (a.department !== b.department) {
+      return a.department === 'women' ? -1 : 1;
+    }
+    return (a.sortOrder ?? 999) - (b.sortOrder ?? 999);
+  });
+}
+
+/**
+ * Cleanly re-numbers all categories in a department as 1, 2, 3, 4... in their current sorted order.
+ */
+export function renumberDepartmentCategoriesSequentially(
+  categories: CategoryItem[],
+  department: Department
+): CategoryItem[] {
+  const deptCategories = getCategoriesByDepartment(categories, department);
+  const orderById = new Map<string, number>();
+  deptCategories.forEach((cat, idx) => {
+    orderById.set(cat.id, idx + 1);
+  });
+
+  return categories.map((cat) =>
+    cat.department === department && orderById.has(cat.id)
+      ? {
+          ...cat,
+          sortOrder: orderById.get(cat.id)!,
+        }
+      : cat
+  );
+}
+
+export const DEFAULT_NEWSLETTER_POPUP_CONFIG: NewsletterPopupConfig = {
+  enabled: true,
+  delaySeconds: 10,
+  maxTimesPerDay: 2,
+  kicker: '',
+  title: 'Subscribe to Samo Weave',
+  subtitle:
+    'Enter your email or phone number to receive early access to new arrivals, latest offers, and seasonal sales.',
+  buttonText: 'Unlock your code',
+  promoCode: 'SAMO10',
+  discountText: '10% OFF',
+};
+
+const LEGACY_POPUP_TITLES = new Set([
+  'UNLOCK 10% OFF YOUR FIRST ACQUISITION',
+]);
+const LEGACY_POPUP_SUBTITLES = new Set([
+  'Enter your email and phone number to join the SAMO Atelier private list and immediately unlock your 10% privilege promo code (SAMO10).',
+  'Enter your email and phone number to join the SAMO Atelier private list and immediately unlock your 10% privilege promo code.',
+]);
+const LEGACY_POPUP_BUTTONS = new Set([
+  'UNLOCK 10% PRIVILEGE CODE',
+]);
+const LEGACY_POPUP_KICKERS = new Set([
+  'SAMO ATELIER · PRIVATE CLIENT INVITATION',
+]);
+
+export function mergeNewsletterPopupConfig(
+  stored?: Partial<NewsletterPopupConfig> | null
+): NewsletterPopupConfig {
+  if (!stored || typeof stored !== 'object') {
+    return { ...DEFAULT_NEWSLETTER_POPUP_CONFIG };
+  }
+
+  const rawTitle =
+    typeof stored.title === 'string'
+      ? LEGACY_POPUP_TITLES.has(stored.title.trim())
+        ? DEFAULT_NEWSLETTER_POPUP_CONFIG.title
+        : stored.title
+      : DEFAULT_NEWSLETTER_POPUP_CONFIG.title;
+
+  const rawSubtitle =
+    typeof stored.subtitle === 'string'
+      ? LEGACY_POPUP_SUBTITLES.has(stored.subtitle.trim())
+        ? DEFAULT_NEWSLETTER_POPUP_CONFIG.subtitle
+        : stored.subtitle.replace(/SAMO Atelier/gi, 'SAMO Weave')
+      : DEFAULT_NEWSLETTER_POPUP_CONFIG.subtitle;
+
+  const rawButton =
+    typeof stored.buttonText === 'string'
+      ? LEGACY_POPUP_BUTTONS.has(stored.buttonText.trim())
+        ? DEFAULT_NEWSLETTER_POPUP_CONFIG.buttonText
+        : stored.buttonText
+      : DEFAULT_NEWSLETTER_POPUP_CONFIG.buttonText;
+
+  const rawKicker =
+    typeof stored.kicker === 'string'
+      ? LEGACY_POPUP_KICKERS.has(stored.kicker.trim())
+        ? ''
+        : stored.kicker.replace(/SAMO ATELIER/gi, 'SAMO WEAVE')
+      : DEFAULT_NEWSLETTER_POPUP_CONFIG.kicker;
+
+  return {
+    enabled:
+      typeof stored.enabled === 'boolean'
+        ? stored.enabled
+        : DEFAULT_NEWSLETTER_POPUP_CONFIG.enabled,
+    delaySeconds:
+      typeof stored.delaySeconds === 'number' &&
+      Number.isFinite(stored.delaySeconds) &&
+      stored.delaySeconds >= 0
+        ? Math.min(300, Math.max(0, Math.round(stored.delaySeconds)))
+        : DEFAULT_NEWSLETTER_POPUP_CONFIG.delaySeconds,
+    maxTimesPerDay:
+      typeof stored.maxTimesPerDay === 'number' &&
+      Number.isFinite(stored.maxTimesPerDay) &&
+      stored.maxTimesPerDay >= 1
+        ? Math.min(50, Math.max(1, Math.round(stored.maxTimesPerDay)))
+        : DEFAULT_NEWSLETTER_POPUP_CONFIG.maxTimesPerDay,
+    kicker: rawKicker,
+    title: rawTitle,
+    subtitle: rawSubtitle,
+    buttonText: rawButton,
+    promoCode:
+      typeof stored.promoCode === 'string'
+        ? stored.promoCode.toUpperCase()
+        : DEFAULT_NEWSLETTER_POPUP_CONFIG.promoCode,
+    discountText:
+      typeof stored.discountText === 'string' && stored.discountText.trim()
+        ? stored.discountText
+        : DEFAULT_NEWSLETTER_POPUP_CONFIG.discountText,
+    updatedAt:
+      typeof stored.updatedAt === 'string' ? stored.updatedAt : undefined,
+  };
+}
+
+/**
+ * Validates the Homepage Newsletter Pop-Up submission:
+ * Supports both:
+ * 1) Single-box input ("Enter your Email Or Number", e.g. "johndoe@gmail.com", "70 123 456", or "johndoe@gmail.com, 70 123 456")
+ * 2) Two-argument (rawEmail, rawPhone) calls.
+ */
+export function validateNewsletterPopupInputs(
+  rawEmailOrCombined: string,
+  rawPhone?: string
+): {
+  valid: boolean;
+  emailValid: boolean;
+  phoneValid: boolean;
+  cleanEmail: string;
+  cleanPhone: string;
+  errorMessage?: string;
+} {
+  // Mode A: Explicit 2-argument call (when rawPhone is passed as a string)
+  if (typeof rawPhone === 'string') {
+    const cleanEmail = (rawEmailOrCombined || '').trim().toLowerCase();
+    const cleanPhone = rawPhone.trim();
+    const phoneDigits = cleanPhone.replace(/\D/g, '');
+
+    const hasAtAndDotCom =
+      cleanEmail.includes('@') &&
+      cleanEmail.includes('.com') &&
+      /^[^\s@]+@[^\s@]+\.com(?:\.[a-z]{2,})?$/i.test(cleanEmail);
+
+    const hasMinEightDigits = phoneDigits.length >= 8;
+
+    if (!hasAtAndDotCom && !hasMinEightDigits) {
+      return {
+        valid: false,
+        emailValid: false,
+        phoneValid: false,
+        cleanEmail,
+        cleanPhone,
+        errorMessage:
+          'Please enter a valid email address or phone number (at least 8 digits).',
+      };
+    }
+
+    if (!hasAtAndDotCom) {
+      return {
+        valid: false,
+        emailValid: false,
+        phoneValid: true,
+        cleanEmail,
+        cleanPhone,
+        errorMessage:
+          'Please enter a valid email address containing "@" and ".com".',
+      };
+    }
+
+    if (!hasMinEightDigits) {
+      return {
+        valid: false,
+        emailValid: true,
+        phoneValid: false,
+        cleanEmail,
+        cleanPhone,
+        errorMessage:
+          'Please enter a valid phone number containing at least 8 digits.',
+      };
+    }
+
+    return {
+      valid: true,
+      emailValid: true,
+      phoneValid: true,
+      cleanEmail,
+      cleanPhone,
+    };
+  }
+
+  // Mode B: Single-box input ("Enter your Email Or Number")
+  const combined = (rawEmailOrCombined || '').trim();
+  if (!combined) {
+    return {
+      valid: false,
+      emailValid: false,
+      phoneValid: false,
+      cleanEmail: '',
+      cleanPhone: '',
+      errorMessage:
+        'Please enter your email address or phone number (e.g., johndoe@gmail.com, 70 123 456).',
+    };
+  }
+
+  // Extract email candidate if '@' is present
+  const emailMatch = combined.match(/[^\s,;]+@[^\s,;]+/i);
+  const candidateEmail = emailMatch ? emailMatch[0].trim().toLowerCase() : '';
+  const emailValid =
+    Boolean(candidateEmail) &&
+    candidateEmail.includes('@') &&
+    candidateEmail.includes('.') &&
+    /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i.test(candidateEmail);
+
+  // Extract phone part by removing any email token and checking digits
+  const remainderWithoutEmail = candidateEmail
+    ? combined.replace(emailMatch![0], '').replace(/^[\s,;|/]+|[\s,;|/]+$/g, '')
+    : combined;
+  const phoneDigits = remainderWithoutEmail.replace(/\D/g, '');
+  const phoneValid = phoneDigits.length >= 8;
+
+  // If the user typed '@' but the email is incomplete and no valid phone is provided
+  if (combined.includes('@') && !emailValid && !phoneValid) {
+    return {
+      valid: false,
+      emailValid: false,
+      phoneValid: false,
+      cleanEmail: candidateEmail,
+      cleanPhone: '',
+      errorMessage:
+        'Please enter a valid email address (e.g., johndoe@gmail.com) or an 8-digit phone number (e.g., 70 123 456).',
+    };
+  }
+
+  if (!emailValid && !phoneValid) {
+    return {
+      valid: false,
+      emailValid: false,
+      phoneValid: false,
+      cleanEmail: '',
+      cleanPhone: remainderWithoutEmail,
+      errorMessage:
+        'Please enter a valid email address or a phone number with at least 8 digits (e.g., johndoe@gmail.com, 70 123 456).',
+    };
+  }
+
+  return {
+    valid: true,
+    emailValid,
+    phoneValid,
+    cleanEmail: emailValid ? candidateEmail : '',
+    cleanPhone: phoneValid ? remainderWithoutEmail : '',
+  };
+}
+
+
 
 
 

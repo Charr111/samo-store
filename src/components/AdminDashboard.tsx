@@ -34,6 +34,10 @@ import {
   Sun,
   Moon,
   Mail,
+  ArrowUp,
+  ArrowDown,
+  Globe,
+  Phone,
 } from 'lucide-react';
 import {
   AdminRecord,
@@ -42,6 +46,7 @@ import {
   Department,
   DiscountType,
   FullSetSubItem,
+  NewsletterPopupConfig,
   NewsletterSubscriber,
   OrderItem,
   OrderStatus,
@@ -51,6 +56,7 @@ import {
   ProductItem,
   PromoCodeItem,
   RoutePath,
+  SeoConfigState,
   SiteBannersConfig,
   SizeType,
   StyleType,
@@ -62,6 +68,7 @@ import {
   buildSizeQuantitiesMap,
   CM_SIZES,
   createSafeSlug,
+  DEFAULT_NEWSLETTER_POPUP_CONFIG,
   filterOrdersByQuery,
   getCategoryBannerKey,
   getColorSwatchHex,
@@ -82,6 +89,10 @@ import {
   syncProductFromColorVariants,
   YEARS_SIZES,
 } from '../utils/catalogLogic';
+import {
+  generateCatalogSeoSnapshot,
+  LUXURY_FASHION_CORE_KEYWORDS,
+} from '../utils/seoLogic';
 import { ProductImage } from './ProductImage';
 import {
   deleteMediaFromR2,
@@ -300,6 +311,7 @@ type AdminSectionTab =
   | 'preorders'
   | 'promos'
   | 'newsletter'
+  | 'seo'
   | 'admins';
 
 interface AdminDashboardProps {
@@ -319,6 +331,14 @@ interface AdminDashboardProps {
   admins: AdminRecord[];
   newsletterSubscribers?: NewsletterSubscriber[];
   onDeleteNewsletterSubscriber?: (id: string) => Promise<void>;
+  newsletterPopupConfig?: NewsletterPopupConfig;
+  onUpdateNewsletterPopupConfig?: (
+    nextConfig: NewsletterPopupConfig
+  ) => Promise<void>;
+  seoConfig?: SeoConfigState | null;
+  onRefreshSeoMetadata?: (
+    customKeywords?: string[]
+  ) => Promise<SeoConfigState | void>;
   siteBanners: SiteBannersConfig;
   onUpdateSiteBanners: (nextBanners: SiteBannersConfig) => Promise<void>;
   onToggleProductStock: (
@@ -329,8 +349,19 @@ interface AdminDashboardProps {
   onUpdateCategory: (
     categoryId: string,
     newName: string,
-    newDescription?: string
+    newDescription?: string,
+    newSortOrder?: number
   ) => Promise<void>;
+  onUpdateCategorySortOrder?: (
+    categoryId: string,
+    newSortOrder: number
+  ) => Promise<void>;
+  onMoveCategoryOrder?: (
+    department: Department,
+    categoryId: string,
+    direction: 'up' | 'down'
+  ) => Promise<void>;
+  onRenumberDepartmentCategories?: (department: Department) => Promise<void>;
   onDeleteCategory: (id: string) => Promise<void>;
   onAddProduct: (prod: Omit<ProductItem, 'id'>) => Promise<void>;
   onUpdateProductSizeQuantity: (
@@ -385,11 +416,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   admins,
   newsletterSubscribers = [],
   onDeleteNewsletterSubscriber,
+  newsletterPopupConfig = DEFAULT_NEWSLETTER_POPUP_CONFIG,
+  onUpdateNewsletterPopupConfig,
+  seoConfig,
+  onRefreshSeoMetadata,
   siteBanners,
   onUpdateSiteBanners,
   onToggleProductStock,
   onAddCategory,
   onUpdateCategory,
+  onUpdateCategorySortOrder,
+  onMoveCategoryOrder,
+  onRenumberDepartmentCategories,
   onDeleteCategory,
   onAddProduct,
   onUpdateProductSizeQuantity,
@@ -630,7 +668,118 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [newCatName, setNewCatName] = useState('');
   const [newCatDept, setNewCatDept] = useState<Department>('women');
   const [newCatDesc, setNewCatDesc] = useState('');
+  const [newCatOrderInput, setNewCatOrderInput] = useState<string>('');
   const [catFeedback, setCatFeedback] = useState('');
+  const [categoryAdminDeptView, setCategoryAdminDeptView] = useState<
+    'all' | 'women' | 'kids'
+  >('all');
+  const [catOrderDrafts, setCatOrderDrafts] = useState<Record<string, string>>(
+    {}
+  );
+  const [editCatOrderInput, setEditCatOrderInput] = useState<string>('');
+  const [seoRefreshing, setSeoRefreshing] = useState<boolean>(false);
+
+  // Newsletter Pop-Up Local Draft State (prevents cursor jumping, deleted text reappearing, and 045 leading zeros)
+  const [popupDelayDraft, setPopupDelayDraft] = useState<string>(
+    String(newsletterPopupConfig.delaySeconds ?? 10)
+  );
+  const [popupMaxPerDayDraft, setPopupMaxPerDayDraft] = useState<string>(
+    String(newsletterPopupConfig.maxTimesPerDay ?? 2)
+  );
+  const [popupPromoCodeDraft, setPopupPromoCodeDraft] = useState<string>(
+    newsletterPopupConfig.promoCode || 'SAMO10'
+  );
+  const [popupButtonDraft, setPopupButtonDraft] = useState<string>(
+    newsletterPopupConfig.buttonText ?? 'Unlock your code'
+  );
+  const [popupTitleDraft, setPopupTitleDraft] = useState<string>(
+    newsletterPopupConfig.title ?? 'Subscribe to Samo Weave'
+  );
+  const [popupSubtitleDraft, setPopupSubtitleDraft] = useState<string>(
+    newsletterPopupConfig.subtitle ??
+      'Enter your email or phone number to receive early access to new arrivals, latest offers, and seasonal sales.'
+  );
+  const popupUserEditedRef = React.useRef<boolean>(false);
+
+  useEffect(() => {
+    if (!popupUserEditedRef.current) {
+      setPopupDelayDraft(String(newsletterPopupConfig.delaySeconds ?? 10));
+      setPopupMaxPerDayDraft(String(newsletterPopupConfig.maxTimesPerDay ?? 2));
+      setPopupPromoCodeDraft(newsletterPopupConfig.promoCode || 'SAMO10');
+      setPopupButtonDraft(
+        newsletterPopupConfig.buttonText ?? 'Unlock your code'
+      );
+      setPopupTitleDraft(
+        newsletterPopupConfig.title ?? 'Subscribe to Samo Weave'
+      );
+      setPopupSubtitleDraft(
+        newsletterPopupConfig.subtitle ??
+          'Enter your email or phone number to receive early access to new arrivals, latest offers, and seasonal sales.'
+      );
+    }
+  }, [newsletterPopupConfig]);
+
+  const commitNewsletterPopupDraft = async (
+    overrides?: Partial<NewsletterPopupConfig>
+  ) => {
+    const parsedDelay =
+      popupDelayDraft.trim() === ''
+        ? 0
+        : Math.max(0, Math.min(300, Number(popupDelayDraft)));
+    const parsedMaxPerDay =
+      popupMaxPerDayDraft.trim() === ''
+        ? 1
+        : Math.max(1, Math.min(50, Number(popupMaxPerDayDraft)));
+    const cleanDelay = Number.isFinite(parsedDelay) ? parsedDelay : 10;
+    const cleanMax = Number.isFinite(parsedMaxPerDay) ? parsedMaxPerDay : 2;
+
+    if (popupDelayDraft.trim() === '') {
+      setPopupDelayDraft(String(cleanDelay));
+    }
+    if (popupMaxPerDayDraft.trim() === '') {
+      setPopupMaxPerDayDraft(String(cleanMax));
+    }
+
+    const nextCfg: NewsletterPopupConfig = {
+      ...newsletterPopupConfig,
+      kicker: '',
+      delaySeconds: cleanDelay,
+      maxTimesPerDay: cleanMax,
+      promoCode: popupPromoCodeDraft.trim().toUpperCase() || 'SAMO10',
+      buttonText: popupButtonDraft,
+      title: popupTitleDraft,
+      subtitle: popupSubtitleDraft,
+      ...overrides,
+      updatedAt: new Date().toISOString(),
+    };
+    if (onUpdateNewsletterPopupConfig) {
+      await onUpdateNewsletterPopupConfig(nextCfg);
+    }
+  };
+
+  // SEO Active Luxury Fashion Keywords Draft State
+  const [seoKeywordsDraft, setSeoKeywordsDraft] = useState<string[]>(() =>
+    seoConfig?.customKeywords && seoConfig.customKeywords.length > 0
+      ? [...seoConfig.customKeywords]
+      : seoConfig?.defaultKeywords && seoConfig.defaultKeywords.length > 0
+      ? [...seoConfig.defaultKeywords]
+      : [...LUXURY_FASHION_CORE_KEYWORDS]
+  );
+  const [newSeoKeywordInput, setNewSeoKeywordInput] = useState<string>('');
+  const [seoKeywordsDirty, setSeoKeywordsDirty] = useState<boolean>(false);
+  const seoUserEditedRef = React.useRef<boolean>(false);
+
+  useEffect(() => {
+    if (!seoUserEditedRef.current && seoConfig) {
+      const nextList =
+        seoConfig.customKeywords && seoConfig.customKeywords.length > 0
+          ? [...seoConfig.customKeywords]
+          : seoConfig.defaultKeywords && seoConfig.defaultKeywords.length > 0
+          ? [...seoConfig.defaultKeywords]
+          : [...LUXURY_FASHION_CORE_KEYWORDS];
+      setSeoKeywordsDraft(nextList);
+    }
+  }, [seoConfig]);
 
   // Add Admin Form State
   const [newAdminGmail, setNewAdminGmail] = useState('');
@@ -1461,6 +1610,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       return;
     }
 
+    const existingDeptCats = getCategoriesByDepartment(categories, newCatDept);
+    const defaultNextOrder = existingDeptCats.length + 1;
+    const parsedOrder = Number(newCatOrderInput.trim());
+    const finalSortOrder =
+      newCatOrderInput.trim() !== '' &&
+      Number.isFinite(parsedOrder) &&
+      parsedOrder > 0
+        ? Math.round(parsedOrder * 100) / 100
+        : defaultNextOrder;
+
     await onAddCategory({
       name: cleanName,
       slug: createSafeSlug(cleanName),
@@ -1468,12 +1627,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       description:
         newCatDesc.trim() ||
         `Curated ${cleanName} collection for SAMO ${newCatDept}.`,
+      sortOrder: finalSortOrder,
     });
 
     setNewCatName('');
     setNewCatDesc('');
+    setNewCatOrderInput('');
     setCatFeedback(
-      `Category "${cleanName}" added to ${newCatDept.toUpperCase()}.`
+      `Category "${cleanName}" (#${finalSortOrder}) added to ${newCatDept.toUpperCase()} with full banner & display structure.`
     );
     setIsAddCategoryModalOpen(false);
   };
@@ -1705,7 +1866,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               SAMO
             </span>
             <span className="text-xs text-zinc-400 uppercase tracking-widest">
-              /admin · Restricted Atelier Portal
+              /admin · Restricted SAMO Weave Portal
             </span>
           </div>
           <div className="flex flex-wrap items-center gap-3">
@@ -1750,7 +1911,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 SAMO Admin Authentication
               </h1>
               <p className="text-xs text-zinc-400">
-                Restricted to Authorized Atelier Administration Accounts
+                Restricted to Authorized SAMO Weave Administration Accounts
               </p>
             </div>
           </div>
@@ -1761,7 +1922,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 Unauthorized Account: {currentUser.email}
               </p>
               <p>
-                Only authorized Atelier administration accounts verified in the
+                Only authorized SAMO Weave administration accounts verified in the
                 database can access <code>/admin</code>.
               </p>
             </div>
@@ -1801,7 +1962,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
 
         <div className="text-center text-[11px] text-zinc-600 uppercase tracking-widest">
-          SAMO Atelier Security Active
+          SAMO Weave Security Active
         </div>
       </div>
     );
@@ -1871,6 +2032,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       shortLabel: 'Newsletter',
       icon: <Mail className="w-4 h-4 shrink-0" />,
       badge: newsletterSubscribers.length,
+    },
+    {
+      id: 'seo',
+      label: 'SEO & Metadata',
+      shortLabel: 'SEO',
+      icon: <Globe className="w-4 h-4 shrink-0" />,
     },
     {
       id: 'admins',
@@ -2066,7 +2233,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 SAMO
               </span>
               <span className="text-[10px] font-mono-tabular uppercase tracking-[0.2em] text-zinc-400 block mt-0.5">
-                Atelier Admin
+                Weave Admin
               </span>
             </button>
             <button
@@ -3413,453 +3580,957 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-800 pb-5">
                 <div>
                   <h1 className="font-display text-xl sm:text-2xl font-bold text-white uppercase tracking-wider">
-                    Categories &amp; Mid-Page Product Banners
+                    Categories, Display Order &amp; Mid-Page Product Banners
                   </h1>
                   <p className="text-xs text-zinc-400 mt-1">
-                    Manage Women &amp; Kids categories and customize the
-                    editorial image banner that appears between products inside
-                    every category page. You can upload/replace or delete any
-                    category’s banner at any time.
+                    All categories are organized under 2 main departments:{' '}
+                    <strong className="text-white">Women</strong> &amp;{' '}
+                    <strong className="text-white">Kids</strong>. Rearrange
+                    website category order using either{' '}
+                    <strong className="text-white">
+                      Order Numbers (1, 2, 3... or decimals like 1.5, 2.5)
+                    </strong>{' '}
+                    or the instant{' '}
+                    <strong className="text-white">
+                      Move Up (↑) / Move Down (↓)
+                    </strong>{' '}
+                    buttons. Delete any banner image at any time so no banner
+                    appears in that category.
                   </p>
                 </div>
                 <button
                   type="button"
-                  onClick={() => setIsAddCategoryModalOpen(true)}
-                  className="px-4 py-2.5 rounded-xl bg-white text-zinc-950 text-xs font-bold uppercase tracking-wider hover:bg-zinc-200 transition-colors flex items-center gap-1.5 cursor-pointer self-start"
+                  onClick={() => {
+                    const currentDept =
+                      categoryAdminDeptView === 'kids' ? 'kids' : 'women';
+                    setNewCatDept(currentDept);
+                    const nextNum =
+                      getCategoriesByDepartment(categories, currentDept)
+                        .length + 1;
+                    setNewCatOrderInput(String(nextNum));
+                    setIsAddCategoryModalOpen(true);
+                  }}
+                  className="px-4 py-2.5 rounded-xl bg-white text-zinc-950 text-xs font-bold uppercase tracking-wider hover:bg-zinc-200 transition-colors flex items-center gap-1.5 cursor-pointer self-start shrink-0"
                 >
                   <Plus className="w-4 h-4" />
                   <span>Add New Category</span>
                 </button>
               </div>
 
-              {/* Women Categories & In-Feed Banners */}
-              <div className="space-y-4">
-                <h2 className="text-sm sm:text-base font-bold text-white uppercase tracking-wider">
-                  Women Categories &amp; In-Feed Banners (
-                  {getCategoriesByDepartment(categories, 'women').length})
-                </h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                  {getCategoriesByDepartment(categories, 'women').map((cat) => {
-                    const bKey = getCategoryBannerKey('women', cat.name);
-                    const bannerCfg =
-                      siteBanners.categoryBanners?.[bKey] ||
-                      buildDefaultCategoryBannerForCategory(
-                        'women',
-                        cat.name,
-                        bKey
-                      );
+              {/* 2 Main Departments Switcher: Women & Kids */}
+              <div className="flex flex-wrap items-center justify-between gap-3 bg-[#18181C] border border-zinc-800 rounded-2xl p-3.5">
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setCategoryAdminDeptView('all')}
+                    className={`px-3.5 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-colors cursor-pointer ${
+                      categoryAdminDeptView === 'all'
+                        ? 'bg-white text-zinc-950'
+                        : 'bg-zinc-900 text-zinc-300 hover:text-white border border-zinc-800'
+                    }`}
+                  >
+                    All Departments (Women &amp; Kids)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCategoryAdminDeptView('women')}
+                    className={`px-3.5 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-colors cursor-pointer ${
+                      categoryAdminDeptView === 'women'
+                        ? 'bg-white text-zinc-950'
+                        : 'bg-zinc-900 text-zinc-300 hover:text-white border border-zinc-800'
+                    }`}
+                  >
+                    1. Women (
+                    {getCategoriesByDepartment(categories, 'women').length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCategoryAdminDeptView('kids')}
+                    className={`px-3.5 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-colors cursor-pointer ${
+                      categoryAdminDeptView === 'kids'
+                        ? 'bg-white text-zinc-950'
+                        : 'bg-zinc-900 text-zinc-300 hover:text-white border border-zinc-800'
+                    }`}
+                  >
+                    2. Kids (
+                    {getCategoriesByDepartment(categories, 'kids').length})
+                  </button>
+                </div>
 
-                    return (
-                      <div
-                        key={cat.id}
-                        className="bg-[#18181C] border border-zinc-800 rounded-2xl p-4 sm:p-5 space-y-4"
+                <div className="text-[11px] text-zinc-400">
+                  Tip: Type <code className="text-white">1.5</code> or{' '}
+                  <code className="text-white">2.5</code> to insert between
+                  categories, or click <code className="text-white">↑</code> /{' '}
+                  <code className="text-white">↓</code> to swap instantly.
+                </div>
+              </div>
+
+              {/* DEPARTMENT 1: WOMEN CATEGORIES & IN-FEED BANNERS */}
+              {(categoryAdminDeptView === 'all' ||
+                categoryAdminDeptView === 'women') && (
+                <div className="space-y-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <h2 className="text-sm sm:text-base font-bold text-white uppercase tracking-wider">
+                        1. Women Categories &amp; In-Feed Banners (
+                        {getCategoriesByDepartment(categories, 'women').length})
+                      </h2>
+                      <p className="text-[11px] text-zinc-400">
+                        Displayed in this exact numbered order on the Women
+                        navigation bar, category tabs, and homepage showcase.
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {onRenumberDepartmentCategories && (
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            await onRenumberDepartmentCategories('women');
+                            setCatOrderDrafts({});
+                            setCatFeedback(
+                              '✓ Cleanly re-numbered Women categories sequentially (1, 2, 3...).'
+                            );
+                          }}
+                          className="px-3 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-700 text-[11px] font-bold uppercase tracking-wider cursor-pointer"
+                        >
+                          Clean Numbering (1, 2, 3...)
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setNewCatDept('women');
+                          const nextNum =
+                            getCategoriesByDepartment(categories, 'women')
+                              .length + 1;
+                          setNewCatOrderInput(String(nextNum));
+                          setIsAddCategoryModalOpen(true);
+                        }}
+                        className="px-3 py-1.5 rounded-lg bg-white text-zinc-950 hover:bg-zinc-200 text-[11px] font-bold uppercase tracking-wider cursor-pointer flex items-center gap-1"
                       >
-                        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800 pb-3">
-                          <div>
-                            <div className="text-xs font-bold uppercase text-white flex flex-wrap items-center gap-2">
-                              <span>Women · {cat.name}</span>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setEditingCategory(cat);
-                                  setEditCatName(cat.name);
-                                  setEditCatDesc(cat.description || '');
-                                }}
-                                aria-label={`Edit category section name ${cat.name}`}
-                                title="Edit Category Name"
-                                className="px-2 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-[10px] font-bold uppercase tracking-wider inline-flex items-center gap-1 cursor-pointer"
-                              >
-                                <Pencil className="w-2.5 h-2.5" />
-                                <span>Rename</span>
-                              </button>
-                            </div>
-                            <div className="text-[11px] text-zinc-400">
-                              Banner appears between products in /women (
-                              {cat.name})
-                            </div>
-                          </div>
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Add Women Category</span>
+                      </button>
+                    </div>
+                  </div>
 
-                          <div className="flex flex-wrap items-center gap-2">
-                            <button
-                              type="button"
-                              onClick={() =>
-                                updateCategoryBanner(
-                                  bKey,
-                                  'women',
-                                  cat.name,
-                                  (prev) => ({
-                                    ...prev,
-                                    enabled: !prev.enabled,
-                                  }),
-                                  `${cat.name} Banner ${
-                                    bannerCfg.enabled ? 'Removed/Hidden' : 'Added/Enabled'
-                                  }`
-                                )
-                              }
-                              className={`px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 cursor-pointer ${
-                                bannerCfg.enabled
-                                  ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-700/70'
-                                  : 'bg-zinc-900 text-zinc-400 border border-zinc-700'
-                              }`}
-                            >
-                              {bannerCfg.enabled ? (
-                                <>
-                                  <Eye className="w-3 h-3" />
-                                  <span>Banner Active</span>
-                                </>
-                              ) : (
-                                <>
-                                  <EyeOff className="w-3 h-3" />
-                                  <span>Banner Deleted</span>
-                                </>
-                              )}
-                            </button>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    {getCategoriesByDepartment(categories, 'women').map(
+                      (cat, idx, deptArr) => {
+                        const bKey = getCategoryBannerKey('women', cat.name);
+                        const storedBanner =
+                          siteBanners.categoryBanners?.[bKey];
+                        const bannerCfg =
+                          storedBanner ||
+                          buildDefaultCategoryBannerForCategory(
+                            'women',
+                            cat.name,
+                            bKey
+                          );
+                        const isBannerActive =
+                          Boolean(bannerCfg.enabled) &&
+                          Boolean(
+                            bannerCfg.imageUrl && bannerCfg.imageUrl.trim()
+                          );
+                        const currentOrderNum = cat.sortOrder ?? idx + 1;
+                        const draftVal =
+                          catOrderDrafts[cat.id] !== undefined
+                            ? catOrderDrafts[cat.id]
+                            : String(currentOrderNum);
 
-                            <button
-                              type="button"
-                              onClick={() => setCategoryPendingDelete(cat)}
-                              aria-label={`Delete category ${cat.name}`}
-                              title="Delete Category"
-                              className="p-1.5 rounded-lg text-zinc-400 hover:text-red-400 border border-zinc-800 hover:border-red-800 cursor-pointer"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* Banner Preview + Upload / Replace / Delete Controls */}
-                        <div className="grid grid-cols-1 sm:grid-cols-12 gap-4 items-center">
-                          <div className="sm:col-span-4 aspect-[4/3] rounded-xl overflow-hidden bg-zinc-950 border border-zinc-800 relative">
-                            {bannerCfg.enabled && bannerCfg.imageUrl ? (
-                              <ProductImage
-                                src={bannerCfg.imageUrl}
-                                alt={`${cat.name} In-Feed Banner`}
-                                category={cat.name}
-                                className="w-full h-full object-cover"
-                              />
-                            ) : (
-                              <div className="w-full h-full flex items-center justify-center text-[10px] text-zinc-500 uppercase tracking-wider text-center p-2">
-                                No Banner Active
-                              </div>
-                            )}
-                          </div>
-
-                          <div className="sm:col-span-8 space-y-2.5">
-                            <div className="flex flex-col gap-1.5">
-                              <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">
-                                In-Feed Banner Image URL for {cat.name}
-                              </label>
-                              <input
-                                type="text"
-                                value={bannerCfg.imageUrl}
-                                onChange={(e) =>
-                                  updateCategoryBanner(
-                                    bKey,
-                                    'women',
-                                    cat.name,
-                                    (prev) => ({
-                                      ...prev,
-                                      imageUrl: e.target.value,
-                                      enabled: true,
-                                    })
-                                  )
-                                }
-                                placeholder="https://... (Banner Image URL)"
-                                className="w-full px-2.5 py-1.5 text-xs bg-zinc-900 border border-zinc-700 rounded-lg text-white focus:border-white focus:outline-none"
-                              />
-                            </div>
-
-                            <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
-                              <div className="flex items-center gap-1.5 text-[11px] text-zinc-300">
-                                <span>Show after:</span>
-                                <select
-                                  value={bannerCfg.insertAfterCount || 4}
-                                  onChange={(e) =>
-                                    updateCategoryBanner(
-                                      bKey,
-                                      'women',
-                                      cat.name,
-                                      (prev) => ({
-                                        ...prev,
-                                        insertAfterCount: Number(
-                                          e.target.value
-                                        ),
-                                      }),
-                                      `Updated ${cat.name} banner position`
-                                    )
-                                  }
-                                  className="px-2 py-1 bg-zinc-900 border border-zinc-700 rounded text-xs text-white"
-                                >
-                                  <option value={2}>2 products</option>
-                                  <option value={4}>4 products</option>
-                                  <option value={6}>6 products</option>
-                                  <option value={8}>8 products</option>
-                                </select>
-                              </div>
-
-                              <div className="flex items-center gap-2">
-                                <R2ImageUploadButton
-                                  compact={true}
-                                  ariaLabel={`Upload banner photo for ${cat.name}`}
-                                  label="Replace Photo"
-                                  onUploaded={(url) =>
-                                    updateCategoryBanner(
-                                      bKey,
-                                      'women',
-                                      cat.name,
-                                      (prev) => ({
-                                        ...prev,
-                                        imageUrl: url,
-                                        enabled: true,
-                                      }),
-                                      `Uploaded new banner for ${cat.name}`
-                                    )
-                                  }
-                                />
-                                {bannerCfg.enabled && (
+                        return (
+                          <div
+                            key={cat.id}
+                            className="bg-[#18181C] border border-zinc-800 rounded-2xl p-4 sm:p-5 space-y-4"
+                          >
+                            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800 pb-3">
+                              <div className="space-y-1">
+                                <div className="text-xs font-bold uppercase text-white flex flex-wrap items-center gap-2">
+                                  <span className="px-2 py-0.5 rounded bg-white text-zinc-950 font-mono-tabular text-[11px] font-extrabold">
+                                    #{idx + 1}
+                                  </span>
+                                  <span>Women · {cat.name}</span>
                                   <button
                                     type="button"
-                                    onClick={() =>
+                                    onClick={() => {
+                                      setEditingCategory(cat);
+                                      setEditCatName(cat.name);
+                                      setEditCatDesc(cat.description || '');
+                                      setEditCatOrderInput(
+                                        String(currentOrderNum)
+                                      );
+                                    }}
+                                    aria-label={`Edit category section name ${cat.name}`}
+                                    title="Edit Category Name & Order"
+                                    className="px-2 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-[10px] font-bold uppercase tracking-wider inline-flex items-center gap-1 cursor-pointer"
+                                  >
+                                    <Pencil className="w-2.5 h-2.5" />
+                                    <span>Rename</span>
+                                  </button>
+                                </div>
+                                <div className="text-[11px] text-zinc-400">
+                                  Banner appears between products in /women (
+                                  {cat.name})
+                                </div>
+                              </div>
+
+                              <div className="flex flex-wrap items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    updateCategoryBanner(
+                                      bKey,
+                                      'women',
+                                      cat.name,
+                                      (prev) => {
+                                        const nextEnabled = !isBannerActive;
+                                        const fallbackDefault =
+                                          buildDefaultCategoryBannerForCategory(
+                                            'women',
+                                            cat.name,
+                                            bKey
+                                          );
+                                        return {
+                                          ...prev,
+                                          enabled: nextEnabled,
+                                          imageUrl:
+                                            nextEnabled &&
+                                            (!prev.imageUrl ||
+                                              !prev.imageUrl.trim())
+                                              ? fallbackDefault.imageUrl
+                                              : prev.imageUrl,
+                                        };
+                                      },
+                                      `${cat.name} Banner ${
+                                        isBannerActive
+                                          ? 'Removed/Hidden'
+                                          : 'Added/Enabled'
+                                      }`
+                                    )
+                                  }
+                                  className={`px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 cursor-pointer ${
+                                    isBannerActive
+                                      ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-700/70'
+                                      : 'bg-zinc-900 text-zinc-400 border border-zinc-700'
+                                  }`}
+                                >
+                                  {isBannerActive ? (
+                                    <>
+                                      <Eye className="w-3 h-3" />
+                                      <span>Banner Active</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <EyeOff className="w-3 h-3" />
+                                      <span>No Banner</span>
+                                    </>
+                                  )}
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => setCategoryPendingDelete(cat)}
+                                  aria-label={`Delete category ${cat.name}`}
+                                  title="Delete Category"
+                                  className="p-1.5 rounded-lg text-zinc-400 hover:text-red-400 border border-zinc-800 hover:border-red-800 cursor-pointer"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* ORDER NUMBER INPUT (Supports Decimals e.g. 1.5, 2.5) + QUICK MOVE UP / DOWN BUTTONS */}
+                            <div className="flex flex-wrap items-center justify-between gap-2 bg-zinc-900/90 border border-zinc-800 rounded-xl px-3 py-2">
+                              <div className="flex items-center gap-2">
+                                <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-300">
+                                  Order # (or 1.5, 2.5):
+                                </label>
+                                <input
+                                  type="number"
+                                  step="any"
+                                  min="0.1"
+                                  value={draftVal}
+                                  onChange={(e) => {
+                                    const raw = e.target.value;
+                                    setCatOrderDrafts((prev) => ({
+                                      ...prev,
+                                      [cat.id]: raw,
+                                    }));
+                                  }}
+                                  onBlur={async () => {
+                                    const parsed = Number(draftVal);
+                                    if (
+                                      draftVal.trim() !== '' &&
+                                      Number.isFinite(parsed) &&
+                                      parsed > 0 &&
+                                      onUpdateCategorySortOrder
+                                    ) {
+                                      await onUpdateCategorySortOrder(
+                                        cat.id,
+                                        parsed
+                                      );
+                                      setCatFeedback(
+                                        `✓ Set "${cat.name}" display order to #${parsed}`
+                                      );
+                                    }
+                                  }}
+                                  onKeyDown={async (e) => {
+                                    if (e.key === 'Enter') {
+                                      e.preventDefault();
+                                      const parsed = Number(draftVal);
+                                      if (
+                                        draftVal.trim() !== '' &&
+                                        Number.isFinite(parsed) &&
+                                        parsed > 0 &&
+                                        onUpdateCategorySortOrder
+                                      ) {
+                                        await onUpdateCategorySortOrder(
+                                          cat.id,
+                                          parsed
+                                        );
+                                        setCatFeedback(
+                                          `✓ Set "${cat.name}" display order to #${parsed}`
+                                        );
+                                      }
+                                    }
+                                  }}
+                                  className="w-18 px-2 py-1 text-xs font-mono-tabular font-bold bg-zinc-950 border border-zinc-700 rounded text-white focus:border-white focus:outline-none"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={async () => {
+                                    const parsed = Number(draftVal);
+                                    if (
+                                      draftVal.trim() !== '' &&
+                                      Number.isFinite(parsed) &&
+                                      parsed > 0 &&
+                                      onUpdateCategorySortOrder
+                                    ) {
+                                      await onUpdateCategorySortOrder(
+                                        cat.id,
+                                        parsed
+                                      );
+                                      setCatFeedback(
+                                        `✓ Set "${cat.name}" display order to #${parsed}`
+                                      );
+                                    }
+                                  }}
+                                  className="px-2 py-1 rounded bg-white text-zinc-950 text-[10px] font-bold uppercase tracking-wider hover:bg-zinc-200 cursor-pointer"
+                                >
+                                  Set #
+                                </button>
+                              </div>
+
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-[10px] text-zinc-400 uppercase tracking-wider mr-1">
+                                  Quick Move:
+                                </span>
+                                <button
+                                  type="button"
+                                  disabled={idx === 0}
+                                  onClick={async () => {
+                                    if (onMoveCategoryOrder) {
+                                      await onMoveCategoryOrder(
+                                        'women',
+                                        cat.id,
+                                        'up'
+                                      );
+                                      setCatOrderDrafts({});
+                                      setCatFeedback(
+                                        `✓ Moved "${cat.name}" up to #${idx}`
+                                      );
+                                    }
+                                  }}
+                                  title="Move category earlier in website order"
+                                  className="px-2 py-1 rounded bg-zinc-800 hover:bg-zinc-700 disabled:opacity-35 text-white text-[10px] font-bold uppercase flex items-center gap-1 cursor-pointer"
+                                >
+                                  <ArrowUp className="w-3 h-3" />
+                                  <span>Up</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={idx === deptArr.length - 1}
+                                  onClick={async () => {
+                                    if (onMoveCategoryOrder) {
+                                      await onMoveCategoryOrder(
+                                        'women',
+                                        cat.id,
+                                        'down'
+                                      );
+                                      setCatOrderDrafts({});
+                                      setCatFeedback(
+                                        `✓ Moved "${cat.name}" down to #${idx + 2}`
+                                      );
+                                    }
+                                  }}
+                                  title="Move category later in website order"
+                                  className="px-2 py-1 rounded bg-zinc-800 hover:bg-zinc-700 disabled:opacity-35 text-white text-[10px] font-bold uppercase flex items-center gap-1 cursor-pointer"
+                                >
+                                  <ArrowDown className="w-3 h-3" />
+                                  <span>Down</span>
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Banner Preview + Upload / Replace / Delete Controls */}
+                            <div className="grid grid-cols-1 sm:grid-cols-12 gap-4 items-center">
+                              <div className="sm:col-span-4 aspect-[4/3] rounded-xl overflow-hidden bg-zinc-950 border border-zinc-800 relative">
+                                {isBannerActive ? (
+                                  <ProductImage
+                                    src={bannerCfg.imageUrl}
+                                    alt={`${cat.name} In-Feed Banner`}
+                                    category={cat.name}
+                                    className="w-full h-full object-cover"
+                                  />
+                                ) : (
+                                  <div className="w-full h-full flex items-center justify-center text-[10px] text-zinc-500 uppercase tracking-wider text-center p-2">
+                                    No Banner Active (Hidden on Website)
+                                  </div>
+                                )}
+                              </div>
+
+                              <div className="sm:col-span-8 space-y-2.5">
+                                <div className="flex flex-col gap-1.5">
+                                  <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">
+                                    In-Feed Banner Image URL for {cat.name}
+                                  </label>
+                                  <input
+                                    type="text"
+                                    value={bannerCfg.imageUrl}
+                                    onChange={(e) => {
+                                      const val = e.target.value;
                                       updateCategoryBanner(
                                         bKey,
                                         'women',
                                         cat.name,
                                         (prev) => ({
                                           ...prev,
-                                          enabled: false,
-                                        }),
-                                        `Deleted banner from ${cat.name}`
-                                      )
-                                    }
-                                    className="px-2.5 py-1.5 rounded-lg bg-red-950/60 hover:bg-red-900/70 text-red-200 border border-red-800/70 text-[10px] font-bold uppercase tracking-wider cursor-pointer"
-                                  >
-                                    Delete Banner
-                                  </button>
-                                )}
+                                          imageUrl: val,
+                                          enabled: Boolean(val.trim()),
+                                        })
+                                      );
+                                    }}
+                                    placeholder="https://... (Leave empty or click Delete Banner for no banner)"
+                                    className="w-full px-2.5 py-1.5 text-xs bg-zinc-900 border border-zinc-700 rounded-lg text-white focus:border-white focus:outline-none"
+                                  />
+                                </div>
+
+                                <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                                  <div className="flex items-center gap-1.5 text-[11px] text-zinc-300">
+                                    <span>Show after:</span>
+                                    <select
+                                      value={bannerCfg.insertAfterCount || 4}
+                                      onChange={(e) =>
+                                        updateCategoryBanner(
+                                          bKey,
+                                          'women',
+                                          cat.name,
+                                          (prev) => ({
+                                            ...prev,
+                                            insertAfterCount: Number(
+                                              e.target.value
+                                            ),
+                                          }),
+                                          `Updated ${cat.name} banner position`
+                                        )
+                                      }
+                                      className="px-2 py-1 bg-zinc-900 border border-zinc-700 rounded text-xs text-white"
+                                    >
+                                      <option value={2}>2 products</option>
+                                      <option value={4}>4 products</option>
+                                      <option value={6}>6 products</option>
+                                      <option value={8}>8 products</option>
+                                    </select>
+                                  </div>
+
+                                  <div className="flex items-center gap-2">
+                                    <R2ImageUploadButton
+                                      compact={true}
+                                      ariaLabel={`Upload banner photo for ${cat.name}`}
+                                      label={
+                                        isBannerActive
+                                          ? 'Replace Photo'
+                                          : 'Upload Banner'
+                                      }
+                                      onUploaded={(url) =>
+                                        updateCategoryBanner(
+                                          bKey,
+                                          'women',
+                                          cat.name,
+                                          (prev) => ({
+                                            ...prev,
+                                            imageUrl: url,
+                                            enabled: true,
+                                          }),
+                                          `Uploaded new banner for ${cat.name}`
+                                        )
+                                      }
+                                    />
+                                    {(isBannerActive || bannerCfg.imageUrl) && (
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          updateCategoryBanner(
+                                            bKey,
+                                            'women',
+                                            cat.name,
+                                            (prev) => ({
+                                              ...prev,
+                                              imageUrl: '',
+                                              enabled: false,
+                                            }),
+                                            `Removed banner from ${cat.name} — no banner will appear in this category`
+                                          )
+                                        }
+                                        className="px-2.5 py-1.5 rounded-lg bg-red-950/60 hover:bg-red-900/70 text-red-200 border border-red-800/70 text-[10px] font-bold uppercase tracking-wider cursor-pointer"
+                                      >
+                                        Delete Banner
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
                               </div>
                             </div>
                           </div>
-                        </div>
-                      </div>
-                    );
-                  })}
+                        );
+                      }
+                    )}
+                  </div>
                 </div>
-              </div>
+              )}
 
-              {/* Kids Categories & In-Feed Banners */}
-              <div className="space-y-4 pt-4 border-t border-zinc-800">
-                <h2 className="text-sm sm:text-base font-bold text-white uppercase tracking-wider">
-                  Kids Categories &amp; In-Feed Banners (
-                  {getCategoriesByDepartment(categories, 'kids').length})
-                </h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                  {getCategoriesByDepartment(categories, 'kids').map((cat) => {
-                    const bKey = getCategoryBannerKey('kids', cat.name);
-                    const bannerCfg =
-                      siteBanners.categoryBanners?.[bKey] ||
-                      buildDefaultCategoryBannerForCategory(
-                        'kids',
-                        cat.name,
-                        bKey
-                      );
-
-                    return (
-                      <div
-                        key={cat.id}
-                        className="bg-[#18181C] border border-zinc-800 rounded-2xl p-4 sm:p-5 space-y-4"
+              {/* DEPARTMENT 2: KIDS CATEGORIES & IN-FEED BANNERS */}
+              {(categoryAdminDeptView === 'all' ||
+                categoryAdminDeptView === 'kids') && (
+                <div className="space-y-4 pt-4 border-t border-zinc-800">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <h2 className="text-sm sm:text-base font-bold text-white uppercase tracking-wider">
+                        2. Kids Categories &amp; In-Feed Banners (
+                        {getCategoriesByDepartment(categories, 'kids').length})
+                      </h2>
+                      <p className="text-[11px] text-zinc-400">
+                        Displayed in this exact numbered order on the Kids
+                        navigation bar and category pages.
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {onRenumberDepartmentCategories && (
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            await onRenumberDepartmentCategories('kids');
+                            setCatOrderDrafts({});
+                            setCatFeedback(
+                              '✓ Cleanly re-numbered Kids categories sequentially (1, 2, 3...).'
+                            );
+                          }}
+                          className="px-3 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-700 text-[11px] font-bold uppercase tracking-wider cursor-pointer"
+                        >
+                          Clean Numbering (1, 2, 3...)
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setNewCatDept('kids');
+                          const nextNum =
+                            getCategoriesByDepartment(categories, 'kids')
+                              .length + 1;
+                          setNewCatOrderInput(String(nextNum));
+                          setIsAddCategoryModalOpen(true);
+                        }}
+                        className="px-3 py-1.5 rounded-lg bg-white text-zinc-950 hover:bg-zinc-200 text-[11px] font-bold uppercase tracking-wider cursor-pointer flex items-center gap-1"
                       >
-                        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800 pb-3">
-                          <div>
-                            <div className="text-xs font-bold uppercase text-white flex flex-wrap items-center gap-2">
-                              <span>Kids · {cat.name}</span>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setEditingCategory(cat);
-                                  setEditCatName(cat.name);
-                                  setEditCatDesc(cat.description || '');
-                                }}
-                                aria-label={`Edit category section name ${cat.name}`}
-                                title="Edit Category Name"
-                                className="px-2 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-[10px] font-bold uppercase tracking-wider inline-flex items-center gap-1 cursor-pointer"
-                              >
-                                <Pencil className="w-2.5 h-2.5" />
-                                <span>Rename</span>
-                              </button>
-                            </div>
-                            <div className="text-[11px] text-zinc-400">
-                              Banner appears between products in /kids (
-                              {cat.name})
-                            </div>
-                          </div>
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Add Kids Category</span>
+                      </button>
+                    </div>
+                  </div>
 
-                          <div className="flex flex-wrap items-center gap-2">
-                            <button
-                              type="button"
-                              onClick={() =>
-                                updateCategoryBanner(
-                                  bKey,
-                                  'kids',
-                                  cat.name,
-                                  (prev) => ({
-                                    ...prev,
-                                    enabled: !prev.enabled,
-                                  }),
-                                  `${cat.name} Banner ${
-                                    bannerCfg.enabled
-                                      ? 'Removed/Hidden'
-                                      : 'Added/Enabled'
-                                  }`
-                                )
-                              }
-                              className={`px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 cursor-pointer ${
-                                bannerCfg.enabled
-                                  ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-700/70'
-                                  : 'bg-zinc-900 text-zinc-400 border border-zinc-700'
-                              }`}
-                            >
-                              {bannerCfg.enabled ? (
-                                <>
-                                  <Eye className="w-3 h-3" />
-                                  <span>Banner Active</span>
-                                </>
-                              ) : (
-                                <>
-                                  <EyeOff className="w-3 h-3" />
-                                  <span>Banner Deleted</span>
-                                </>
-                              )}
-                            </button>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    {getCategoriesByDepartment(categories, 'kids').map(
+                      (cat, idx, deptArr) => {
+                        const bKey = getCategoryBannerKey('kids', cat.name);
+                        const storedBanner =
+                          siteBanners.categoryBanners?.[bKey];
+                        const bannerCfg =
+                          storedBanner ||
+                          buildDefaultCategoryBannerForCategory(
+                            'kids',
+                            cat.name,
+                            bKey
+                          );
+                        const isBannerActive =
+                          Boolean(bannerCfg.enabled) &&
+                          Boolean(
+                            bannerCfg.imageUrl && bannerCfg.imageUrl.trim()
+                          );
+                        const currentOrderNum = cat.sortOrder ?? idx + 1;
+                        const draftVal =
+                          catOrderDrafts[cat.id] !== undefined
+                            ? catOrderDrafts[cat.id]
+                            : String(currentOrderNum);
 
-                            <button
-                              type="button"
-                              onClick={() => setCategoryPendingDelete(cat)}
-                              aria-label={`Delete category ${cat.name}`}
-                              title="Delete Category"
-                              className="p-1.5 rounded-lg text-zinc-400 hover:text-red-400 border border-zinc-800 hover:border-red-800 cursor-pointer"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-1 sm:grid-cols-12 gap-4 items-center">
-                          <div className="sm:col-span-4 aspect-[4/3] rounded-xl overflow-hidden bg-zinc-950 border border-zinc-800 relative">
-                            {bannerCfg.enabled && bannerCfg.imageUrl ? (
-                              <ProductImage
-                                src={bannerCfg.imageUrl}
-                                alt={`${cat.name} In-Feed Banner`}
-                                category={cat.name}
-                                className="w-full h-full object-cover"
-                              />
-                            ) : (
-                              <div className="w-full h-full flex items-center justify-center text-[10px] text-zinc-500 uppercase tracking-wider text-center p-2">
-                                No Banner Active
-                              </div>
-                            )}
-                          </div>
-
-                          <div className="sm:col-span-8 space-y-2.5">
-                            <div className="flex flex-col gap-1.5">
-                              <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">
-                                In-Feed Banner Image URL for {cat.name}
-                              </label>
-                              <input
-                                type="text"
-                                value={bannerCfg.imageUrl}
-                                onChange={(e) =>
-                                  updateCategoryBanner(
-                                    bKey,
-                                    'kids',
-                                    cat.name,
-                                    (prev) => ({
-                                      ...prev,
-                                      imageUrl: e.target.value,
-                                      enabled: true,
-                                    })
-                                  )
-                                }
-                                placeholder="https://... (Banner Image URL)"
-                                className="w-full px-2.5 py-1.5 text-xs bg-zinc-900 border border-zinc-700 rounded-lg text-white focus:border-white focus:outline-none"
-                              />
-                            </div>
-
-                            <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
-                              <div className="flex items-center gap-1.5 text-[11px] text-zinc-300">
-                                <span>Show after:</span>
-                                <select
-                                  value={bannerCfg.insertAfterCount || 4}
-                                  onChange={(e) =>
-                                    updateCategoryBanner(
-                                      bKey,
-                                      'kids',
-                                      cat.name,
-                                      (prev) => ({
-                                        ...prev,
-                                        insertAfterCount: Number(
-                                          e.target.value
-                                        ),
-                                      }),
-                                      `Updated ${cat.name} banner position`
-                                    )
-                                  }
-                                  className="px-2 py-1 bg-zinc-900 border border-zinc-700 rounded text-xs text-white"
-                                >
-                                  <option value={2}>2 products</option>
-                                  <option value={4}>4 products</option>
-                                  <option value={6}>6 products</option>
-                                  <option value={8}>8 products</option>
-                                </select>
-                              </div>
-
-                              <div className="flex items-center gap-2">
-                                <R2ImageUploadButton
-                                  compact={true}
-                                  ariaLabel={`Upload banner photo for ${cat.name}`}
-                                  label="Replace Photo"
-                                  onUploaded={(url) =>
-                                    updateCategoryBanner(
-                                      bKey,
-                                      'kids',
-                                      cat.name,
-                                      (prev) => ({
-                                        ...prev,
-                                        imageUrl: url,
-                                        enabled: true,
-                                      }),
-                                      `Uploaded new banner for ${cat.name}`
-                                    )
-                                  }
-                                />
-                                {bannerCfg.enabled && (
+                        return (
+                          <div
+                            key={cat.id}
+                            className="bg-[#18181C] border border-zinc-800 rounded-2xl p-4 sm:p-5 space-y-4"
+                          >
+                            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800 pb-3">
+                              <div className="space-y-1">
+                                <div className="text-xs font-bold uppercase text-white flex flex-wrap items-center gap-2">
+                                  <span className="px-2 py-0.5 rounded bg-white text-zinc-950 font-mono-tabular text-[11px] font-extrabold">
+                                    #{idx + 1}
+                                  </span>
+                                  <span>Kids · {cat.name}</span>
                                   <button
                                     type="button"
-                                    onClick={() =>
+                                    onClick={() => {
+                                      setEditingCategory(cat);
+                                      setEditCatName(cat.name);
+                                      setEditCatDesc(cat.description || '');
+                                      setEditCatOrderInput(
+                                        String(currentOrderNum)
+                                      );
+                                    }}
+                                    aria-label={`Edit category section name ${cat.name}`}
+                                    title="Edit Category Name & Order"
+                                    className="px-2 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-[10px] font-bold uppercase tracking-wider inline-flex items-center gap-1 cursor-pointer"
+                                  >
+                                    <Pencil className="w-2.5 h-2.5" />
+                                    <span>Rename</span>
+                                  </button>
+                                </div>
+                                <div className="text-[11px] text-zinc-400">
+                                  Banner appears between products in /kids (
+                                  {cat.name})
+                                </div>
+                              </div>
+
+                              <div className="flex flex-wrap items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    updateCategoryBanner(
+                                      bKey,
+                                      'kids',
+                                      cat.name,
+                                      (prev) => {
+                                        const nextEnabled = !isBannerActive;
+                                        const fallbackDefault =
+                                          buildDefaultCategoryBannerForCategory(
+                                            'kids',
+                                            cat.name,
+                                            bKey
+                                          );
+                                        return {
+                                          ...prev,
+                                          enabled: nextEnabled,
+                                          imageUrl:
+                                            nextEnabled &&
+                                            (!prev.imageUrl ||
+                                              !prev.imageUrl.trim())
+                                              ? fallbackDefault.imageUrl
+                                              : prev.imageUrl,
+                                        };
+                                      },
+                                      `${cat.name} Banner ${
+                                        isBannerActive
+                                          ? 'Removed/Hidden'
+                                          : 'Added/Enabled'
+                                      }`
+                                    )
+                                  }
+                                  className={`px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 cursor-pointer ${
+                                    isBannerActive
+                                      ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-700/70'
+                                      : 'bg-zinc-900 text-zinc-400 border border-zinc-700'
+                                  }`}
+                                >
+                                  {isBannerActive ? (
+                                    <>
+                                      <Eye className="w-3 h-3" />
+                                      <span>Banner Active</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <EyeOff className="w-3 h-3" />
+                                      <span>No Banner</span>
+                                    </>
+                                  )}
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => setCategoryPendingDelete(cat)}
+                                  aria-label={`Delete category ${cat.name}`}
+                                  title="Delete Category"
+                                  className="p-1.5 rounded-lg text-zinc-400 hover:text-red-400 border border-zinc-800 hover:border-red-800 cursor-pointer"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* ORDER NUMBER INPUT (Supports Decimals e.g. 1.5, 2.5) + QUICK MOVE UP / DOWN BUTTONS */}
+                            <div className="flex flex-wrap items-center justify-between gap-2 bg-zinc-900/90 border border-zinc-800 rounded-xl px-3 py-2">
+                              <div className="flex items-center gap-2">
+                                <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-300">
+                                  Order # (or 1.5, 2.5):
+                                </label>
+                                <input
+                                  type="number"
+                                  step="any"
+                                  min="0.1"
+                                  value={draftVal}
+                                  onChange={(e) => {
+                                    const raw = e.target.value;
+                                    setCatOrderDrafts((prev) => ({
+                                      ...prev,
+                                      [cat.id]: raw,
+                                    }));
+                                  }}
+                                  onBlur={async () => {
+                                    const parsed = Number(draftVal);
+                                    if (
+                                      draftVal.trim() !== '' &&
+                                      Number.isFinite(parsed) &&
+                                      parsed > 0 &&
+                                      onUpdateCategorySortOrder
+                                    ) {
+                                      await onUpdateCategorySortOrder(
+                                        cat.id,
+                                        parsed
+                                      );
+                                      setCatFeedback(
+                                        `✓ Set "${cat.name}" display order to #${parsed}`
+                                      );
+                                    }
+                                  }}
+                                  onKeyDown={async (e) => {
+                                    if (e.key === 'Enter') {
+                                      e.preventDefault();
+                                      const parsed = Number(draftVal);
+                                      if (
+                                        draftVal.trim() !== '' &&
+                                        Number.isFinite(parsed) &&
+                                        parsed > 0 &&
+                                        onUpdateCategorySortOrder
+                                      ) {
+                                        await onUpdateCategorySortOrder(
+                                          cat.id,
+                                          parsed
+                                        );
+                                        setCatFeedback(
+                                          `✓ Set "${cat.name}" display order to #${parsed}`
+                                        );
+                                      }
+                                    }
+                                  }}
+                                  className="w-18 px-2 py-1 text-xs font-mono-tabular font-bold bg-zinc-950 border border-zinc-700 rounded text-white focus:border-white focus:outline-none"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={async () => {
+                                    const parsed = Number(draftVal);
+                                    if (
+                                      draftVal.trim() !== '' &&
+                                      Number.isFinite(parsed) &&
+                                      parsed > 0 &&
+                                      onUpdateCategorySortOrder
+                                    ) {
+                                      await onUpdateCategorySortOrder(
+                                        cat.id,
+                                        parsed
+                                      );
+                                      setCatFeedback(
+                                        `✓ Set "${cat.name}" display order to #${parsed}`
+                                      );
+                                    }
+                                  }}
+                                  className="px-2 py-1 rounded bg-white text-zinc-950 text-[10px] font-bold uppercase tracking-wider hover:bg-zinc-200 cursor-pointer"
+                                >
+                                  Set #
+                                </button>
+                              </div>
+
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-[10px] text-zinc-400 uppercase tracking-wider mr-1">
+                                  Quick Move:
+                                </span>
+                                <button
+                                  type="button"
+                                  disabled={idx === 0}
+                                  onClick={async () => {
+                                    if (onMoveCategoryOrder) {
+                                      await onMoveCategoryOrder(
+                                        'kids',
+                                        cat.id,
+                                        'up'
+                                      );
+                                      setCatOrderDrafts({});
+                                      setCatFeedback(
+                                        `✓ Moved "${cat.name}" up to #${idx}`
+                                      );
+                                    }
+                                  }}
+                                  title="Move category earlier in website order"
+                                  className="px-2 py-1 rounded bg-zinc-800 hover:bg-zinc-700 disabled:opacity-35 text-white text-[10px] font-bold uppercase flex items-center gap-1 cursor-pointer"
+                                >
+                                  <ArrowUp className="w-3 h-3" />
+                                  <span>Up</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={idx === deptArr.length - 1}
+                                  onClick={async () => {
+                                    if (onMoveCategoryOrder) {
+                                      await onMoveCategoryOrder(
+                                        'kids',
+                                        cat.id,
+                                        'down'
+                                      );
+                                      setCatOrderDrafts({});
+                                      setCatFeedback(
+                                        `✓ Moved "${cat.name}" down to #${idx + 2}`
+                                      );
+                                    }
+                                  }}
+                                  title="Move category later in website order"
+                                  className="px-2 py-1 rounded bg-zinc-800 hover:bg-zinc-700 disabled:opacity-35 text-white text-[10px] font-bold uppercase flex items-center gap-1 cursor-pointer"
+                                >
+                                  <ArrowDown className="w-3 h-3" />
+                                  <span>Down</span>
+                                </button>
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-12 gap-4 items-center">
+                              <div className="sm:col-span-4 aspect-[4/3] rounded-xl overflow-hidden bg-zinc-950 border border-zinc-800 relative">
+                                {isBannerActive ? (
+                                  <ProductImage
+                                    src={bannerCfg.imageUrl}
+                                    alt={`${cat.name} In-Feed Banner`}
+                                    category={cat.name}
+                                    className="w-full h-full object-cover"
+                                  />
+                                ) : (
+                                  <div className="w-full h-full flex items-center justify-center text-[10px] text-zinc-500 uppercase tracking-wider text-center p-2">
+                                    No Banner Active (Hidden on Website)
+                                  </div>
+                                )}
+                              </div>
+
+                              <div className="sm:col-span-8 space-y-2.5">
+                                <div className="flex flex-col gap-1.5">
+                                  <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">
+                                    In-Feed Banner Image URL for {cat.name}
+                                  </label>
+                                  <input
+                                    type="text"
+                                    value={bannerCfg.imageUrl}
+                                    onChange={(e) => {
+                                      const val = e.target.value;
                                       updateCategoryBanner(
                                         bKey,
                                         'kids',
                                         cat.name,
                                         (prev) => ({
                                           ...prev,
-                                          enabled: false,
-                                        }),
-                                        `Deleted banner from ${cat.name}`
-                                      )
-                                    }
-                                    className="px-2.5 py-1.5 rounded-lg bg-red-950/60 hover:bg-red-900/70 text-red-200 border border-red-800/70 text-[10px] font-bold uppercase tracking-wider cursor-pointer"
-                                  >
-                                    Delete Banner
-                                  </button>
-                                )}
+                                          imageUrl: val,
+                                          enabled: Boolean(val.trim()),
+                                        })
+                                      );
+                                    }}
+                                    placeholder="https://... (Leave empty or click Delete Banner for no banner)"
+                                    className="w-full px-2.5 py-1.5 text-xs bg-zinc-900 border border-zinc-700 rounded-lg text-white focus:border-white focus:outline-none"
+                                  />
+                                </div>
+
+                                <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                                  <div className="flex items-center gap-1.5 text-[11px] text-zinc-300">
+                                    <span>Show after:</span>
+                                    <select
+                                      value={bannerCfg.insertAfterCount || 4}
+                                      onChange={(e) =>
+                                        updateCategoryBanner(
+                                          bKey,
+                                          'kids',
+                                          cat.name,
+                                          (prev) => ({
+                                            ...prev,
+                                            insertAfterCount: Number(
+                                              e.target.value
+                                            ),
+                                          }),
+                                          `Updated ${cat.name} banner position`
+                                        )
+                                      }
+                                      className="px-2 py-1 bg-zinc-900 border border-zinc-700 rounded text-xs text-white"
+                                    >
+                                      <option value={2}>2 products</option>
+                                      <option value={4}>4 products</option>
+                                      <option value={6}>6 products</option>
+                                      <option value={8}>8 products</option>
+                                    </select>
+                                  </div>
+
+                                  <div className="flex items-center gap-2">
+                                    <R2ImageUploadButton
+                                      compact={true}
+                                      ariaLabel={`Upload banner photo for ${cat.name}`}
+                                      label={
+                                        isBannerActive
+                                          ? 'Replace Photo'
+                                          : 'Upload Banner'
+                                      }
+                                      onUploaded={(url) =>
+                                        updateCategoryBanner(
+                                          bKey,
+                                          'kids',
+                                          cat.name,
+                                          (prev) => ({
+                                            ...prev,
+                                            imageUrl: url,
+                                            enabled: true,
+                                          }),
+                                          `Uploaded new banner for ${cat.name}`
+                                        )
+                                      }
+                                    />
+                                    {(isBannerActive || bannerCfg.imageUrl) && (
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          updateCategoryBanner(
+                                            bKey,
+                                            'kids',
+                                            cat.name,
+                                            (prev) => ({
+                                              ...prev,
+                                              imageUrl: '',
+                                              enabled: false,
+                                            }),
+                                            `Removed banner from ${cat.name} — no banner will appear in this category`
+                                          )
+                                        }
+                                        className="px-2.5 py-1.5 rounded-lg bg-red-950/60 hover:bg-red-900/70 text-red-200 border border-red-800/70 text-[10px] font-bold uppercase tracking-wider cursor-pointer"
+                                      >
+                                        Delete Banner
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
                               </div>
                             </div>
                           </div>
-                        </div>
-                      </div>
-                    );
-                  })}
+                        );
+                      }
+                    )}
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           )}
 
@@ -4330,10 +5001,242 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           )}
 
           {/* =====================================================================
-              SECTION 8: SAMO NEWSLETTER SUBSCRIBERS (PERSISTED TO CLOUDFLARE R2)
+              SECTION 8: SAMO NEWSLETTER SUBSCRIBERS & HOMEPAGE POP-UP (CLOUDFLARE R2)
              ===================================================================== */}
           {activeTab === 'newsletter' && (
             <div className="space-y-6">
+              {/* HOMEPAGE 10% OFF NEWSLETTER POP-UP CONFIGURATION PANEL */}
+              <div className="bg-[#18181C] border border-zinc-800 rounded-2xl p-5 sm:p-6 space-y-5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-800 pb-4">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h2 className="font-display text-base sm:text-lg font-bold uppercase tracking-wider text-white">
+                        Homepage Newsletter Pop-Up (10% OFF · Code: SAMO10)
+                      </h2>
+                      <span
+                        className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+                          newsletterPopupConfig.enabled
+                            ? 'bg-emerald-950/90 text-emerald-300 border border-emerald-700/70'
+                            : 'bg-zinc-900 text-zinc-400 border border-zinc-700'
+                        }`}
+                      >
+                        {newsletterPopupConfig.enabled
+                          ? `ACTIVE · Pops after ${newsletterPopupConfig.delaySeconds}s (${newsletterPopupConfig.maxTimesPerDay}x/day per IP)`
+                          : 'OFF · Hidden on Homepage'}
+                      </span>
+                    </div>
+                    <p className="text-xs text-zinc-400 mt-1">
+                      Appears on the Homepage after your chosen seconds and
+                      daily IP limit. Features a single{' '}
+                      <strong className="text-zinc-200">
+                        Enter your Email Or Number
+                      </strong>{' '}
+                      box before revealing the{' '}
+                      <strong className="text-white">SAMO10</strong> (10% OFF)
+                      promo code.
+                    </p>
+                  </div>
+
+                  {/* Toggle Switch ON / OFF */}
+                  <div className="flex items-center gap-3 shrink-0">
+                    <span className="text-xs font-bold text-zinc-200">
+                      {newsletterPopupConfig.enabled
+                        ? 'Pop-Up ON'
+                        : 'Pop-Up OFF'}
+                    </span>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={newsletterPopupConfig.enabled}
+                      aria-label="Toggle Homepage Newsletter Pop-Up On or Off"
+                      onClick={async () => {
+                        const nextEnabled = !newsletterPopupConfig.enabled;
+                        await commitNewsletterPopupDraft({
+                          enabled: nextEnabled,
+                        });
+                        setItemFeedback(
+                          nextEnabled
+                            ? '✓ Homepage Newsletter Pop-Up turned ON'
+                            : 'Homepage Newsletter Pop-Up turned OFF'
+                        );
+                      }}
+                      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border transition-colors duration-200 items-center ${
+                        newsletterPopupConfig.enabled
+                          ? 'bg-white border-white'
+                          : 'bg-zinc-800 border-zinc-700'
+                      }`}
+                    >
+                      <span
+                        className={`inline-block h-4 w-4 transform rounded-full transition-transform duration-200 ${
+                          newsletterPopupConfig.enabled
+                            ? 'translate-x-5 bg-zinc-950'
+                            : 'translate-x-1 bg-zinc-400'
+                        }`}
+                      />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Timing & IP Frequency + Editable Copy */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-300 mb-1">
+                      Appear After Entering Website (Seconds)
+                    </label>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      aria-label="Appear After Entering Website (Seconds)"
+                      placeholder="10"
+                      value={popupDelayDraft}
+                      onFocus={() => {
+                        popupUserEditedRef.current = true;
+                      }}
+                      onChange={(e) => {
+                        popupUserEditedRef.current = true;
+                        const raw = e.target.value.replace(/[^\d]/g, '');
+                        const cleaned = raw.replace(/^0+(?=\d)/, '');
+                        setPopupDelayDraft(cleaned);
+                      }}
+                      onBlur={() => {
+                        void commitNewsletterPopupDraft();
+                      }}
+                      className="w-full px-3 py-2 text-xs font-mono-tabular bg-zinc-900 border border-zinc-700 rounded-lg text-white focus:border-white focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-300 mb-1">
+                      Times Per Day (Per User IP Address)
+                    </label>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      aria-label="Times Per Day (Per User IP Address)"
+                      placeholder="2"
+                      value={popupMaxPerDayDraft}
+                      onFocus={() => {
+                        popupUserEditedRef.current = true;
+                      }}
+                      onChange={(e) => {
+                        popupUserEditedRef.current = true;
+                        const raw = e.target.value.replace(/[^\d]/g, '');
+                        const cleaned = raw.replace(/^0+(?=\d)/, '');
+                        setPopupMaxPerDayDraft(cleaned);
+                      }}
+                      onBlur={() => {
+                        void commitNewsletterPopupDraft();
+                      }}
+                      className="w-full px-3 py-2 text-xs font-mono-tabular bg-zinc-900 border border-zinc-700 rounded-lg text-white focus:border-white focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-300 mb-1">
+                      Unlocked Promo Code (10% OFF)
+                    </label>
+                    <input
+                      type="text"
+                      aria-label="Unlocked Promo Code (10% OFF)"
+                      value={popupPromoCodeDraft}
+                      onFocus={() => {
+                        popupUserEditedRef.current = true;
+                      }}
+                      onChange={(e) => {
+                        popupUserEditedRef.current = true;
+                        setPopupPromoCodeDraft(e.target.value.toUpperCase());
+                      }}
+                      onBlur={() => {
+                        void commitNewsletterPopupDraft();
+                      }}
+                      className="w-full px-3 py-2 text-xs font-mono-tabular font-bold uppercase bg-zinc-900 border border-zinc-700 rounded-lg text-emerald-400 focus:border-white focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-300 mb-1">
+                      Submit Button Label
+                    </label>
+                    <input
+                      type="text"
+                      aria-label="Submit Button Label"
+                      value={popupButtonDraft}
+                      onFocus={() => {
+                        popupUserEditedRef.current = true;
+                      }}
+                      onChange={(e) => {
+                        popupUserEditedRef.current = true;
+                        setPopupButtonDraft(e.target.value);
+                      }}
+                      onBlur={() => {
+                        void commitNewsletterPopupDraft();
+                      }}
+                      className="w-full px-3 py-2 text-xs bg-zinc-900 border border-zinc-700 rounded-lg text-white focus:border-white focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-300 mb-1">
+                    Pop-Up Main Headline
+                  </label>
+                  <input
+                    type="text"
+                    aria-label="Pop-Up Main Headline"
+                    value={popupTitleDraft}
+                    onFocus={() => {
+                      popupUserEditedRef.current = true;
+                    }}
+                    onChange={(e) => {
+                      popupUserEditedRef.current = true;
+                      setPopupTitleDraft(e.target.value);
+                    }}
+                    onBlur={() => {
+                      void commitNewsletterPopupDraft();
+                    }}
+                    className="w-full px-3 py-2 text-xs bg-zinc-900 border border-zinc-700 rounded-lg text-white focus:border-white focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-300 mb-1">
+                    Pop-Up Message / Content
+                  </label>
+                  <textarea
+                    rows={2}
+                    aria-label="Pop-Up Message / Content"
+                    value={popupSubtitleDraft}
+                    onFocus={() => {
+                      popupUserEditedRef.current = true;
+                    }}
+                    onChange={(e) => {
+                      popupUserEditedRef.current = true;
+                      setPopupSubtitleDraft(e.target.value);
+                    }}
+                    onBlur={() => {
+                      void commitNewsletterPopupDraft();
+                    }}
+                    className="w-full px-3 py-2 text-xs bg-zinc-900 border border-zinc-700 rounded-lg text-white focus:border-white focus:outline-none"
+                  />
+                </div>
+
+                <div className="flex items-center justify-end pt-1">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      await commitNewsletterPopupDraft();
+                      setItemFeedback(
+                        '✓ Homepage Newsletter Pop-Up settings saved'
+                      );
+                    }}
+                    className="px-4 py-2 rounded-lg bg-white hover:bg-zinc-200 text-zinc-950 text-xs font-bold uppercase tracking-wider cursor-pointer transition-colors"
+                  >
+                    Save Pop-Up Settings
+                  </button>
+                </div>
+              </div>
+
+              {/* SUBSCRIBERS DIRECTORY */}
               <div className="bg-[#18181C] border border-zinc-800 rounded-2xl p-6 space-y-4">
                 <div className="flex flex-wrap items-center justify-between gap-4">
                   <div>
@@ -4346,7 +5249,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       </span>
                     </div>
                     <p className="text-xs text-zinc-400 mt-1">
-                      Client emails submitted via the storefront footer newsletter, automatically saved to Cloudflare R2 storage.
+                      Client emails &amp; phone numbers submitted via the
+                      Homepage 10% Off Pop-Up and Storefront Footer,
+                      automatically saved to Cloudflare R2 storage.
                     </p>
                   </div>
 
@@ -4380,9 +5285,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       type="button"
                       disabled={newsletterSubscribers.length === 0}
                       onClick={() => {
-                        const csvHeader = 'Email,SubscribedAt\n';
+                        const csvHeader =
+                          'Email,Phone,Source,SubscribedAt\n';
                         const csvRows = newsletterSubscribers
-                          .map((s) => `"${s.email}","${s.subscribedAt}"`)
+                          .map(
+                            (s) =>
+                              `"${s.email}","${s.phone || ''}","${
+                                s.source || 'footer'
+                              }","${s.subscribedAt}"`
+                          )
                           .join('\n');
                         const blob = new Blob([csvHeader + csvRows], {
                           type: 'text/csv',
@@ -4411,7 +5322,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       type="text"
                       value={newsletterSearchQuery}
                       onChange={(e) => setNewsletterSearchQuery(e.target.value)}
-                      placeholder="Search subscriber email..."
+                      placeholder="Search subscriber email or phone..."
                       className="w-full pl-9 pr-3 py-2 text-xs bg-zinc-900 border border-zinc-700 rounded-lg text-white placeholder-zinc-500 focus:outline-none focus:border-white"
                     />
                   </div>
@@ -4426,17 +5337,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
                 <div className="divide-y divide-zinc-800 border-t border-zinc-800 mt-4">
                   {(() => {
-                    const filtered = newsletterSubscribers.filter((s) =>
-                      s.email
-                        .toLowerCase()
-                        .includes(newsletterSearchQuery.toLowerCase())
+                    const q = newsletterSearchQuery.toLowerCase();
+                    const filtered = newsletterSubscribers.filter(
+                      (s) =>
+                        s.email.toLowerCase().includes(q) ||
+                        (s.phone || '').toLowerCase().includes(q)
                     );
 
                     if (filtered.length === 0) {
                       return (
                         <div className="py-12 text-center text-xs text-zinc-500">
                           {newsletterSubscribers.length === 0
-                            ? 'No newsletter subscriptions yet. Submissions from the website footer will automatically appear here and sync to Cloudflare R2.'
+                            ? 'No newsletter subscriptions yet. Submissions from the Homepage Pop-Up and Website Footer will automatically appear here and sync to Cloudflare R2.'
                             : 'No subscribers matching your search.'}
                         </div>
                       );
@@ -4460,10 +5372,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               {index + 1}.
                             </span>
                             <div className="min-w-0">
-                              <div className="text-xs font-bold text-white truncate">
-                                {sub.email}
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="text-xs font-bold text-white truncate">
+                                  {sub.email}
+                                </span>
+                                {sub.phone && (
+                                  <span className="px-2 py-0.5 rounded bg-zinc-800 text-zinc-200 font-mono-tabular text-[11px] inline-flex items-center gap-1">
+                                    <Phone className="w-2.5 h-2.5" />
+                                    {sub.phone}
+                                  </span>
+                                )}
+                                {sub.source === 'popup' && (
+                                  <span className="px-2 py-0.5 rounded bg-emerald-950/80 border border-emerald-800/60 text-emerald-300 text-[9px] font-bold uppercase tracking-wider">
+                                    10% Pop-Up (SAMO10)
+                                  </span>
+                                )}
                               </div>
-                              <div className="text-[10px] text-zinc-400">
+                              <div className="text-[10px] text-zinc-400 mt-0.5">
                                 Subscribed: {dateStr}
                               </div>
                             </div>
@@ -4488,6 +5413,274 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   })()}
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* =====================================================================
+              SECTION 8B: SEO & IMAGE METADATA AUTOMATION ENGINE
+             ===================================================================== */}
+          {activeTab === 'seo' && (
+            <div className="space-y-6">
+              {(() => {
+                const liveSeo =
+                  seoConfig ||
+                  generateCatalogSeoSnapshot(
+                    products,
+                    categories,
+                    siteBanners,
+                    seoKeywordsDraft
+                  );
+                return (
+                  <>
+                    <div className="bg-[#18181C] border border-zinc-800 rounded-2xl p-6 space-y-5">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-800 pb-5">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <Globe className="w-5 h-5 text-white" />
+                            <h1 className="font-display text-lg sm:text-xl font-bold uppercase tracking-wider text-white">
+                              Automated Website &amp; Image SEO Engine
+                            </h1>
+                          </div>
+                          <p className="text-xs text-zinc-400 mt-1 max-w-2xl">
+                            Click the button on the right anytime you add or
+                            edit products, categories, banners, or SEO keywords
+                            to automatically regenerate all search engine
+                            titles, descriptions, luxury fashion keywords,
+                            Schema.org Product JSON-LD, and Google Image{' '}
+                            <code className="text-zinc-200">alt</code> metadata
+                            across <strong className="text-white">samoweave.com</strong>.
+                          </p>
+                        </div>
+
+                        <button
+                          type="button"
+                          disabled={seoRefreshing}
+                          onClick={async () => {
+                            setSeoRefreshing(true);
+                            try {
+                              if (onRefreshSeoMetadata) {
+                                await onRefreshSeoMetadata(seoKeywordsDraft);
+                              }
+                              setSeoKeywordsDirty(false);
+                              setItemFeedback(
+                                `✓ Updated Website SEO & Image Metadata (${seoKeywordsDraft.length} active keywords) for ${products.length} products, ${categories.length} categories, and ${liveSeo.indexedImagesCount} images!`
+                              );
+                            } finally {
+                              setSeoRefreshing(false);
+                            }
+                          }}
+                          className="px-5 py-3 rounded-xl bg-white hover:bg-zinc-200 text-zinc-950 text-xs font-bold uppercase tracking-wider flex items-center gap-2 cursor-pointer shadow-md shrink-0 disabled:opacity-60"
+                        >
+                          <Sparkles className="w-4 h-4" />
+                          <span>
+                            {seoRefreshing
+                              ? 'Updating All SEO & Image Tags...'
+                              : 'Update Website SEO & Image Metadata'}
+                          </span>
+                        </button>
+                      </div>
+
+                      {/* SEO Metrics Cards */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                        <div className="bg-zinc-900/90 border border-zinc-800 rounded-xl p-4">
+                          <div className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">
+                            Indexed Products (JSON-LD)
+                          </div>
+                          <div className="text-2xl font-mono-tabular font-bold text-white mt-1">
+                            {liveSeo.indexedProductsCount}
+                          </div>
+                          <div className="text-[11px] text-emerald-400 mt-1">
+                            ✓ Rich Product &amp; Price Schema Active
+                          </div>
+                        </div>
+
+                        <div className="bg-zinc-900/90 border border-zinc-800 rounded-xl p-4">
+                          <div className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">
+                            Indexed Categories (Women &amp; Kids)
+                          </div>
+                          <div className="text-2xl font-mono-tabular font-bold text-white mt-1">
+                            {liveSeo.indexedCategoriesCount}
+                          </div>
+                          <div className="text-[11px] text-emerald-400 mt-1">
+                            ✓ Dynamic Route &amp; Category Titles
+                          </div>
+                        </div>
+
+                        <div className="bg-zinc-900/90 border border-zinc-800 rounded-xl p-4">
+                          <div className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">
+                            Optimized Product &amp; Banner Images
+                          </div>
+                          <div className="text-2xl font-mono-tabular font-bold text-white mt-1">
+                            {liveSeo.indexedImagesCount}
+                          </div>
+                          <div className="text-[11px] text-emerald-400 mt-1">
+                            ✓ Google Image Search Alt &amp; Title Tags
+                          </div>
+                        </div>
+
+                        <div className="bg-zinc-900/90 border border-zinc-800 rounded-xl p-4">
+                          <div className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">
+                            Last Full SEO Sync
+                          </div>
+                          <div className="text-xs font-mono-tabular font-bold text-white mt-2">
+                            {new Date(liveSeo.lastUpdatedAt).toLocaleString()}
+                          </div>
+                          <div className="text-[11px] text-zinc-400 mt-1">
+                            Auto-updates on product/category changes
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Active Luxury Fashion Keywords (Editable: Add & Delete) */}
+                      <div className="space-y-3 pt-2 border-t border-zinc-800/80">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div>
+                            <div className="text-xs font-bold uppercase tracking-wider text-white">
+                              Active Luxury Fashion Search Keywords ({seoKeywordsDraft.length})
+                            </div>
+                            <p className="text-[11px] text-zinc-400 mt-0.5">
+                              Add new search keywords/phrases or delete existing ones. Changes are saved and applied across all pages when you click &ldquo;Update Website SEO &amp; Image Metadata&rdquo;.
+                            </p>
+                          </div>
+                          {seoKeywordsDirty && (
+                            <span className="px-2.5 py-1 rounded bg-amber-950/80 border border-amber-700/70 text-[10px] font-bold uppercase tracking-wider text-amber-300">
+                              Ready to Sync on Next SEO Update
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Add Keyword Form */}
+                        <div className="flex flex-col sm:flex-row gap-2 max-w-xl">
+                          <input
+                            type="text"
+                            value={newSeoKeywordInput}
+                            onChange={(e) => setNewSeoKeywordInput(e.target.value)}
+                            onKeyDown={async (e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                const trimmed = newSeoKeywordInput.trim();
+                                if (!trimmed) return;
+                                const exists = seoKeywordsDraft.some(
+                                  (k) => k.toLowerCase() === trimmed.toLowerCase()
+                                );
+                                if (exists) {
+                                  setNewSeoKeywordInput('');
+                                  return;
+                                }
+                                seoUserEditedRef.current = true;
+                                const nextKeywords = [...seoKeywordsDraft, trimmed];
+                                setSeoKeywordsDraft(nextKeywords);
+                                setNewSeoKeywordInput('');
+                                setSeoKeywordsDirty(true);
+                                if (onRefreshSeoMetadata) {
+                                  await onRefreshSeoMetadata(nextKeywords);
+                                }
+                              }
+                            }}
+                            placeholder="Add a keyword or phrase (e.g., bespoke leather coat)..."
+                            aria-label="Add a luxury fashion SEO keyword"
+                            className="flex-1 px-3.5 py-2 text-xs bg-zinc-900 border border-zinc-700 rounded-lg text-white placeholder:text-zinc-500 focus:border-white focus:outline-none"
+                          />
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              const trimmed = newSeoKeywordInput.trim();
+                              if (!trimmed) return;
+                              const exists = seoKeywordsDraft.some(
+                                (k) => k.toLowerCase() === trimmed.toLowerCase()
+                              );
+                              if (exists) {
+                                setNewSeoKeywordInput('');
+                                return;
+                              }
+                              seoUserEditedRef.current = true;
+                              const nextKeywords = [...seoKeywordsDraft, trimmed];
+                              setSeoKeywordsDraft(nextKeywords);
+                              setNewSeoKeywordInput('');
+                              setSeoKeywordsDirty(true);
+                              if (onRefreshSeoMetadata) {
+                                await onRefreshSeoMetadata(nextKeywords);
+                              }
+                              setItemFeedback(`✓ Added SEO keyword "${trimmed}"`);
+                            }}
+                            className="px-4 py-2 rounded-lg bg-white hover:bg-zinc-200 text-zinc-950 text-xs font-bold uppercase tracking-wider cursor-pointer shrink-0 transition-colors"
+                          >
+                            + Add Keyword
+                          </button>
+                        </div>
+
+                        {/* Keyword Chips with Delete Buttons */}
+                        <div className="flex flex-wrap gap-1.5">
+                          {seoKeywordsDraft.map((kw) => (
+                            <span
+                              key={kw}
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-zinc-900 border border-zinc-800 text-[11px] text-zinc-200"
+                            >
+                              <span>{kw}</span>
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  seoUserEditedRef.current = true;
+                                  const nextKeywords = seoKeywordsDraft.filter(
+                                    (item) => item !== kw
+                                  );
+                                  setSeoKeywordsDraft(nextKeywords);
+                                  setSeoKeywordsDirty(true);
+                                  if (onRefreshSeoMetadata) {
+                                    await onRefreshSeoMetadata(nextKeywords);
+                                  }
+                                  setItemFeedback(`Removed SEO keyword "${kw}"`);
+                                }}
+                                aria-label={`Delete keyword ${kw}`}
+                                title={`Remove "${kw}"`}
+                                className="text-zinc-400 hover:text-red-400 font-bold leading-none px-0.5 cursor-pointer transition-colors"
+                              >
+                                ×
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Preview of Auto-Generated Product & Image SEO Metadata */}
+                    <div className="bg-[#18181C] border border-zinc-800 rounded-2xl p-6 space-y-4">
+                      <h2 className="text-sm font-bold uppercase tracking-wider text-white">
+                        Live Auto-Generated Product &amp; Image SEO Tags (
+                        {products.length})
+                      </h2>
+                      <div className="divide-y divide-zinc-800 max-h-[460px] overflow-y-auto pr-1">
+                        {products.map((prod) => {
+                          const pSeo = liveSeo.productSeoMap?.[prod.id];
+                          return (
+                            <div key={prod.id} className="py-3.5 space-y-1">
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <span className="text-xs font-bold text-white">
+                                  {pSeo?.title || prod.name}
+                                </span>
+                                <span className="text-[10px] font-mono-tabular text-zinc-400">
+                                  samoweave.com
+                                  {pSeo?.canonicalPath ||
+                                    `/${prod.department}?product=${prod.id}`}
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-zinc-400">
+                                {pSeo?.description || prod.description}
+                              </p>
+                              <div className="text-[10px] text-emerald-400 font-mono-tabular">
+                                Image Alt:{' '}
+                                <span className="text-zinc-300">
+                                  {pSeo?.imageAlt || prod.name}
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </>
+                );
+              })()}
             </div>
           )}
 
@@ -4867,30 +6060,56 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 e.preventDefault();
                 const clean = editCatName.trim();
                 if (!clean) return;
+                const parsedOrder = Number(editCatOrderInput.trim());
+                const validOrder =
+                  editCatOrderInput.trim() !== '' &&
+                  Number.isFinite(parsedOrder) &&
+                  parsedOrder > 0
+                    ? Math.round(parsedOrder * 100) / 100
+                    : editingCategory.sortOrder;
                 await onUpdateCategory(
                   editingCategory.id,
                   clean,
-                  editCatDesc.trim()
+                  editCatDesc.trim(),
+                  validOrder
                 );
                 setCatFeedback(
-                  `Renamed category "${editingCategory.name}" to "${clean}".`
+                  `Updated category "${clean}"${
+                    validOrder ? ` (Order #${validOrder})` : ''
+                  }.`
                 );
                 setEditingCategory(null);
               }}
               className="space-y-4"
             >
-              <div>
-                <label className="block text-[11px] font-bold uppercase tracking-wider text-zinc-300 mb-1">
-                  Category Name *
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={editCatName}
-                  onChange={(e) => setEditCatName(e.target.value)}
-                  placeholder="Enter new category section name..."
-                  className="w-full px-3 py-2.5 text-xs bg-zinc-900 border border-zinc-700 rounded-lg text-white"
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="sm:col-span-2">
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-zinc-300 mb-1">
+                    Category Name *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editCatName}
+                    onChange={(e) => setEditCatName(e.target.value)}
+                    placeholder="Enter new category section name..."
+                    className="w-full px-3 py-2.5 text-xs bg-zinc-900 border border-zinc-700 rounded-lg text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-zinc-300 mb-1">
+                    Order # (or 1.5)
+                  </label>
+                  <input
+                    type="number"
+                    step="any"
+                    min="0.1"
+                    value={editCatOrderInput}
+                    onChange={(e) => setEditCatOrderInput(e.target.value)}
+                    placeholder="E.g. 1, 2, 1.5"
+                    className="w-full px-3 py-2.5 text-xs font-mono-tabular bg-zinc-900 border border-zinc-700 rounded-lg text-white"
+                  />
+                </div>
               </div>
 
               <div>
@@ -4918,7 +6137,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   type="submit"
                   className="px-5 py-2.5 rounded-xl bg-white text-zinc-950 text-xs font-bold uppercase tracking-wider hover:bg-zinc-200 cursor-pointer"
                 >
-                  Save Category Name
+                  Save Category
                 </button>
               </div>
             </form>
@@ -4955,18 +6174,44 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </div>
 
             <form onSubmit={handleCreateCategorySubmit} className="space-y-4">
-              <div>
-                <label className="block text-[11px] font-bold uppercase tracking-wider text-zinc-300 mb-1">
-                  Main Department *
-                </label>
-                <select
-                  value={newCatDept}
-                  onChange={(e) => setNewCatDept(e.target.value as Department)}
-                  className="w-full px-3 py-2.5 text-xs bg-zinc-900 border border-zinc-700 rounded-lg text-white"
-                >
-                  <option value="women">Women</option>
-                  <option value="kids">Kids</option>
-                </select>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-zinc-300 mb-1">
+                    Main Department *
+                  </label>
+                  <select
+                    value={newCatDept}
+                    onChange={(e) => {
+                      const dept = e.target.value as Department;
+                      setNewCatDept(dept);
+                      const nextOrder =
+                        getCategoriesByDepartment(categories, dept).length + 1;
+                      setNewCatOrderInput(String(nextOrder));
+                    }}
+                    className="w-full px-3 py-2.5 text-xs bg-zinc-900 border border-zinc-700 rounded-lg text-white"
+                  >
+                    <option value="women">Women</option>
+                    <option value="kids">Kids</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-zinc-300 mb-1">
+                    Website Order # (or 1.5, 2.5)
+                  </label>
+                  <input
+                    type="number"
+                    step="any"
+                    min="0.1"
+                    value={newCatOrderInput}
+                    onChange={(e) => setNewCatOrderInput(e.target.value)}
+                    placeholder={`Default: ${
+                      getCategoriesByDepartment(categories, newCatDept).length +
+                      1
+                    } (or 1.5, 2.5)`}
+                    className="w-full px-3 py-2.5 text-xs font-mono-tabular bg-zinc-900 border border-zinc-700 rounded-lg text-white"
+                  />
+                </div>
               </div>
 
               <div>
@@ -4995,6 +6240,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   className="w-full px-3 py-2 text-xs bg-zinc-900 border border-zinc-700 rounded-lg text-white"
                 />
               </div>
+
+              <p className="text-[11px] text-zinc-400 leading-relaxed">
+                Note: Your new category will immediately include the full
+                in-feed banner controls (Upload/Replace Photo, Show after 2/4/6/8
+                products, and Delete Banner) in the Categories tab.
+              </p>
 
               <div className="flex items-center justify-end gap-2.5 pt-2">
                 <button

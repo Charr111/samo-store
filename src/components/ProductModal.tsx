@@ -77,6 +77,55 @@ export const ProductModal: React.FC<ProductModalProps> = ({
   const galleryScrollRef = useRef<HTMLDivElement | null>(null);
   const modalOverlayRef = useRef<HTMLDivElement | null>(null);
   const detailsScrollRef = useRef<HTMLDivElement | null>(null);
+  const preorderSectionRef = useRef<HTMLDivElement | null>(null);
+  const preorderInputRef = useRef<HTMLInputElement | null>(null);
+
+  const scrollToPreorderBox = (focusInput = false) => {
+    window.requestAnimationFrame(() => {
+      window.setTimeout(() => {
+        const preorderEl = preorderSectionRef.current;
+        if (!preorderEl) return;
+
+        const detailsEl = detailsScrollRef.current;
+        const overlayEl = modalOverlayRef.current;
+        const isDesktopDetailsScrollable =
+          Boolean(detailsEl) &&
+          window.matchMedia('(min-width: 768px)').matches &&
+          detailsEl!.scrollHeight > detailsEl!.clientHeight + 4;
+
+        const activeContainer = isDesktopDetailsScrollable ? detailsEl : overlayEl;
+
+        if (activeContainer) {
+          const containerRect = activeContainer.getBoundingClientRect();
+          const elRect = preorderEl.getBoundingClientRect();
+          const currentScrollTop = activeContainer.scrollTop;
+          const offsetInsideContainer =
+            elRect.top - containerRect.top + currentScrollTop;
+          const centeredTop = Math.max(
+            0,
+            offsetInsideContainer -
+              Math.max(24, (activeContainer.clientHeight - elRect.height) / 2)
+          );
+          activeContainer.scrollTo({
+            top: centeredTop,
+            behavior: 'smooth',
+          });
+        } else {
+          preorderEl.scrollIntoView({
+            behavior: 'smooth',
+            block: 'center',
+            inline: 'nearest',
+          });
+        }
+
+        if (focusInput && preorderInputRef.current) {
+          window.setTimeout(() => {
+            preorderInputRef.current?.focus({ preventScroll: true });
+          }, 220);
+        }
+      }, 95);
+    });
+  };
 
   // Preorder form state when an out-of-stock size is selected
   const [preorderContact, setPreorderContact] = useState<string>('');
@@ -428,7 +477,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({
       role="dialog"
       aria-modal="true"
       aria-labelledby="sole-product-modal-title"
-      className="fixed inset-0 z-50 flex items-start md:items-center justify-center bg-black/70 p-3 md:p-6 overflow-y-auto"
+      className="fixed inset-0 z-50 flex items-start md:items-center justify-center bg-black/70 p-3 pb-[calc(2rem+env(safe-area-inset-bottom,20px))] md:p-6 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]"
     >
       <div className="relative w-full max-w-4xl bg-white border border-zinc-950 grid grid-cols-1 md:grid-cols-12 overflow-hidden my-auto">
         {/* Close Button */}
@@ -475,9 +524,13 @@ export const ProductModal: React.FC<ProductModalProps> = ({
             {/* Top-Left Badges */}
             <div className="pointer-events-none absolute top-3.5 left-3.5 z-10 flex flex-wrap gap-1.5">
               {isSelectedConfigurationOut && (
-                <span className="px-2.5 py-1 bg-red-700 text-white text-[10px] font-bold uppercase tracking-[0.14em]">
+                <button
+                  type="button"
+                  onClick={() => scrollToPreorderBox(true)}
+                  className="pointer-events-auto cursor-pointer px-2.5 py-1 bg-red-700 text-white text-[10px] font-bold uppercase tracking-[0.14em]"
+                >
                   Out of Stock
-                </span>
+                </button>
               )}
               {pricing.hasDiscount && (
                 <span className="px-2.5 py-1 bg-red-700 text-white text-[10px] font-bold uppercase tracking-[0.14em]">
@@ -545,7 +598,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({
         {/* Right Column: Sole Item Purchase Module (5 cols) */}
         <div
           ref={detailsScrollRef}
-          className="md:col-span-5 p-6 md:p-8 flex flex-col justify-between bg-white max-h-[88vh] overflow-y-auto"
+          className="md:col-span-5 p-6 pb-[calc(2rem+env(safe-area-inset-bottom,20px))] md:p-8 flex flex-col justify-between bg-white md:max-h-[88vh] md:overflow-y-auto overscroll-contain touch-pan-y [-webkit-overflow-scrolling:touch]"
         >
           <div className="space-y-5">
             {/* Unboxed Clean Metadata Header */}
@@ -580,9 +633,13 @@ export const ProductModal: React.FC<ProductModalProps> = ({
                   )}
                 </div>
                 {isSelectedConfigurationOut && (
-                  <span className="px-2 py-0.5 bg-red-50 border border-red-200 text-[10px] font-mono-tabular font-bold uppercase tracking-wider text-red-700">
+                  <button
+                    type="button"
+                    onClick={() => scrollToPreorderBox(true)}
+                    className="px-2 py-0.5 bg-red-50 border border-red-200 text-[10px] font-mono-tabular font-bold uppercase tracking-wider text-red-700 cursor-pointer"
+                  >
                     Out of Stock
-                  </span>
+                  </button>
                 )}
               </div>
             </div>
@@ -731,7 +788,13 @@ export const ProductModal: React.FC<ProductModalProps> = ({
                             {chosenSize}
                           </span>
                           {isPieceChosenOut && (
-                            <span className="px-1.5 py-0.5 bg-red-50 text-red-700 border border-red-200 text-[9px] font-bold uppercase tracking-wider">
+                            <span
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                scrollToPreorderBox(true);
+                              }}
+                              className="px-1.5 py-0.5 bg-red-50 text-red-700 border border-red-200 text-[9px] font-bold uppercase tracking-wider cursor-pointer"
+                            >
                               Out of Stock
                             </span>
                           )}
@@ -828,6 +891,9 @@ export const ProductModal: React.FC<ProductModalProps> = ({
                                     }));
                                     setPreorderSubmitted(false);
                                     setPreorderError('');
+                                    if (isZeroQty || !product.inStock) {
+                                      scrollToPreorderBox(false);
+                                    }
                                   }}
                                   aria-pressed={isSelected}
                                   aria-label={
@@ -872,7 +938,10 @@ export const ProductModal: React.FC<ProductModalProps> = ({
                             })}
                           </div>
                           {isPieceChosenOut && (
-                            <div className="text-[11px] font-semibold text-red-700 flex items-center gap-1.5">
+                            <div
+                              onClick={() => scrollToPreorderBox(true)}
+                              className="text-[11px] font-semibold text-red-700 flex items-center gap-1.5 cursor-pointer"
+                            >
                               <span>
                                 Size {chosenSize} is currently out of stock — select to Preorder below.
                               </span>
@@ -893,9 +962,13 @@ export const ProductModal: React.FC<ProductModalProps> = ({
                       Select Size {activeVariant ? `(${activeVariant.colorName})` : ''}
                     </span>
                     {isSelectedConfigurationOut && (
-                      <span className="px-2 py-0.5 bg-red-50 text-red-700 border border-red-200 text-[10px] font-bold uppercase tracking-wider">
+                      <button
+                        type="button"
+                        onClick={() => scrollToPreorderBox(true)}
+                        className="px-2 py-0.5 bg-red-50 text-red-700 border border-red-200 text-[10px] font-bold uppercase tracking-wider cursor-pointer"
+                      >
                         Out of Stock
-                      </span>
+                      </button>
                     )}
                   </div>
                   <span className="text-[11px] text-zinc-500 uppercase tracking-wider">
@@ -917,6 +990,9 @@ export const ProductModal: React.FC<ProductModalProps> = ({
                           setSelectedSize(size);
                           setPreorderSubmitted(false);
                           setPreorderError('');
+                          if (isZeroQty || !product.inStock) {
+                            scrollToPreorderBox(false);
+                          }
                         }}
                         aria-pressed={isSelected}
                         aria-label={
@@ -961,7 +1037,10 @@ export const ProductModal: React.FC<ProductModalProps> = ({
                   })}
                 </div>
                 {isSelectedConfigurationOut && (
-                  <p className="mt-2 text-[11px] font-semibold text-red-700">
+                  <p
+                    onClick={() => scrollToPreorderBox(true)}
+                    className="mt-2 text-[11px] font-semibold text-red-700 cursor-pointer"
+                  >
                     Size {selectedSize} is out of stock. Enter your email or phone below to preorder.
                   </p>
                 )}
@@ -982,7 +1061,10 @@ export const ProductModal: React.FC<ProductModalProps> = ({
           {/* Primary Actions: ADD TO CART + BUY NOW, OR PREORDER WHEN OUT-OF-STOCK SIZE IS SELECTED */}
           <div className="pt-6 mt-6 border-t border-zinc-200 space-y-2.5">
             {isSelectedConfigurationOut ? (
-              <div className="p-4 bg-zinc-50 border border-zinc-950 space-y-3">
+              <div
+                ref={preorderSectionRef}
+                className="preorder scroll-mt-6 p-4 bg-zinc-50 border border-zinc-950 space-y-3"
+              >
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-[0.12em] text-zinc-950">
                     <BellRing className="w-3.5 h-3.5 text-red-700" />
@@ -1015,9 +1097,11 @@ export const ProductModal: React.FC<ProductModalProps> = ({
                       </div>
                     )}
                     <input
+                      ref={preorderInputRef}
                       type="text"
                       required
                       value={preorderContact}
+                      onFocus={() => scrollToPreorderBox(false)}
                       onChange={(e) => setPreorderContact(e.target.value)}
                       placeholder="Email or phone number (e.g. client@email.com or +961 70...)"
                       aria-label="Email or phone number for preorder notification"

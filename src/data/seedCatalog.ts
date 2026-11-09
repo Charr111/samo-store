@@ -16,6 +16,7 @@ export const INITIAL_CATEGORIES: CategoryItem[] = [
     slug: 'jacket',
     department: 'women',
     description: 'Architectural biker, bomber, and structured shoulder silhouettes in grained leather and wool.',
+    sortOrder: 1,
   },
   {
     id: 'women-trousers',
@@ -23,6 +24,7 @@ export const INITIAL_CATEGORIES: CategoryItem[] = [
     slug: 'trousers',
     department: 'women',
     description: 'Tailored high-waist and elongated pleated wool and leather trousers.',
+    sortOrder: 2,
   },
   {
     id: 'women-pants',
@@ -30,6 +32,7 @@ export const INITIAL_CATEGORIES: CategoryItem[] = [
     slug: 'pants',
     department: 'women',
     description: 'Relaxed sport-chic track pants, cargo silhouettes, and flared suede styles.',
+    sortOrder: 3,
   },
   {
     id: 'women-skirts',
@@ -37,6 +40,7 @@ export const INITIAL_CATEGORIES: CategoryItem[] = [
     slug: 'skirts',
     department: 'women',
     description: 'Asymmetric midi, wrap leather, and sculptural maxi column skirts.',
+    sortOrder: 4,
   },
   {
     id: 'women-denim',
@@ -44,6 +48,7 @@ export const INITIAL_CATEGORIES: CategoryItem[] = [
     slug: 'denim',
     department: 'women',
     description: 'Japanese raw selvedge, baggy couture-wash jeans, and structured denim outerwear.',
+    sortOrder: 5,
   },
   {
     id: 'women-tops',
@@ -51,6 +56,7 @@ export const INITIAL_CATEGORIES: CategoryItem[] = [
     slug: 'tops',
     department: 'women',
     description: 'Draped silk blouses, heavy jersey hoodies, and second-skin satin tops.',
+    sortOrder: 6,
   },
   {
     id: 'women-full-set',
@@ -58,6 +64,7 @@ export const INITIAL_CATEGORIES: CategoryItem[] = [
     slug: 'full-set',
     department: 'women',
     description: 'Coordinated two-piece tailoring, suede ensembles, and sport-chic monolith sets.',
+    sortOrder: 7,
   },
   {
     id: 'women-trench-coat',
@@ -65,6 +72,7 @@ export const INITIAL_CATEGORIES: CategoryItem[] = [
     slug: 'trench-coat',
     department: 'women',
     description: 'Floor-sweeping double-breasted storm-flap coats in calfskin, suede, and gabardine.',
+    sortOrder: 8,
   },
   {
     id: 'women-fur',
@@ -72,6 +80,7 @@ export const INITIAL_CATEGORIES: CategoryItem[] = [
     slug: 'fur',
     department: 'women',
     description: 'Voluminous shearling, plush faux-fur opera coats, and cropped winter statements.',
+    sortOrder: 9,
   },
   {
     id: 'women-bags',
@@ -79,6 +88,7 @@ export const INITIAL_CATEGORIES: CategoryItem[] = [
     slug: 'bags',
     department: 'women',
     description: 'Signature Hourglass-inspired top-handle bags, Rodeo totes, and Le City Moto styles.',
+    sortOrder: 10,
   },
   {
     id: 'women-belts',
@@ -86,6 +96,7 @@ export const INITIAL_CATEGORIES: CategoryItem[] = [
     slug: 'belts',
     department: 'women',
     description: 'Heavy brass hardware waist belts and grained Italian cow leather straps.',
+    sortOrder: 11,
   },
 
   // KIDS CATEGORIES (MINIS 1 To 5, CHILDREN 6+, Teen 13+ — Full Set removed from Kids)
@@ -95,6 +106,7 @@ export const INITIAL_CATEGORIES: CategoryItem[] = [
     slug: 'minis-1-to-5',
     department: 'kids',
     description: 'Ultra-soft cashmere, organic cotton, and mini shearling pieces for ages 1 to 5 (80 cm – 110 cm).',
+    sortOrder: 1,
   },
   {
     id: 'kids-children',
@@ -102,6 +114,7 @@ export const INITIAL_CATEGORIES: CategoryItem[] = [
     slug: 'children-6-plus',
     department: 'kids',
     description: 'Sport-chic sets, mini leather bombers, and tailored denim for children 6+ (110 cm – 140 cm).',
+    sortOrder: 2,
   },
   {
     id: 'kids-teen',
@@ -109,6 +122,7 @@ export const INITIAL_CATEGORIES: CategoryItem[] = [
     slug: 'teen-13-plus',
     department: 'kids',
     description: 'Runway-proportioned outerwear, wide denim, and suede silhouettes for teens 13+ (140 cm – 165 cm).',
+    sortOrder: 3,
   },
 ];
 

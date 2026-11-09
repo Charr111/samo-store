@@ -34,6 +34,9 @@ interface PersistedCatalogState {
   showLowStockCount?: boolean;
   shrinkUploadsEnabled?: boolean;
   newsletterSubscribers?: unknown[];
+  newsletterPopupConfig?: Record<string, unknown>;
+  seoConfig?: Record<string, unknown>;
+  newsletterPopupImpressions?: Record<string, { date: string; count: number }>;
 }
 
 const R2_CORS_HEADERS: Record<string, string> = {
@@ -145,6 +148,8 @@ const R2_NEWSLETTER_OBJECT_KEY = 'newsletter/subscribers.json';
 interface NewsletterSubscriberRecord {
   id: string;
   email: string;
+  phone?: string;
+  source?: 'footer' | 'popup';
   subscribedAt: string;
 }
 
@@ -307,6 +312,18 @@ async function startServer() {
         : {}),
       ...(Array.isArray(body.newsletterSubscribers)
         ? { newsletterSubscribers: body.newsletterSubscribers }
+        : {}),
+      ...(body.newsletterPopupConfig &&
+      typeof body.newsletterPopupConfig === 'object'
+        ? {
+            newsletterPopupConfig: body.newsletterPopupConfig as Record<
+              string,
+              unknown
+            >,
+          }
+        : {}),
+      ...(body.seoConfig && typeof body.seoConfig === 'object'
+        ? { seoConfig: body.seoConfig as Record<string, unknown> }
         : {}),
       deletedProductIds: mergedDeletedProducts,
       deletedCategoryIds: mergedDeletedCategories,
@@ -532,16 +549,33 @@ async function startServer() {
   app.post('/api/newsletter/subscribe', async (req, res) => {
     res.set(R2_CORS_HEADERS);
     try {
-      const email =
+      const rawEmail =
         typeof req.body?.email === 'string' ? req.body.email.trim() : '';
-      if (!email || !email.includes('@') || !email.includes('.')) {
-        res
-          .status(400)
-          .json({ error: 'Please provide a valid client email address.' });
+      const rawPhone =
+        typeof req.body?.phone === 'string' ? req.body.phone.trim() : '';
+      const source: 'footer' | 'popup' =
+        req.body?.source === 'popup' ? 'popup' : 'footer';
+
+      const hasValidEmail =
+        rawEmail.includes('@') && rawEmail.includes('.');
+      const phoneDigits = (rawPhone || (!hasValidEmail ? rawEmail : '')).replace(
+        /[^\d]/g,
+        ''
+      );
+      const hasValidPhone = phoneDigits.length >= 8;
+
+      if (!hasValidEmail && !hasValidPhone) {
+        res.status(400).json({
+          error:
+            'Please provide a valid email address or phone number.',
+        });
         return;
       }
 
-      const normalized = email.toLowerCase();
+      const normalizedEmail = hasValidEmail ? rawEmail.toLowerCase() : '';
+      const cleanPhone = rawPhone || (!hasValidEmail ? rawEmail : '');
+      const uniqueKey = normalizedEmail || cleanPhone.toLowerCase();
+
       const r2Subs = await readR2NewsletterSubscribers();
       const localState = await readCatalogState();
       const localSubs = Array.isArray(localState.newsletterSubscribers)
@@ -556,14 +590,23 @@ async function startServer() {
         if (s && s.email) map.set(s.email.toLowerCase(), s);
       }
 
-      let existing = map.get(normalized);
+      let existing = map.get(uniqueKey);
       if (!existing) {
         existing = {
           id: `sub_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-          email: normalized,
+          email: normalizedEmail || cleanPhone,
+          ...(cleanPhone ? { phone: cleanPhone } : {}),
+          source,
           subscribedAt: new Date().toISOString(),
         };
-        map.set(normalized, existing);
+        map.set(uniqueKey, existing);
+      } else {
+        existing = {
+          ...existing,
+          ...(cleanPhone ? { phone: cleanPhone } : {}),
+          ...(source === 'popup' ? { source: 'popup' } : {}),
+        };
+        map.set(uniqueKey, existing);
       }
 
       const all = Array.from(map.values()).sort(
@@ -582,8 +625,70 @@ async function startServer() {
       const message =
         err instanceof Error
           ? err.message
-          : 'Failed to persist newsletter email to R2.';
+          : 'Failed to persist newsletter subscription to R2.';
       res.status(500).json({ error: message });
+    }
+  });
+
+  // Per-IP Daily Homepage Newsletter Pop-Up Frequency Cap Endpoints (kept in server memory to avoid consuming Cloudflare R2 Free Tier operations)
+  const popupImpressionsMemory: Record<string, { date: string; count: number }> = {};
+
+  const resolveClientIp = (req: express.Request): string => {
+    const xff = req.headers['x-forwarded-for'];
+    if (typeof xff === 'string' && xff.trim()) {
+      return xff.split(',')[0].trim();
+    }
+    if (Array.isArray(xff) && xff.length > 0) {
+      return xff[0].trim();
+    }
+    return req.socket?.remoteAddress || '127.0.0.1';
+  };
+
+  app.get('/api/newsletter/popup-eligibility', async (req, res) => {
+    res.set(R2_CORS_HEADERS);
+    res.set('Cache-Control', 'no-store');
+    try {
+      const clientIp = resolveClientIp(req);
+      const today = new Date().toISOString().slice(0, 10);
+      const maxPerDay = Math.max(
+        1,
+        Math.floor(Number(req.query.maxPerDay) || 2)
+      );
+      const entry = popupImpressionsMemory[clientIp];
+      const countToday = entry && entry.date === today ? entry.count : 0;
+
+      res.json({
+        ip: clientIp,
+        date: today,
+        countToday,
+        maxPerDay,
+        eligible: countToday < maxPerDay,
+      });
+    } catch {
+      res.json({ eligible: true, countToday: 0 });
+    }
+  });
+
+  app.post('/api/newsletter/popup-impression', async (req, res) => {
+    res.set(R2_CORS_HEADERS);
+    try {
+      const clientIp = resolveClientIp(req);
+      const today = new Date().toISOString().slice(0, 10);
+
+      // Prune stale dates so the in-memory map stays compact
+      for (const [ipKey, rec] of Object.entries(popupImpressionsMemory)) {
+        if (!rec || rec.date !== today) {
+          delete popupImpressionsMemory[ipKey];
+        }
+      }
+
+      const prev = popupImpressionsMemory[clientIp];
+      const nextCount = prev && prev.date === today ? prev.count + 1 : 1;
+      popupImpressionsMemory[clientIp] = { date: today, count: nextCount };
+
+      res.json({ ip: clientIp, date: today, countToday: nextCount });
+    } catch {
+      res.status(200).json({ ok: true });
     }
   });
 

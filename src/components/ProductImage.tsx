@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { buildProductImageSeoAlt } from '../utils/seoLogic';
 
 interface ProductImageProps {
   src: string;
@@ -29,6 +30,12 @@ export const ProductImage: React.FC<ProductImageProps> = ({
     setHasError(false);
   }, [normalizedSrc]);
 
+  const seoAltText = buildProductImageSeoAlt({
+    alt,
+    category,
+    style: styleType,
+  });
+
   const isStudioUri =
     !normalizedSrc || normalizedSrc.startsWith('studio://') || hasError;
   const variantKey = (normalizedSrc || alt || category).toLowerCase();
@@ -41,7 +48,8 @@ export const ProductImage: React.FC<ProductImageProps> = ({
         <img
           key={normalizedSrc}
           src={normalizedSrc}
-          alt={alt}
+          alt={seoAltText}
+          title={seoAltText}
           loading="lazy"
           decoding="async"
           referrerPolicy="no-referrer"

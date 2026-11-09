@@ -29,6 +29,7 @@ export interface CategoryItem {
   slug: string;
   department: Department;
   description: string;
+  sortOrder?: number;
   createdAt?: string;
 }
 
@@ -205,7 +206,53 @@ export interface SiteBannersConfig {
 export interface NewsletterSubscriber {
   id: string;
   email: string;
+  phone?: string;
+  source?: 'footer' | 'popup';
   subscribedAt: string;
 }
+
+export interface NewsletterPopupConfig {
+  enabled: boolean;
+  delaySeconds: number;
+  maxTimesPerDay: number;
+  kicker: string;
+  title: string;
+  subtitle: string;
+  buttonText: string;
+  promoCode: string;
+  discountText: string;
+  updatedAt?: string;
+}
+
+export interface SeoConfigState {
+  lastUpdatedAt: string;
+  siteTitleSuffix: string;
+  defaultDescription: string;
+  defaultKeywords: string[];
+  customKeywords?: string[];
+  indexedProductsCount: number;
+  indexedCategoriesCount: number;
+  indexedImagesCount: number;
+  productSeoMap: Record<
+    string,
+    {
+      title: string;
+      description: string;
+      keywords: string[];
+      imageAlt: string;
+      canonicalPath: string;
+    }
+  >;
+  categorySeoMap: Record<
+    string,
+    {
+      title: string;
+      description: string;
+      keywords: string[];
+      canonicalPath: string;
+    }
+  >;
+}
+
 
 
