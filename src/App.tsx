@@ -31,6 +31,7 @@ import {
   SelectedSetPieceSize,
   SeoConfigState,
   SiteBannersConfig,
+  SizeGuideConfig,
   StyleType,
 } from './types/samo';
 import {
@@ -76,6 +77,7 @@ import {
   buildDynamicPageSeo,
   generateCatalogSeoSnapshot,
 } from './utils/seoLogic';
+import { mergeSizeGuideConfig } from './utils/sizeGuideLogic';
 import {
   auth,
   db,
@@ -121,6 +123,7 @@ const STORAGE_KEYS = {
   showLowStockCount: 'samo_show_low_stock_v1',
   newsletterPopupConfig: 'samo_newsletter_popup_cfg_v1',
   seoConfig: 'samo_seo_config_v1',
+  sizeGuideConfig: 'samo_size_guide_cfg_v1',
 };
 
 function sanitizeAuthorizedAdmins(list: AdminRecord[]): AdminRecord[] {
@@ -439,6 +442,13 @@ export default function App() {
     if (stored && stored.siteTitleSuffix) return stored;
     return generateCatalogSeoSnapshot(products, categories, siteBanners);
   });
+  const [sizeGuideConfig, setSizeGuideConfig] = useState<SizeGuideConfig>(() => {
+    const stored = loadStored<Partial<SizeGuideConfig> | null>(
+      STORAGE_KEYS.sizeGuideConfig,
+      null
+    );
+    return mergeSizeGuideConfig(stored);
+  });
 
   // Home Page Section 2 (Categories Switcher: Women | Kids) & New Arrivals Carousel State
   const [homeCategoryDept, setHomeCategoryDept] = useState<Department>('women');
@@ -585,6 +595,15 @@ export default function App() {
       localStorage.setItem(STORAGE_KEYS.seoConfig, JSON.stringify(seoConfig));
     } catch {}
   }, [seoConfig]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        STORAGE_KEYS.sizeGuideConfig,
+        JSON.stringify(sizeGuideConfig)
+      );
+    } catch {}
+  }, [sizeGuideConfig]);
 
   // Dynamic Route, Category & Product SEO + Schema.org JSON-LD Updater
   useEffect(() => {
@@ -906,6 +925,11 @@ export default function App() {
         }
         if (data.seoConfig && typeof data.seoConfig === 'object') {
           setSeoConfig(data.seoConfig as SeoConfigState);
+        }
+        if (data.sizeGuideConfig && typeof data.sizeGuideConfig === 'object') {
+          setSizeGuideConfig(
+            mergeSizeGuideConfig(data.sizeGuideConfig as Partial<SizeGuideConfig>)
+          );
         }
       } catch {}
     };
@@ -1243,7 +1267,8 @@ export default function App() {
     categoryId: string,
     newName: string,
     newDescription?: string,
-    newSortOrder?: number
+    newSortOrder?: number,
+    sizeGuides?: ('tops_guide' | 'trousers_guide')[]
   ) => {
     const cleanNewName = newName.trim();
     if (!cleanNewName) return;
@@ -1267,6 +1292,8 @@ export default function App() {
               typeof newSortOrder === 'number' && Number.isFinite(newSortOrder)
                 ? newSortOrder
                 : c.sortOrder,
+            sizeGuides:
+              sizeGuides !== undefined ? sizeGuides : c.sizeGuides,
           }
         : c
     );
@@ -1975,6 +2002,33 @@ export default function App() {
     }
   };
 
+  const handleUpdateSizeGuideConfig = async (nextConfig: SizeGuideConfig) => {
+    const merged = mergeSizeGuideConfig({
+      ...nextConfig,
+      updatedAt: new Date().toISOString(),
+    });
+    setSizeGuideConfig(merged);
+    try {
+      localStorage.setItem(
+        STORAGE_KEYS.sizeGuideConfig,
+        JSON.stringify(merged)
+      );
+    } catch {}
+    await pushServerCatalogPatch({
+      sizeGuideConfig: merged as unknown as Record<string, unknown>,
+    });
+    try {
+      await setDoc(
+        doc(db, 'settings', 'store_config'),
+        {
+          sizeGuideConfig: merged,
+          updatedAt: new Date().toISOString(),
+        },
+        { merge: true }
+      );
+    } catch {}
+  };
+
   // AI Quick Search Filter Handler
   const handleAiQuickSearch = async (query: string) => {
     try {
@@ -2276,6 +2330,8 @@ export default function App() {
         onUpdateNewsletterPopupConfig={handleUpdateNewsletterPopupConfig}
         seoConfig={seoConfig}
         onRefreshSeoMetadata={handleRefreshSeoMetadata}
+        sizeGuideConfig={sizeGuideConfig}
+        onUpdateSizeGuideConfig={handleUpdateSizeGuideConfig}
       />
     );
   }
@@ -3023,6 +3079,8 @@ export default function App() {
       {/* SOLE ITEM POP-UP MODAL */}
       <ProductModal
         product={activeProductModal}
+        categories={categories}
+        sizeGuideConfig={sizeGuideConfig}
         onClose={handleCloseProductModal}
         onAddToCart={handleAddToCart}
         onBuyNow={handleBuyNow}

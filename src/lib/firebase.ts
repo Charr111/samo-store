@@ -18,8 +18,12 @@ import {
   updateDoc,
   serverTimestamp,
   onSnapshot,
+  setLogLevel,
 } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
+
+// Suppress benign transport reconnection chatter in the console
+setLogLevel('error');
 
 const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);

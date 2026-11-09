@@ -30,7 +30,28 @@ export interface CategoryItem {
   department: Department;
   description: string;
   sortOrder?: number;
+  sizeGuides?: ('tops_guide' | 'trousers_guide')[];
   createdAt?: string;
+}
+
+export type SizeGuideId = 'tops_guide' | 'trousers_guide';
+
+export interface SizeGuideTable {
+  id: SizeGuideId;
+  title: string;
+  columns: string[];
+  rows: string[][];
+}
+
+export interface SizeGuideConfig {
+  masterEnabled: boolean;
+  topsGuideEnabled: boolean;
+  trousersGuideEnabled: boolean;
+  fitNoteEnabled: boolean;
+  fitNoteTitle: string;
+  fitNoteText: string;
+  tables: Record<SizeGuideId, SizeGuideTable>;
+  updatedAt?: string;
 }
 
 export interface ProductColorVariant {

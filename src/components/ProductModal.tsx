@@ -9,11 +9,15 @@ import {
   ChevronLeft,
   ChevronRight,
   BellRing,
+  Ruler,
 } from 'lucide-react';
 import {
+  CategoryItem,
   ProductColorVariant,
   ProductItem,
   SelectedSetPieceSize,
+  SizeGuideConfig,
+  SizeGuideId,
   SizeType,
 } from '../types/samo';
 import {
@@ -22,10 +26,17 @@ import {
   getSizeQuantity,
   sumSizeQuantities,
 } from '../utils/catalogLogic';
+import {
+  DEFAULT_SIZE_GUIDE_CONFIG,
+  getCategoryActiveSizeGuides,
+} from '../utils/sizeGuideLogic';
 import { ProductImage } from './ProductImage';
+import { SizeGuideModal } from './SizeGuideModal';
 
 interface ProductModalProps {
   product: ProductItem | null;
+  categories?: CategoryItem[];
+  sizeGuideConfig?: SizeGuideConfig;
   onClose: () => void;
   onAddToCart: (
     product: ProductItem,
@@ -50,9 +61,10 @@ interface ProductModalProps {
   showLowStockCount?: boolean;
 }
 
-
 export const ProductModal: React.FC<ProductModalProps> = ({
   product,
+  categories,
+  sizeGuideConfig,
   onClose,
   onAddToCart,
   onBuyNow,
@@ -132,6 +144,25 @@ export const ProductModal: React.FC<ProductModalProps> = ({
   const [preorderSubmitting, setPreorderSubmitting] = useState<boolean>(false);
   const [preorderSubmitted, setPreorderSubmitted] = useState<boolean>(false);
   const [preorderError, setPreorderError] = useState<string>('');
+
+  // Size Guide overlay state
+  const [isSizeGuideOpen, setIsSizeGuideOpen] = useState<boolean>(false);
+  const [sizeGuideInitialTab, setSizeGuideInitialTab] = useState<
+    SizeGuideId | undefined
+  >(undefined);
+
+  const effectiveSizeGuideConfig = sizeGuideConfig || DEFAULT_SIZE_GUIDE_CONFIG;
+  const matchedCategory = categories?.find(
+    (c) =>
+      c.department === product?.department &&
+      (c.name.toLowerCase() === product?.category?.toLowerCase() ||
+        c.slug.toLowerCase() === product?.category?.toLowerCase())
+  );
+  const activeSizeGuideIds: SizeGuideId[] = product
+    ? product.isFullSet
+      ? ['tops_guide', 'trousers_guide']
+      : getCategoryActiveSizeGuides(matchedCategory, product.category)
+    : [];
 
   useEffect(() => {
     if (product) {
@@ -863,6 +894,28 @@ export const ProductModal: React.FC<ProductModalProps> = ({
                             </div>
                           )}
 
+                          <div className="flex items-center justify-between pb-0.5">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-600">
+                              Select Size
+                            </span>
+                            {effectiveSizeGuideConfig.masterEnabled && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const pieceGuide: SizeGuideId =
+                                    idx === 1 ? 'trousers_guide' : 'tops_guide';
+                                  setSizeGuideInitialTab(pieceGuide);
+                                  setIsSizeGuideOpen(true);
+                                }}
+                                className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-zinc-600 hover:text-zinc-950 underline underline-offset-2 cursor-pointer"
+                              >
+                                <Ruler className="w-3 h-3 text-zinc-600" />
+                                <span>Size Guide</span>
+                              </button>
+                            )}
+                          </div>
+
                           <div className="grid grid-cols-3 sm:grid-cols-4 gap-1.5">
                             {activeSubSizes.map((sz) => {
                               const szQty = activeSubQtyMap?.[sz] ?? 5;
@@ -961,6 +1014,20 @@ export const ProductModal: React.FC<ProductModalProps> = ({
                       </button>
                     )}
                   </div>
+                  {activeSizeGuideIds.length > 0 &&
+                    effectiveSizeGuideConfig.masterEnabled && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSizeGuideInitialTab(activeSizeGuideIds[0]);
+                          setIsSizeGuideOpen(true);
+                        }}
+                        className="inline-flex items-center gap-1.5 text-[10px] sm:text-[11px] font-bold uppercase tracking-[0.14em] text-zinc-600 hover:text-zinc-950 underline underline-offset-4 cursor-pointer shrink-0"
+                      >
+                        <Ruler className="w-3.5 h-3.5 text-zinc-700" />
+                        <span>Size Guide</span>
+                      </button>
+                    )}
                 </div>
                 <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
                   {activeSizes.map((size) => {
@@ -1153,6 +1220,15 @@ export const ProductModal: React.FC<ProductModalProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Atelier Size Guide Overlay Modal (Closes without closing the parent ProductModal) */}
+      <SizeGuideModal
+        isOpen={isSizeGuideOpen}
+        onClose={() => setIsSizeGuideOpen(false)}
+        config={effectiveSizeGuideConfig}
+        activeGuides={activeSizeGuideIds}
+        initialGuide={sizeGuideInitialTab}
+      />
     </div>
   );
 };

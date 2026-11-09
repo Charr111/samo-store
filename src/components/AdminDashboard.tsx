@@ -38,6 +38,7 @@ import {
   ArrowDown,
   Globe,
   Phone,
+  Ruler,
 } from 'lucide-react';
 import {
   AdminRecord,
@@ -58,6 +59,9 @@ import {
   RoutePath,
   SeoConfigState,
   SiteBannersConfig,
+  SizeGuideConfig,
+  SizeGuideId,
+  SizeGuideTable,
   SizeType,
   StyleType,
 } from '../types/samo';
@@ -93,6 +97,11 @@ import {
   generateCatalogSeoSnapshot,
   LUXURY_FASHION_CORE_KEYWORDS,
 } from '../utils/seoLogic';
+import {
+  DEFAULT_SIZE_GUIDE_CONFIG,
+  inferDefaultSizeGuidesForCategory,
+  mergeSizeGuideConfig,
+} from '../utils/sizeGuideLogic';
 import { ProductImage } from './ProductImage';
 import {
   deleteMediaFromR2,
@@ -312,7 +321,8 @@ type AdminSectionTab =
   | 'promos'
   | 'newsletter'
   | 'seo'
-  | 'admins';
+  | 'admins'
+  | 'size_guides';
 
 interface AdminDashboardProps {
   currentUser: User | null;
@@ -339,6 +349,10 @@ interface AdminDashboardProps {
   onRefreshSeoMetadata?: (
     customKeywords?: string[]
   ) => Promise<SeoConfigState | void>;
+  sizeGuideConfig?: SizeGuideConfig;
+  onUpdateSizeGuideConfig?: (
+    nextConfig: SizeGuideConfig
+  ) => Promise<void> | void;
   siteBanners: SiteBannersConfig;
   onUpdateSiteBanners: (nextBanners: SiteBannersConfig) => Promise<void>;
   onToggleProductStock: (
@@ -350,7 +364,8 @@ interface AdminDashboardProps {
     categoryId: string,
     newName: string,
     newDescription?: string,
-    newSortOrder?: number
+    newSortOrder?: number,
+    sizeGuides?: ('tops_guide' | 'trousers_guide')[]
   ) => Promise<void>;
   onUpdateCategorySortOrder?: (
     categoryId: string,
@@ -420,6 +435,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onUpdateNewsletterPopupConfig,
   seoConfig,
   onRefreshSeoMetadata,
+  sizeGuideConfig = DEFAULT_SIZE_GUIDE_CONFIG,
+  onUpdateSizeGuideConfig,
   siteBanners,
   onUpdateSiteBanners,
   onToggleProductStock,
@@ -520,6 +537,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   );
   const [editCatName, setEditCatName] = useState('');
   const [editCatDesc, setEditCatDesc] = useState('');
+  const [editCatSizeGuides, setEditCatSizeGuides] = useState<SizeGuideId[]>([]);
+  const [newCatSizeGuides, setNewCatSizeGuides] = useState<SizeGuideId[]>([
+    'tops_guide',
+  ]);
+
+  // Size Guides Management State
+  const [activeSizeGuideSubTab, setActiveSizeGuideSubTab] = useState<
+    'tops_guide' | 'trousers_guide' | 'fit_note'
+  >('tops_guide');
+  const [sizeGuideFeedback, setSizeGuideFeedback] = useState<string>('');
+  const [newColumnInput, setNewColumnInput] = useState<string>('');
   const [categoryPendingDelete, setCategoryPendingDelete] =
     useState<CategoryItem | null>(null);
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
@@ -1628,11 +1656,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         newCatDesc.trim() ||
         `Curated ${cleanName} collection for SAMO ${newCatDept}.`,
       sortOrder: finalSortOrder,
+      sizeGuides: newCatSizeGuides,
     });
 
     setNewCatName('');
     setNewCatDesc('');
     setNewCatOrderInput('');
+    setNewCatSizeGuides(['tops_guide']);
     setCatFeedback(
       `Category "${cleanName}" (#${finalSortOrder}) added to ${newCatDept.toUpperCase()} with full banner & display structure.`
     );
@@ -1742,6 +1772,206 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     () => validPreorders.filter((p) => p.status === 'pending'),
     [validPreorders]
   );
+
+  const currentSizeConfig = sizeGuideConfig || DEFAULT_SIZE_GUIDE_CONFIG;
+
+  const handleUpdateCurrentSizeConfig = (
+    next: SizeGuideConfig,
+    feedbackText = 'Size Guide updated.'
+  ) => {
+    if (onUpdateSizeGuideConfig) {
+      onUpdateSizeGuideConfig(next);
+    }
+    setSizeGuideFeedback(feedbackText);
+    setTimeout(() => setSizeGuideFeedback(''), 4000);
+  };
+
+  const handleToggleMasterSizeGuide = () => {
+    handleUpdateCurrentSizeConfig(
+      {
+        ...currentSizeConfig,
+        masterEnabled: !currentSizeConfig.masterEnabled,
+      },
+      currentSizeConfig.masterEnabled
+        ? 'Size Guides hidden on live website.'
+        : 'Size Guides enabled on live website.'
+    );
+  };
+
+  const handleToggleGuide = (
+    guideKey: 'topsGuideEnabled' | 'trousersGuideEnabled' | 'fitNoteEnabled'
+  ) => {
+    handleUpdateCurrentSizeConfig({
+      ...currentSizeConfig,
+      [guideKey]: !currentSizeConfig[guideKey],
+    });
+  };
+
+  const handleUpdateTableTitle = (
+    guideId: 'tops_guide' | 'trousers_guide',
+    title: string
+  ) => {
+    const table = currentSizeConfig.tables[guideId];
+    handleUpdateCurrentSizeConfig({
+      ...currentSizeConfig,
+      tables: {
+        ...currentSizeConfig.tables,
+        [guideId]: {
+          ...table,
+          title,
+        },
+      },
+    });
+  };
+
+  const handleUpdateTableCell = (
+    guideId: 'tops_guide' | 'trousers_guide',
+    rowIdx: number,
+    colIdx: number,
+    val: string
+  ) => {
+    const table = currentSizeConfig.tables[guideId];
+    const newRows = table.rows.map((r, rI) =>
+      rI === rowIdx
+        ? r.map((c, cI) => (cI === colIdx ? val : c))
+        : [...r]
+    );
+    handleUpdateCurrentSizeConfig({
+      ...currentSizeConfig,
+      tables: {
+        ...currentSizeConfig.tables,
+        [guideId]: {
+          ...table,
+          rows: newRows,
+        },
+      },
+    });
+  };
+
+  const handleUpdateColumnName = (
+    guideId: 'tops_guide' | 'trousers_guide',
+    colIdx: number,
+    val: string
+  ) => {
+    const table = currentSizeConfig.tables[guideId];
+    const newCols = table.columns.map((c, cI) => (cI === colIdx ? val : c));
+    handleUpdateCurrentSizeConfig({
+      ...currentSizeConfig,
+      tables: {
+        ...currentSizeConfig.tables,
+        [guideId]: {
+          ...table,
+          columns: newCols,
+        },
+      },
+    });
+  };
+
+  const handleAddTableRow = (guideId: 'tops_guide' | 'trousers_guide') => {
+    const table = currentSizeConfig.tables[guideId];
+    const emptyRow = new Array(table.columns.length).fill('');
+    handleUpdateCurrentSizeConfig(
+      {
+        ...currentSizeConfig,
+        tables: {
+          ...currentSizeConfig.tables,
+          [guideId]: {
+            ...table,
+            rows: [...table.rows, emptyRow],
+          },
+        },
+      },
+      'Added new size row.'
+    );
+  };
+
+  const handleDeleteTableRow = (
+    guideId: 'tops_guide' | 'trousers_guide',
+    rowIdx: number
+  ) => {
+    const table = currentSizeConfig.tables[guideId];
+    if (table.rows.length <= 1) return;
+    const newRows = table.rows.filter((_, idx) => idx !== rowIdx);
+    handleUpdateCurrentSizeConfig(
+      {
+        ...currentSizeConfig,
+        tables: {
+          ...currentSizeConfig.tables,
+          [guideId]: {
+            ...table,
+            rows: newRows,
+          },
+        },
+      },
+      'Removed size row.'
+    );
+  };
+
+  const handleAddTableColumn = (
+    guideId: 'tops_guide' | 'trousers_guide',
+    colName: string
+  ) => {
+    const clean = colName.trim();
+    if (!clean) return;
+    const table = currentSizeConfig.tables[guideId];
+    const newCols = [...table.columns, clean];
+    const newRows = table.rows.map((r) => [...r, '']);
+    handleUpdateCurrentSizeConfig(
+      {
+        ...currentSizeConfig,
+        tables: {
+          ...currentSizeConfig.tables,
+          [guideId]: {
+            ...table,
+            columns: newCols,
+            rows: newRows,
+          },
+        },
+      },
+      `Added column "${clean}".`
+    );
+    setNewColumnInput('');
+  };
+
+  const handleDeleteTableColumn = (
+    guideId: 'tops_guide' | 'trousers_guide',
+    colIdx: number
+  ) => {
+    const table = currentSizeConfig.tables[guideId];
+    if (table.columns.length <= 2) return;
+    const colName = table.columns[colIdx];
+    const newCols = table.columns.filter((_, idx) => idx !== colIdx);
+    const newRows = table.rows.map((r) =>
+      r.filter((_, idx) => idx !== colIdx)
+    );
+    handleUpdateCurrentSizeConfig(
+      {
+        ...currentSizeConfig,
+        tables: {
+          ...currentSizeConfig.tables,
+          [guideId]: {
+            ...table,
+            columns: newCols,
+            rows: newRows,
+          },
+        },
+      },
+      `Deleted column "${colName}".`
+    );
+  };
+
+  const handleResetToDefaults = () => {
+    if (
+      window.confirm(
+        'Reset all size guides and measurement tables to SAMO verified atelier defaults? Any custom sizes or table edits will be restored.'
+      )
+    ) {
+      handleUpdateCurrentSizeConfig(
+        mergeSizeGuideConfig(null),
+        '✓ Size guides successfully restored to verified defaults.'
+      );
+    }
+  };
 
   // Quick Categories with item counts (Women + Kids)
   const quickCategoriesWithCounts = useMemo(() => {
@@ -2038,6 +2268,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       label: 'SEO & Metadata',
       shortLabel: 'SEO',
       icon: <Globe className="w-4 h-4 shrink-0" />,
+    },
+    {
+      id: 'size_guides',
+      label: 'Size Guides',
+      shortLabel: 'Sizes',
+      icon: <Ruler className="w-4 h-4 shrink-0" />,
     },
     {
       id: 'admins',
@@ -2751,6 +2987,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               setEditingCategory(cat);
                               setEditCatName(cat.name);
                               setEditCatDesc(cat.description || '');
+                              setEditCatSizeGuides(
+                                cat.sizeGuides ||
+                                  inferDefaultSizeGuidesForCategory(cat.name)
+                              );
                             }}
                             aria-label={`Edit category name ${cat.name}`}
                             title={`Rename "${cat.name}" category`}
@@ -3756,6 +3996,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                       setEditingCategory(cat);
                                       setEditCatName(cat.name);
                                       setEditCatDesc(cat.description || '');
+                                      setEditCatSizeGuides(
+                                        cat.sizeGuides ||
+                                          inferDefaultSizeGuidesForCategory(cat.name)
+                                      );
                                       setEditCatOrderInput(
                                         String(currentOrderNum)
                                       );
@@ -4190,6 +4434,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                       setEditingCategory(cat);
                                       setEditCatName(cat.name);
                                       setEditCatDesc(cat.description || '');
+                                      setEditCatSizeGuides(
+                                        cat.sizeGuides ||
+                                          inferDefaultSizeGuidesForCategory(cat.name)
+                                      );
                                       setEditCatOrderInput(
                                         String(currentOrderNum)
                                       );
@@ -5792,6 +6040,422 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
             </div>
           )}
+
+          {/* =====================================================================
+              SECTION 10: SIZE GUIDES MANAGEMENT (CENTIMETERS CM ONLY)
+             ===================================================================== */}
+          {activeTab === 'size_guides' && (
+            <div className="space-y-6">
+              {/* Top Section Header */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <h1 className="font-display text-xl sm:text-2xl font-bold text-white tracking-tight flex items-center gap-2.5">
+                    <Ruler className="w-5 h-5 text-white" />
+                    <span>Size Guides Management</span>
+                  </h1>
+                  <p className="text-xs text-zinc-400 mt-1">
+                    Control precision atelier sizing charts (Centimeters · cm), manage live product modal visibility, and customize fit notes.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleResetToDefaults}
+                    className="px-3.5 py-2 rounded-xl bg-zinc-900 border border-zinc-700 hover:border-zinc-500 text-zinc-300 text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    <span>Reset to Defaults</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (onUpdateSizeGuideConfig) {
+                        onUpdateSizeGuideConfig(currentSizeConfig);
+                      }
+                      setSizeGuideFeedback('✓ All Size Guide updates saved and synchronized.');
+                      setTimeout(() => setSizeGuideFeedback(''), 4000);
+                    }}
+                    className="px-4 py-2 rounded-xl bg-white text-zinc-950 hover:bg-zinc-200 text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                    <span>Save Changes</span>
+                  </button>
+                </div>
+              </div>
+
+              {sizeGuideFeedback && (
+                <div className="p-3.5 rounded-xl bg-emerald-950/80 border border-emerald-700 text-xs text-emerald-200 font-semibold flex items-center gap-2">
+                  <Check className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span>{sizeGuideFeedback}</span>
+                </div>
+              )}
+
+              {/* Master Live Switch & Per-Guide Switches Card */}
+              <div className="bg-[#18181C] border border-zinc-800 rounded-2xl p-5 sm:p-6 space-y-5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-zinc-800">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2.5">
+                      <h2 className="text-sm font-bold uppercase tracking-wider text-white">
+                        Live Website Size Guides
+                      </h2>
+                      <span
+                        className={`px-2 py-0.5 rounded text-[10px] font-mono-tabular font-bold uppercase tracking-wider ${
+                          currentSizeConfig.masterEnabled
+                            ? 'bg-emerald-950 text-emerald-300 border border-emerald-800'
+                            : 'bg-zinc-800 text-zinc-400 border border-zinc-700'
+                        }`}
+                      >
+                        {currentSizeConfig.masterEnabled ? 'Active in Boutique' : 'Disabled / Hidden'}
+                      </span>
+                    </div>
+                    <p className="text-xs text-zinc-400">
+                      When enabled, luxury "Size Guide" ruler buttons appear on website product popups and category drawers.
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleToggleMasterSizeGuide}
+                    className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-colors cursor-pointer ${
+                      currentSizeConfig.masterEnabled
+                        ? 'bg-emerald-500 text-zinc-950 hover:bg-emerald-400'
+                        : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
+                    }`}
+                  >
+                    {currentSizeConfig.masterEnabled ? 'Turn OFF Master' : 'Turn ON Master'}
+                  </button>
+                </div>
+
+                {/* Sub-Guide Toggles */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1">
+                  <div className="p-3.5 rounded-xl bg-zinc-900/80 border border-zinc-800 flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-xs font-bold text-white uppercase tracking-wider">
+                        Tops, Jackets & Coats
+                      </div>
+                      <div className="text-[10px] text-zinc-400">
+                        Guide A (tops_guide)
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleToggleGuide('topsGuideEnabled')}
+                      className={`px-3 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider cursor-pointer ${
+                        currentSizeConfig.topsGuideEnabled
+                          ? 'bg-white text-zinc-950'
+                          : 'bg-zinc-800 text-zinc-500'
+                      }`}
+                    >
+                      {currentSizeConfig.topsGuideEnabled ? 'Enabled' : 'Disabled'}
+                    </button>
+                  </div>
+
+                  <div className="p-3.5 rounded-xl bg-zinc-900/80 border border-zinc-800 flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-xs font-bold text-white uppercase tracking-wider">
+                        Trousers & Denim
+                      </div>
+                      <div className="text-[10px] text-zinc-400">
+                        Guide B (trousers_guide)
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleToggleGuide('trousersGuideEnabled')}
+                      className={`px-3 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider cursor-pointer ${
+                        currentSizeConfig.trousersGuideEnabled
+                          ? 'bg-white text-zinc-950'
+                          : 'bg-zinc-800 text-zinc-500'
+                      }`}
+                    >
+                      {currentSizeConfig.trousersGuideEnabled ? 'Enabled' : 'Disabled'}
+                    </button>
+                  </div>
+
+                  <div className="p-3.5 rounded-xl bg-zinc-900/80 border border-zinc-800 flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-xs font-bold text-white uppercase tracking-wider">
+                        Atelier Fit Note
+                      </div>
+                      <div className="text-[10px] text-zinc-400">
+                        Editorial fit advisory box
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleToggleGuide('fitNoteEnabled')}
+                      className={`px-3 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider cursor-pointer ${
+                        currentSizeConfig.fitNoteEnabled
+                          ? 'bg-white text-zinc-950'
+                          : 'bg-zinc-800 text-zinc-500'
+                      }`}
+                    >
+                      {currentSizeConfig.fitNoteEnabled ? 'Enabled' : 'Disabled'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Sub Tabs: Guide A | Guide B | Fit Note */}
+              <div className="bg-[#18181C] border border-zinc-800 rounded-2xl overflow-hidden shadow-sm">
+                <div className="flex border-b border-zinc-800 bg-zinc-900/60 overflow-x-auto">
+                  <button
+                    type="button"
+                    onClick={() => setActiveSizeGuideSubTab('tops_guide')}
+                    className={`py-3.5 px-5 text-xs font-bold uppercase tracking-wider border-b-2 whitespace-nowrap cursor-pointer transition-colors ${
+                      activeSizeGuideSubTab === 'tops_guide'
+                        ? 'border-white text-white bg-zinc-800/60'
+                        : 'border-transparent text-zinc-400 hover:text-zinc-200'
+                    }`}
+                  >
+                    Tops, Jackets & Coats Chart
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveSizeGuideSubTab('trousers_guide')}
+                    className={`py-3.5 px-5 text-xs font-bold uppercase tracking-wider border-b-2 whitespace-nowrap cursor-pointer transition-colors ${
+                      activeSizeGuideSubTab === 'trousers_guide'
+                        ? 'border-white text-white bg-zinc-800/60'
+                        : 'border-transparent text-zinc-400 hover:text-zinc-200'
+                    }`}
+                  >
+                    Trousers & Denim Chart
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveSizeGuideSubTab('fit_note')}
+                    className={`py-3.5 px-5 text-xs font-bold uppercase tracking-wider border-b-2 whitespace-nowrap cursor-pointer transition-colors ${
+                      activeSizeGuideSubTab === 'fit_note'
+                        ? 'border-white text-white bg-zinc-800/60'
+                        : 'border-transparent text-zinc-400 hover:text-zinc-200'
+                    }`}
+                  >
+                    Atelier Fit Note
+                  </button>
+                </div>
+
+                <div className="p-5 sm:p-6 space-y-6">
+                  {/* Mode: Table Editor (tops_guide or trousers_guide) */}
+                  {(activeSizeGuideSubTab === 'tops_guide' ||
+                    activeSizeGuideSubTab === 'trousers_guide') && (() => {
+                    const guideId = activeSizeGuideSubTab;
+                    const table = currentSizeConfig.tables[guideId];
+                    if (!table) return null;
+
+                    return (
+                      <div className="space-y-5">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                          <div className="flex-1 max-w-md">
+                            <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-400 mb-1">
+                              Chart Display Title
+                            </label>
+                            <input
+                              type="text"
+                              value={table.title ?? ''}
+                              onChange={(e) =>
+                                handleUpdateTableTitle(guideId, e.target.value)
+                              }
+                              className="w-full px-3 py-2 text-xs bg-zinc-900 border border-zinc-700 rounded-lg text-white font-semibold"
+                            />
+                          </div>
+
+                          <div className="flex flex-wrap items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => handleAddTableRow(guideId)}
+                              className="px-3 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 cursor-pointer"
+                            >
+                              <Plus className="w-3.5 h-3.5" />
+                              <span>Add Row</span>
+                            </button>
+                            <div className="flex items-center gap-1.5">
+                              <input
+                                type="text"
+                                placeholder="New Column name..."
+                                value={newColumnInput}
+                                onChange={(e) => setNewColumnInput(e.target.value)}
+                                className="px-2.5 py-2 text-xs bg-zinc-900 border border-zinc-700 rounded-lg text-white w-40"
+                              />
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleAddTableColumn(guideId, newColumnInput)
+                                }
+                                disabled={!newColumnInput.trim()}
+                                className="px-3 py-2 rounded-xl bg-white text-zinc-950 hover:bg-zinc-200 disabled:opacity-40 text-xs font-bold uppercase tracking-wider cursor-pointer"
+                              >
+                                + Add Col
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Interactive Table Grid */}
+                        <div className="border border-zinc-800 rounded-xl overflow-x-auto">
+                          <table className="w-full text-left border-collapse min-w-[640px]">
+                            <thead>
+                              <tr className="bg-zinc-900/90 border-b border-zinc-800">
+                                {table.columns.map((colName, cIdx) => (
+                                  <th
+                                    key={cIdx}
+                                    className="p-2 border-r border-zinc-800 last:border-r-0"
+                                  >
+                                    <div className="flex items-center gap-1">
+                                      <input
+                                        type="text"
+                                        value={colName ?? ''}
+                                        onChange={(e) =>
+                                          handleUpdateColumnName(
+                                            guideId,
+                                            cIdx,
+                                            e.target.value
+                                          )
+                                        }
+                                        className="w-full px-2 py-1 text-[11px] font-bold uppercase bg-zinc-800/80 border border-transparent focus:border-zinc-500 rounded text-zinc-100 text-center"
+                                      />
+                                      {table.columns.length > 2 && (
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            handleDeleteTableColumn(
+                                              guideId,
+                                              cIdx
+                                            )
+                                          }
+                                          title={`Delete column ${colName}`}
+                                          className="p-1 text-zinc-500 hover:text-red-400 cursor-pointer"
+                                        >
+                                          <X className="w-3 h-3" />
+                                        </button>
+                                      )}
+                                    </div>
+                                  </th>
+                                ))}
+                                <th className="p-2 w-12 text-center text-[10px] text-zinc-500 uppercase">
+                                  Action
+                                </th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-zinc-800/70 bg-[#141417]">
+                              {table.rows.map((row, rIdx) => (
+                                <tr key={rIdx} className="hover:bg-zinc-900/40">
+                                  {row.map((cellVal, cIdx) => (
+                                    <td
+                                      key={cIdx}
+                                      className="p-1.5 border-r border-zinc-800 last:border-r-0"
+                                    >
+                                      <input
+                                        type="text"
+                                        value={cellVal ?? ''}
+                                        onChange={(e) =>
+                                          handleUpdateTableCell(
+                                            guideId,
+                                            rIdx,
+                                            cIdx,
+                                            e.target.value
+                                          )
+                                        }
+                                        className="w-full px-2 py-1.5 text-xs font-mono-tabular bg-zinc-900/90 border border-zinc-800 focus:border-zinc-500 rounded text-white text-center"
+                                      />
+                                    </td>
+                                  ))}
+                                  <td className="p-1.5 text-center">
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        handleDeleteTableRow(guideId, rIdx)
+                                      }
+                                      title="Delete row"
+                                      disabled={table.rows.length <= 1}
+                                      className="p-1.5 text-zinc-500 hover:text-red-400 disabled:opacity-20 cursor-pointer"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5 mx-auto" />
+                                    </button>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+
+                        <div className="flex items-center justify-between text-[11px] text-zinc-500">
+                          <span>
+                            Tip: All cell measurements are in Centimeters (cm) only. Text values and ranges like "80–84 cm" or "27 / 28" are fully supported.
+                          </span>
+                          <span>
+                            {table.rows.length} rows · {table.columns.length} columns
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* Mode: Atelier Fit Note Editor */}
+                  {activeSizeGuideSubTab === 'fit_note' && (
+                    <div className="space-y-5">
+                      <div>
+                        <label className="block text-[11px] font-bold uppercase tracking-wider text-zinc-300 mb-1">
+                          Fit Note Header Title
+                        </label>
+                        <input
+                          type="text"
+                          value={currentSizeConfig.fitNoteTitle ?? ''}
+                          onChange={(e) =>
+                            handleUpdateCurrentSizeConfig({
+                              ...currentSizeConfig,
+                              fitNoteTitle: e.target.value,
+                            })
+                          }
+                          placeholder="ATELIER FIT NOTE"
+                          className="w-full px-3 py-2.5 text-xs bg-zinc-900 border border-zinc-700 rounded-lg text-white font-semibold"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-bold uppercase tracking-wider text-zinc-300 mb-1">
+                          Fit Advisory Body Text
+                        </label>
+                        <textarea
+                          rows={4}
+                          value={currentSizeConfig.fitNoteText ?? ''}
+                          onChange={(e) =>
+                            handleUpdateCurrentSizeConfig({
+                              ...currentSizeConfig,
+                              fitNoteText: e.target.value,
+                            })
+                          }
+                          placeholder="Enter atelier fit advisory text..."
+                          className="w-full px-3 py-2.5 text-xs bg-zinc-900 border border-zinc-700 rounded-lg text-white leading-relaxed"
+                        />
+                      </div>
+
+                      {/* Live Atelier Preview */}
+                      <div className="pt-2">
+                        <div className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 mb-2">
+                          Live Boutique Pop-up Preview:
+                        </div>
+                        <div
+                          className="border border-[#1A1A1A] p-4 bg-[#FBFBFA] space-y-1.5 rounded-none"
+                          style={{ borderRadius: '0px' }}
+                        >
+                          <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#1A1A1A] flex items-center gap-1.5">
+                            <span className="w-1.5 h-1.5 bg-[#4A080C] shrink-0" />
+                            <span>
+                              {currentSizeConfig.fitNoteTitle || 'ATELIER FIT NOTE'}
+                            </span>
+                          </div>
+                          <p className="text-xs text-zinc-800 leading-relaxed font-sans">
+                            {currentSizeConfig.fitNoteText}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
         </main>
       </div>
 
@@ -6071,7 +6735,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   editingCategory.id,
                   clean,
                   editCatDesc.trim(),
-                  validOrder
+                  validOrder,
+                  editCatSizeGuides
                 );
                 setCatFeedback(
                   `Updated category "${clean}"${
@@ -6123,6 +6788,46 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   placeholder="Editorial description..."
                   className="w-full px-3 py-2 text-xs bg-zinc-900 border border-zinc-700 rounded-lg text-white"
                 />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-zinc-300 mb-1.5">
+                  Assigned Size Guides
+                </label>
+                <div className="space-y-2 bg-zinc-900/80 border border-zinc-700/80 rounded-lg p-3">
+                  <label className="flex items-center gap-2.5 text-xs text-zinc-200 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={editCatSizeGuides.includes('tops_guide')}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setEditCatSizeGuides((prev) =>
+                          checked
+                            ? Array.from(new Set([...prev, 'tops_guide']))
+                            : prev.filter((id) => id !== 'tops_guide')
+                        );
+                      }}
+                      className="rounded border-zinc-600 text-red-600 focus:ring-0 focus:ring-offset-0"
+                    />
+                    <span>Tops, Jackets & Coats Size Guide (tops_guide)</span>
+                  </label>
+                  <label className="flex items-center gap-2.5 text-xs text-zinc-200 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={editCatSizeGuides.includes('trousers_guide')}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setEditCatSizeGuides((prev) =>
+                          checked
+                            ? Array.from(new Set([...prev, 'trousers_guide']))
+                            : prev.filter((id) => id !== 'trousers_guide')
+                        );
+                      }}
+                      className="rounded border-zinc-600 text-red-600 focus:ring-0 focus:ring-offset-0"
+                    />
+                    <span>Trousers & Denim Size Guide (trousers_guide)</span>
+                  </label>
+                </div>
               </div>
 
               <div className="flex items-center justify-end gap-2.5 pt-2">
@@ -6239,6 +6944,46 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   placeholder="Editorial description..."
                   className="w-full px-3 py-2 text-xs bg-zinc-900 border border-zinc-700 rounded-lg text-white"
                 />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-zinc-300 mb-1.5">
+                  Assigned Size Guides
+                </label>
+                <div className="space-y-2 bg-zinc-900/80 border border-zinc-700/80 rounded-lg p-3">
+                  <label className="flex items-center gap-2.5 text-xs text-zinc-200 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={newCatSizeGuides.includes('tops_guide')}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setNewCatSizeGuides((prev) =>
+                          checked
+                            ? Array.from(new Set([...prev, 'tops_guide']))
+                            : prev.filter((id) => id !== 'tops_guide')
+                        );
+                      }}
+                      className="rounded border-zinc-600 text-red-600 focus:ring-0 focus:ring-offset-0"
+                    />
+                    <span>Tops, Jackets & Coats Size Guide (tops_guide)</span>
+                  </label>
+                  <label className="flex items-center gap-2.5 text-xs text-zinc-200 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={newCatSizeGuides.includes('trousers_guide')}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setNewCatSizeGuides((prev) =>
+                          checked
+                            ? Array.from(new Set([...prev, 'trousers_guide']))
+                            : prev.filter((id) => id !== 'trousers_guide')
+                        );
+                      }}
+                      className="rounded border-zinc-600 text-red-600 focus:ring-0 focus:ring-offset-0"
+                    />
+                    <span>Trousers & Denim Size Guide (trousers_guide)</span>
+                  </label>
+                </div>
               </div>
 
               <p className="text-[11px] text-zinc-400 leading-relaxed">
