@@ -1,4 +1,4 @@
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useState, useRef, useMemo, useEffect } from 'react';
 import {
   Check,
   X,
@@ -358,6 +358,8 @@ interface AdminDashboardProps {
   onToggleAutoAcceptOrders: (nextEnabled: boolean) => Promise<void>;
   showLowStockCount?: boolean;
   onToggleShowLowStockCount?: (nextEnabled: boolean) => Promise<void>;
+  shrinkUploadsEnabled?: boolean;
+  onToggleShrinkUploads?: (nextEnabled: boolean) => Promise<void> | void;
   onUpdatePreorderStatus: (
     preorderId: string,
     status: PreorderStatus
@@ -404,6 +406,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onToggleAutoAcceptOrders,
   showLowStockCount = false,
   onToggleShowLowStockCount,
+  shrinkUploadsEnabled: shrinkUploadsEnabledProp,
+  onToggleShrinkUploads,
   onUpdatePreorderStatus,
   onDeletePreorder,
   onAddAdminByEmail,
@@ -431,15 +435,27 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     });
   };
 
-  // Toggle ON/OFF for Auto-Shrink Image Upload
+  // Toggle ON/OFF for Auto-Shrink Image Upload (Synced with Firebase & R2 Catalog)
   const [shrinkUploadsEnabled, setShrinkUploadsState] = useState<boolean>(() =>
-    getShrinkUploadsEnabled()
+    typeof shrinkUploadsEnabledProp === 'boolean'
+      ? shrinkUploadsEnabledProp
+      : getShrinkUploadsEnabled()
   );
+
+  useEffect(() => {
+    if (typeof shrinkUploadsEnabledProp === 'boolean') {
+      setShrinkUploadsState(shrinkUploadsEnabledProp);
+      setShrinkUploadsEnabled(shrinkUploadsEnabledProp);
+    }
+  }, [shrinkUploadsEnabledProp]);
 
   const handleToggleShrinkUploads = () => {
     const next = !shrinkUploadsEnabled;
     setShrinkUploadsState(next);
     setShrinkUploadsEnabled(next);
+    if (onToggleShrinkUploads) {
+      onToggleShrinkUploads(next);
+    }
     setItemFeedback(
       next
         ? 'Auto-Shrink Image Upload turned ON (photos will shrink by 60%–70%, e.g. 2 MB → 500–800 KB).'
@@ -474,6 +490,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [editProdPriceInputs, setEditProdPriceInputs] = useState<
     Record<string, string>
   >({});
+  const [editProdDiscountInputs, setEditProdDiscountInputs] = useState<
+    Record<string, string>
+  >({});
   const [productPendingDelete, setProductPendingDelete] =
     useState<ProductItem | null>(null);
   const [imagePendingDelete, setImagePendingDelete] = useState<{
@@ -496,7 +515,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [itemPrice, setItemPrice] = useState('1290');
   const [itemDiscountType, setItemDiscountType] =
     useState<DiscountType>('none');
-  const [itemDiscountValue, setItemDiscountValue] = useState('0');
+  const [itemDiscountValue, setItemDiscountValue] = useState('');
   const [itemIsNewArrival, setItemIsNewArrival] = useState<boolean>(true);
   const [itemIsFullSet, setItemIsFullSet] = useState<boolean>(false);
   const [linkTwoSetPieces, setLinkTwoSetPieces] = useState<boolean>(false);
@@ -529,7 +548,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     Record<string, string>
   >({});
 
-  // Full Set 2-Piece Builder State
+  // Full Set 2-Piece or 3-Piece Builder State
   const [setPiece1ProductId, setSetPiece1ProductId] = useState<string>('');
   const [setPiece1Search, setSetPiece1Search] = useState<string>('');
   const [setPiece1Label, setSetPiece1Label] = useState<string>('Top / Jacket');
@@ -559,6 +578,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   ]);
   const [setPiece2Colors, setSetPiece2Colors] = useState<string[]>([]);
   const [setPiece2Category, setSetPiece2Category] = useState<string>('');
+
+  const [hasThirdSetPiece, setHasThirdSetPiece] = useState<boolean>(false);
+  const [setPiece3ProductId, setSetPiece3ProductId] = useState<string>('');
+  const [setPiece3Label, setSetPiece3Label] = useState<string>('Third Piece');
+  const [setPiece3SizeType, setSetPiece3SizeType] =
+    useState<SizeType>('letter');
+  const [setPiece3Sizes, setSetPiece3Sizes] = useState<string[]>([
+    'XS',
+    'S',
+    'M',
+    'L',
+  ]);
+  const [setPiece3Colors, setSetPiece3Colors] = useState<string[]>([]);
+  const [setPiece3Category, setSetPiece3Category] = useState<string>('');
 
   // Custom Months & Years Presets Added by Admin
   const [customMonthsSizes, setCustomMonthsSizes] = useState<string[]>([]);
@@ -662,7 +695,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   };
 
   const handleSelectSetPieceProduct = (
-    pieceNum: 1 | 2,
+    pieceNum: 1 | 2 | 3,
     selectedProdId: string
   ) => {
     const found = products.find((p) => p.id === selectedProdId);
@@ -683,7 +716,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           setSetPiece1Colors([]);
         }
       }
-    } else {
+    } else if (pieceNum === 2) {
       setSetPiece2ProductId(selectedProdId);
       if (found) {
         setSetPiece2Category(found.category);
@@ -698,6 +731,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           setSetPiece2Colors([found.colorVariants[0].colorName]);
         } else {
           setSetPiece2Colors([]);
+        }
+      }
+    } else {
+      setSetPiece3ProductId(selectedProdId);
+      if (found) {
+        setSetPiece3Category(found.category);
+        setSetPiece3Label(found.category || 'Piece 3');
+        setSetPiece3SizeType(found.sizeType);
+        setSetPiece3Sizes([...found.sizes]);
+        if (
+          Boolean(found.hasColors) &&
+          Array.isArray(found.colorVariants) &&
+          found.colorVariants.length > 0
+        ) {
+          setSetPiece3Colors([found.colorVariants[0].colorName]);
+        } else {
+          setSetPiece3Colors([]);
         }
       }
     }
@@ -1042,6 +1092,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       );
       const setItemsPayload: FullSetSubItem[] = [sub1, sub2];
 
+      const p3Id =
+        setPiece3ProductId || pool[2]?.id || pool[0]?.id || '';
+      const prod3 = hasThirdSetPiece
+        ? products.find((p) => p.id === p3Id)
+        : undefined;
+      if (hasThirdSetPiece && prod3) {
+        const sub3 = buildPieceSubItem(
+          prod3,
+          setPiece3Colors,
+          setPiece3Label || prod3.category || 'Third Piece'
+        );
+        setItemsPayload.push(sub3);
+      }
+
       const computeSubTotal = (sub: FullSetSubItem): number => {
         if (Array.isArray(sub.colorVariants) && sub.colorVariants.length > 0) {
           return sub.colorVariants.reduce(
@@ -1052,14 +1116,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         return sumSizeQuantities(sub.sizes, sub.sizeQuantities);
       };
 
-      const total1 = computeSubTotal(sub1);
-      const total2 = computeSubTotal(sub2);
-      const minSetTotal = Math.min(total1, total2);
+      const pieceTotals = setItemsPayload.map(computeSubTotal);
+      const minSetTotal = Math.min(...pieceTotals);
 
       const autoGallery =
         additionalUrls.length > 0
           ? additionalUrls
-          : [prod1.imageUrl, prod2.imageUrl].filter(
+          : [prod1.imageUrl, prod2.imageUrl, ...(prod3 ? [prod3.imageUrl] : [])].filter(
               (u) => Boolean(u) && u !== primaryImage
             );
 
@@ -1085,8 +1148,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         materials: [],
         description:
           itemDescription.trim() ||
-          `${cleanName} — Coordinated 2-piece SAMO Full Set linking ${prod1.name} and ${prod2.name}.`,
-        inStock: total1 > 0 && total2 > 0,
+          `${cleanName} — Coordinated ${setItemsPayload.length}-piece SAMO Full Set linking ${setItemsPayload.map((s) => s.productName).join(' and ')}.`,
+        inStock: pieceTotals.every((t) => t > 0),
         featured: itemIsNewArrival,
       });
 
@@ -1096,11 +1159,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       setItemUrl3('');
       setItemUrl4('');
       setItemDescription('');
+      setItemDiscountType('none');
+      setItemDiscountValue('');
+      setHasThirdSetPiece(false);
       setItemHasColors(false);
       setDraftColors([]);
       setItemHasMaterials(false);
       setItemFeedback(
-        `Added 2-Piece Full Set "${cleanName.toUpperCase()}" to ${itemDept.toUpperCase()} / Full Set.`
+        `Added ${setItemsPayload.length}-Piece Full Set "${cleanName.toUpperCase()}" to ${itemDept.toUpperCase()} / Full Set.`
       );
       setIsAddProductModalOpen(false);
       return;
@@ -1230,9 +1296,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setItemDescription('');
     setPerSizeRawQuantities({});
     setItemDiscountType('none');
-    setItemDiscountValue('0');
+    setItemDiscountValue('');
     setItemIsNewArrival(true);
     setItemIsFullSet(false);
+    setHasThirdSetPiece(false);
     setLinkTwoSetPieces(false);
     setItemHasColors(false);
     setDraftColors([]);
@@ -5038,7 +5105,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               : String(prod.price)
                           }
                           onChange={(e) => {
-                            const rawVal = e.target.value;
+                            const rawVal = e.target.value.replace(
+                              /^0+(?=\d)/,
+                              ''
+                            );
                             setEditProdPriceInputs((prev) => ({
                               ...prev,
                               [prod.id]: rawVal,
@@ -5357,28 +5427,32 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </div>
                   )}
 
-                  {/* 2-Piece Full Set Linked Items & Colors Editor */}
+                  {/* Full Set Linked Items & Colors Editor (2 or 3 Pieces) */}
                   {isEditingFullSet && (
                     <div className="p-4 bg-zinc-50 border-2 border-zinc-950 rounded-xl space-y-4">
-                      <div className="flex items-center justify-between border-b border-zinc-200 pb-2.5">
+                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-200 pb-2.5">
                         <div>
                           <div className="text-xs font-extrabold uppercase tracking-wider text-zinc-950 flex items-center gap-1.5">
                             <Layers className="w-4 h-4" />
                             <span>
-                              2-Piece Full Set Linked Items &amp; Colors
+                              Full Set Linked Items &amp; Colors (2 or 3 Pieces)
                             </span>
                           </div>
                           <p className="text-[11px] text-zinc-600 mt-0.5">
                             Sizes, colors, and stock quantities are synced from
-                            the two linked store items below. When a customer
-                            buys this Full Set, stock is deducted from both
-                            original items.
+                            the linked store items below. When a customer buys
+                            this Full Set, stock is deducted from each linked
+                            item.
                           </p>
                         </div>
                       </div>
 
-                      {[0, 1].map((pieceIdx) => {
-                        const currentSetItems: FullSetSubItem[] =
+                      {(Array.isArray(prod.setItems) &&
+                      prod.setItems.length >= 3
+                        ? [0, 1, 2]
+                        : [0, 1]
+                      ).map((pieceIdx) => {
+                        const baseTwoSetItems: FullSetSubItem[] =
                           Array.isArray(prod.setItems) &&
                           prod.setItems.length >= 2
                             ? prod.setItems
@@ -5421,6 +5495,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                     {},
                                 },
                               ];
+                        const currentSetItems: FullSetSubItem[] =
+                          baseTwoSetItems;
 
                         const piece = currentSetItems[pieceIdx];
                         const linkedProd =
@@ -5520,18 +5596,37 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             key={pieceIdx}
                             className="p-3.5 bg-white border border-zinc-300 rounded-lg space-y-3"
                           >
-                            <div className="flex items-center justify-between">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
                               <span className="text-[11px] font-extrabold uppercase tracking-wider text-zinc-950">
                                 Piece {pieceIdx + 1}:{' '}
                                 {pieceIdx === 0
                                   ? 'Shirt / Top / Jacket'
-                                  : 'Trousers / Skirt / Bottom'}
+                                  : pieceIdx === 1
+                                  ? 'Trousers / Skirt / Bottom'
+                                  : 'Optional 3rd Piece'}
                               </span>
-                              {linkedProd && (
-                                <span className="text-[10px] font-mono-tabular text-zinc-500 uppercase">
-                                  Category: {linkedProd.category}
-                                </span>
-                              )}
+                              <div className="flex items-center gap-2">
+                                {linkedProd && (
+                                  <span className="text-[10px] font-mono-tabular text-zinc-500 uppercase">
+                                    Category: {linkedProd.category}
+                                  </span>
+                                )}
+                                {pieceIdx === 2 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      onUpdateProductMeta(prod.id, {
+                                        isFullSet: true,
+                                        setItems: currentSetItems.slice(0, 2),
+                                      });
+                                    }}
+                                    className="px-2 py-0.5 bg-red-600 hover:bg-red-500 text-white text-[10px] font-bold uppercase rounded cursor-pointer flex items-center gap-1"
+                                  >
+                                    <Trash2 className="w-3 h-3" />
+                                    <span>Remove 3rd Piece</span>
+                                  </button>
+                                )}
+                              </div>
                             </div>
 
                             {(() => {
@@ -5758,6 +5853,88 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           </div>
                         );
                       })}
+
+                      {/* Add Optional 3rd Piece Button in Edit Product */}
+                      {(!Array.isArray(prod.setItems) ||
+                        prod.setItems.length < 3) && (
+                        <div className="pt-1">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const fallbackPool =
+                                womenStandaloneProducts.length > 0
+                                  ? womenStandaloneProducts
+                                  : allStandaloneProducts;
+                              const thirdProd =
+                                fallbackPool[2] ||
+                                fallbackPool[0];
+                              if (!thirdProd) return;
+                              const thirdHasColors =
+                                Boolean(thirdProd.hasColors) &&
+                                Array.isArray(thirdProd.colorVariants) &&
+                                thirdProd.colorVariants.length > 0;
+                              const leadVar = thirdHasColors
+                                ? thirdProd.colorVariants![0]
+                                : undefined;
+                              const nextSizes = leadVar
+                                ? [...leadVar.sizes]
+                                : [...thirdProd.sizes];
+                              const nextQtyMap = leadVar
+                                ? buildSizeQuantitiesMap(
+                                    nextSizes,
+                                    leadVar.sizeQuantities
+                                  )
+                                : buildSizeQuantitiesMap(
+                                    nextSizes,
+                                    thirdProd.sizeQuantities
+                                  );
+                              const newThirdPiece: FullSetSubItem = {
+                                productId: thirdProd.id,
+                                productName: thirdProd.name,
+                                pieceLabel:
+                                  thirdProd.category || 'Third Piece',
+                                sizeType:
+                                  leadVar?.sizeType || thirdProd.sizeType,
+                                sizes: nextSizes,
+                                sizeQuantities: nextQtyMap,
+                                selectedColors: leadVar
+                                  ? [leadVar.colorName]
+                                  : [],
+                                colorVariants: leadVar
+                                  ? [
+                                      {
+                                        ...leadVar,
+                                        sizes: [...leadVar.sizes],
+                                        sizeQuantities: {
+                                          ...leadVar.sizeQuantities,
+                                        },
+                                      },
+                                    ]
+                                  : [],
+                              };
+                              const existingTwo: FullSetSubItem[] =
+                                Array.isArray(prod.setItems) &&
+                                prod.setItems.length >= 2
+                                  ? prod.setItems.slice(0, 2)
+                                  : [
+                                      prod.setItems?.[0] || newThirdPiece,
+                                      prod.setItems?.[1] || newThirdPiece,
+                                    ];
+                              onUpdateProductMeta(prod.id, {
+                                isFullSet: true,
+                                materials: [],
+                                hasColors: false,
+                                colorVariants: [],
+                                setItems: [...existingTwo, newThirdPiece],
+                              });
+                            }}
+                            className="w-full py-2 px-3 bg-white hover:bg-zinc-100 text-zinc-950 border border-dashed border-zinc-400 rounded-lg text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            <span>+ Add Optional 3rd Piece to Full Set</span>
+                          </button>
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -6631,15 +6808,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </span>
                     <select
                       value={prod.discountType || 'none'}
-                      onChange={(e) =>
+                      onChange={(e) => {
+                        const nextType = e.target.value as DiscountType;
+                        const nextVal =
+                          nextType === 'none'
+                            ? 0
+                            : prod.discountValue && prod.discountValue > 0
+                            ? prod.discountValue
+                            : 10;
+                        setEditProdDiscountInputs((prev) => ({
+                          ...prev,
+                          [prod.id]:
+                            nextType === 'none' ? '' : String(nextVal),
+                        }));
                         onUpdateProductMeta(prod.id, {
-                          discountType: e.target.value as DiscountType,
-                          discountValue:
-                            e.target.value === 'none'
-                              ? 0
-                              : prod.discountValue || 10,
-                        })
-                      }
+                          discountType: nextType,
+                          discountValue: nextVal,
+                        });
+                      }}
                       className="px-2.5 py-1.5 border border-zinc-300 bg-white text-xs"
                     >
                       <option value="none">No Discount</option>
@@ -6650,15 +6836,36 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <input
                         type="number"
                         min="0"
-                        value={prod.discountValue ?? 0}
-                        onChange={(e) =>
-                          onUpdateProductMeta(prod.id, {
-                            discountValue: Math.max(
-                              0,
-                              Number(e.target.value) || 0
-                            ),
-                          })
+                        placeholder="e.g. 10"
+                        value={
+                          editProdDiscountInputs[prod.id] !== undefined
+                            ? editProdDiscountInputs[prod.id]
+                            : prod.discountValue && prod.discountValue > 0
+                            ? String(prod.discountValue)
+                            : ''
                         }
+                        onChange={(e) => {
+                          const rawVal = e.target.value.replace(
+                            /^0+(?=\d)/,
+                            ''
+                          );
+                          setEditProdDiscountInputs((prev) => ({
+                            ...prev,
+                            [prod.id]: rawVal,
+                          }));
+                          if (rawVal.trim() === '') {
+                            onUpdateProductMeta(prod.id, {
+                              discountValue: 0,
+                            });
+                            return;
+                          }
+                          const parsed = Number(rawVal);
+                          if (!Number.isNaN(parsed) && parsed >= 0) {
+                            onUpdateProductMeta(prod.id, {
+                              discountValue: parsed,
+                            });
+                          }
+                        }}
                         className="w-24 px-2.5 py-1.5 border border-zinc-300 bg-white font-mono-tabular text-xs"
                       />
                     )}
@@ -6906,7 +7113,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     required
                     min="1"
                     value={itemPrice}
-                    onChange={(e) => setItemPrice(e.target.value)}
+                    onChange={(e) =>
+                      setItemPrice(e.target.value.replace(/^0+(?=\d)/, ''))
+                    }
                     className="w-full px-3 py-2 text-xs font-mono-tabular border border-zinc-300 focus:border-zinc-950 focus:outline-none"
                   />
                 </div>
@@ -6920,9 +7129,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </label>
                     <select
                       value={itemDiscountType}
-                      onChange={(e) =>
-                        setItemDiscountType(e.target.value as DiscountType)
-                      }
+                      onChange={(e) => {
+                        const nextType = e.target.value as DiscountType;
+                        setItemDiscountType(nextType);
+                        if (nextType === 'none') {
+                          setItemDiscountValue('');
+                        } else if (itemDiscountValue === '0') {
+                          setItemDiscountValue('');
+                        }
+                      }}
                       aria-label="Item discount type"
                       className="w-full px-3 py-2 text-xs border border-zinc-300 bg-white"
                     >
@@ -6941,9 +7156,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <input
                       type="number"
                       min="0"
+                      placeholder={
+                        itemDiscountType === 'none' ? '0' : 'e.g. 10'
+                      }
                       disabled={itemDiscountType === 'none'}
                       value={itemDiscountValue}
-                      onChange={(e) => setItemDiscountValue(e.target.value)}
+                      onChange={(e) =>
+                        setItemDiscountValue(
+                          e.target.value.replace(/^0+(?=\d)/, '')
+                        )
+                      }
                       className="w-full px-3 py-2 text-xs font-mono-tabular border border-zinc-300 bg-white disabled:bg-zinc-100"
                     />
                   </div>
@@ -7671,6 +7893,254 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       </div>
                     );
                   })()}
+
+                  {/* OPTIONAL PIECE 3 SELECTOR */}
+                  {!hasThirdSetPiece ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setHasThirdSetPiece(true);
+                        const p3Pool =
+                          womenStandaloneProducts.length > 0
+                            ? womenStandaloneProducts
+                            : allStandaloneProducts;
+                        const defaultP3 =
+                          products.find((p) => p.id === setPiece3ProductId) ||
+                          p3Pool[2] ||
+                          p3Pool[0];
+                        if (defaultP3 && !setPiece3ProductId) {
+                          handleSelectSetPieceProduct(3, defaultP3.id);
+                        }
+                      }}
+                      className="w-full py-2.5 px-3 bg-white hover:bg-zinc-100 text-zinc-950 border border-dashed border-zinc-400 text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>+ Add Optional 3rd Piece to Full Set</span>
+                    </button>
+                  ) : (
+                    (() => {
+                      const p3Pool =
+                        womenStandaloneProducts.length > 0
+                          ? womenStandaloneProducts
+                          : allStandaloneProducts;
+                      const effectiveP3Cat =
+                        setPiece3Category ||
+                        products.find((p) => p.id === setPiece3ProductId)
+                          ?.category ||
+                        womenCategories[2]?.name ||
+                        womenCategories[0]?.name ||
+                        p3Pool[0]?.category ||
+                        '';
+                      const p3ProductsForCat = p3Pool.filter(
+                        (p) =>
+                          p.category.trim().toLowerCase() ===
+                          effectiveP3Cat.trim().toLowerCase()
+                      );
+                      const p3Id =
+                        setPiece3ProductId &&
+                        p3ProductsForCat.some(
+                          (p) => p.id === setPiece3ProductId
+                        )
+                          ? setPiece3ProductId
+                          : p3ProductsForCat[0]?.id ||
+                            p3Pool[2]?.id ||
+                            p3Pool[0]?.id ||
+                            '';
+                      const prod3 = products.find((p) => p.id === p3Id);
+                      const p3HasColors =
+                        Boolean(prod3?.hasColors) &&
+                        Array.isArray(prod3?.colorVariants) &&
+                        prod3!.colorVariants!.length > 0;
+                      const activeP3Colors = p3HasColors
+                        ? setPiece3Colors.length > 0
+                          ? setPiece3Colors
+                          : [prod3!.colorVariants![0].colorName]
+                        : [];
+
+                      return (
+                        <div className="p-3.5 bg-white border border-zinc-300 space-y-3">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <span className="text-xs font-extrabold uppercase tracking-wider text-zinc-950">
+                              3. Select Third Item (Optional 3rd Piece)
+                            </span>
+                            <div className="flex items-center gap-2">
+                              {prod3 && (
+                                <span className="text-[10px] font-mono-tabular uppercase text-zinc-500">
+                                  Category: {prod3.category} · Sizes:{' '}
+                                  {prod3.sizes.join(', ')}
+                                </span>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => setHasThirdSetPiece(false)}
+                                className="px-2 py-0.5 bg-red-600 hover:bg-red-500 text-white text-[10px] font-bold uppercase cursor-pointer flex items-center gap-1"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                                <span>Remove 3rd Piece</span>
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <div>
+                              <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-700 mb-1">
+                                Choose Category (Women Only) *
+                              </label>
+                              <select
+                                aria-label="Select Full Set Piece 3 Category"
+                                value={effectiveP3Cat}
+                                onChange={(e) => {
+                                  const newCat = e.target.value;
+                                  setSetPiece3Category(newCat);
+                                  const matchingProds = p3Pool.filter(
+                                    (p) =>
+                                      p.category.trim().toLowerCase() ===
+                                      newCat.trim().toLowerCase()
+                                  );
+                                  if (matchingProds.length > 0) {
+                                    handleSelectSetPieceProduct(
+                                      3,
+                                      matchingProds[0].id
+                                    );
+                                  }
+                                }}
+                                className="w-full px-2.5 py-2 text-xs bg-white border border-zinc-300"
+                              >
+                                {womenCategories.map((wc) => (
+                                  <option key={wc.id} value={wc.name}>
+                                    {wc.name}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+
+                            <div>
+                              <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-700 mb-1">
+                                Choose Product in Category *
+                              </label>
+                              <select
+                                aria-label="Select Full Set Piece 3 Product"
+                                value={p3Id}
+                                onChange={(e) =>
+                                  handleSelectSetPieceProduct(3, e.target.value)
+                                }
+                                className="w-full px-2.5 py-2 text-xs bg-white border border-zinc-300"
+                              >
+                                {p3ProductsForCat.length > 0 ? (
+                                  p3ProductsForCat.map((sp) => (
+                                    <option key={sp.id} value={sp.id}>
+                                      {sp.name} (${sp.price})
+                                    </option>
+                                  ))
+                                ) : (
+                                  <option value="">
+                                    No products in this category
+                                  </option>
+                                )}
+                              </select>
+                            </div>
+
+                            <div>
+                              <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-700 mb-1">
+                                Piece 3 Label on Website
+                              </label>
+                              <input
+                                type="text"
+                                value={setPiece3Label}
+                                onChange={(e) =>
+                                  setSetPiece3Label(e.target.value)
+                                }
+                                placeholder="e.g. Jacket / Belt / Bag"
+                                className="w-full px-2.5 py-2 text-xs bg-white border border-zinc-300"
+                              />
+                            </div>
+                          </div>
+
+                          {p3HasColors && prod3?.colorVariants && (
+                            <div className="p-3 bg-zinc-50 border border-zinc-200 space-y-2">
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-800">
+                                  Select Colors of &ldquo;{prod3.name}&rdquo; to
+                                  Appear in Full Set (Defaults to 1st color if
+                                  none selected):
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setSetPiece3Colors(
+                                      prod3.colorVariants!.map(
+                                        (v) => v.colorName
+                                      )
+                                    )
+                                  }
+                                  className="px-2.5 py-1 bg-zinc-900 text-white text-[10px] font-bold uppercase cursor-pointer"
+                                >
+                                  Select All Colors
+                                </button>
+                              </div>
+                              <div className="flex flex-wrap gap-1.5">
+                                {prod3.colorVariants.map((cv) => {
+                                  const isSelected = activeP3Colors.some(
+                                    (c) =>
+                                      c.trim().toLowerCase() ===
+                                      cv.colorName.trim().toLowerCase()
+                                  );
+                                  return (
+                                    <button
+                                      key={cv.colorName}
+                                      type="button"
+                                      onClick={() => {
+                                        const exists = activeP3Colors.some(
+                                          (c) =>
+                                            c.trim().toLowerCase() ===
+                                            cv.colorName.trim().toLowerCase()
+                                        );
+                                        const next = exists
+                                          ? activeP3Colors.filter(
+                                              (c) =>
+                                                c.trim().toLowerCase() !==
+                                                cv.colorName
+                                                  .trim()
+                                                  .toLowerCase()
+                                            )
+                                          : [...activeP3Colors, cv.colorName];
+                                        setSetPiece3Colors(
+                                          next.length > 0
+                                            ? next
+                                            : [
+                                                prod3.colorVariants![0]
+                                                  .colorName,
+                                              ]
+                                        );
+                                      }}
+                                      className={`px-2.5 py-1 text-[10px] font-bold uppercase border flex items-center gap-1.5 cursor-pointer ${
+                                        isSelected
+                                          ? 'bg-zinc-950 text-white border-zinc-950'
+                                          : 'bg-white text-zinc-700 border-zinc-300'
+                                      }`}
+                                    >
+                                      <span
+                                        className="w-2.5 h-2.5 rounded-full border border-zinc-400 shrink-0"
+                                        style={{
+                                          backgroundColor:
+                                            cv.colorHex ||
+                                            getColorSwatchHex(cv.colorName),
+                                        }}
+                                      />
+                                      <span>{cv.colorName}</span>
+                                      {isSelected && (
+                                        <Check className="w-2.5 h-2.5" />
+                                      )}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()
+                  )}
                 </div>
               )}
 

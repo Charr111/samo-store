@@ -393,6 +393,16 @@ test('getEffectiveProductPrice and filterOrdersByQuery work as expected', () => 
   });
   assert.equal(pctDisc.hasDiscount, true);
   assert.equal(pctDisc.effectivePrice, 850);
+  assert.equal(pctDisc.discountBadge, 'Save 15%');
+
+  const fixedDisc = getEffectiveProductPrice({
+    price: 1000,
+    discountType: 'fixed',
+    discountValue: 10,
+  });
+  assert.equal(fixedDisc.hasDiscount, true);
+  assert.equal(fixedDisc.effectivePrice, 990);
+  assert.equal(fixedDisc.discountBadge, 'Save $10');
 
   const sampleOrders: OrderItem[] = [
     {

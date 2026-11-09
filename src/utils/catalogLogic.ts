@@ -401,7 +401,7 @@ export function getEffectiveProductPrice(
       originalPrice,
       effectivePrice,
       hasDiscount: effectivePrice < originalPrice,
-      discountBadge: `-${pct}%`,
+      discountBadge: `Save ${pct}%`,
     };
   }
 
@@ -411,7 +411,7 @@ export function getEffectiveProductPrice(
     originalPrice,
     effectivePrice,
     hasDiscount: effectivePrice < originalPrice,
-    discountBadge: `-$${discountValue.toLocaleString()}`,
+    discountBadge: `Save $${discountValue.toLocaleString()}`,
   };
 }
 

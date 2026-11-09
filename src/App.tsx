@@ -62,13 +62,21 @@ import {
 } from './utils/catalogLogic';
 import {
   auth,
+  db,
+  doc,
   firebaseSignOut,
   googleProvider,
   onAuthStateChanged,
+  onSnapshot,
+  setDoc,
   signInWithPopup,
   User,
 } from './lib/firebase';
-import { deleteMediaFromR2 } from './utils/imageCompression';
+import {
+  deleteMediaFromR2,
+  getShrinkUploadsEnabled,
+  setShrinkUploadsEnabled,
+} from './utils/imageCompression';
 import { Navbar } from './components/Navbar';
 import { HeroVideoSection } from './components/HeroVideoSection';
 import { ProductImage } from './components/ProductImage';
@@ -134,14 +142,23 @@ export function deepCleanFirestorePayload<T>(value: T): T {
   return value;
 }
 
+let pendingLocalMutations = 0;
+let lastLocalMutationMs = 0;
+
 async function pushServerCatalogPatch(patch: Record<string, unknown>): Promise<void> {
+  pendingLocalMutations += 1;
+  lastLocalMutationMs = Date.now();
   try {
     await fetch('/api/catalog', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(patch),
     });
-  } catch {}
+  } catch {
+  } finally {
+    pendingLocalMutations = Math.max(0, pendingLocalMutations - 1);
+    lastLocalMutationMs = Date.now();
+  }
 }
 
 function loadStored<T>(key: string, fallback: T): T {
@@ -348,6 +365,9 @@ export default function App() {
   const [showLowStockCount, setShowLowStockCount] = useState<boolean>(() =>
     loadStored<boolean>(STORAGE_KEYS.showLowStockCount, false)
   );
+  const [shrinkUploadsEnabled, setShrinkUploadsState] = useState<boolean>(() =>
+    getShrinkUploadsEnabled()
+  );
 
   // Shopping Bag & Active Sole Product Modal State
   const [cartItems, setCartItems] = useState<CartItem[]>(() =>
@@ -489,6 +509,10 @@ export default function App() {
   }, [showLowStockCount]);
 
   useEffect(() => {
+    setShrinkUploadsEnabled(shrinkUploadsEnabled);
+  }, [shrinkUploadsEnabled]);
+
+  useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEYS.cart, JSON.stringify(cartItems));
     } catch {}
@@ -514,16 +538,53 @@ export default function App() {
     return () => unsub();
   }, []);
 
+  // Sync shrinkUploadsEnabled and store settings with live Firebase Firestore (settings/store_config)
+  useEffect(() => {
+    const storeConfigRef = doc(db, 'settings', 'store_config');
+    const unsub = onSnapshot(
+      storeConfigRef,
+      (snap) => {
+        if (!snap.exists()) return;
+        const cfg = snap.data();
+        if (cfg && typeof cfg.shrinkUploadsEnabled === 'boolean') {
+          setShrinkUploadsState(cfg.shrinkUploadsEnabled);
+          setShrinkUploadsEnabled(cfg.shrinkUploadsEnabled);
+        }
+        if (cfg && typeof cfg.autoAcceptOrders === 'boolean') {
+          setAutoAcceptOrders(cfg.autoAcceptOrders);
+        }
+        if (cfg && typeof cfg.showLowStockCount === 'boolean') {
+          setShowLowStockCount(cfg.showLowStockCount);
+        }
+      },
+      () => {
+        // Ignore snapshot errors when offline
+      }
+    );
+    return () => unsub();
+  }, []);
+
   // Cloudflare R2 Bucket Catalog Sync (/api/catalog -> state/catalog.json in R2)
   useEffect(() => {
     let active = true;
 
     const pullServerCatalog = async () => {
+      if (pendingLocalMutations > 0 || Date.now() - lastLocalMutationMs < 4500) {
+        return;
+      }
       try {
         const res = await fetch('/api/catalog', { cache: 'no-store' });
         if (!res.ok) return;
         const data = await res.json();
-        if (!active || !data || typeof data !== 'object') return;
+        if (
+          !active ||
+          !data ||
+          typeof data !== 'object' ||
+          pendingLocalMutations > 0 ||
+          Date.now() - lastLocalMutationMs < 4500
+        ) {
+          return;
+        }
 
         // If R2 bucket state/catalog.json has not been seeded yet, push current catalog state to R2
         if (!data.updatedAt && (!Array.isArray(data.products) || data.products.length === 0)) {
@@ -541,6 +602,7 @@ export default function App() {
             admins,
             autoAcceptOrders,
             showLowStockCount,
+            shrinkUploadsEnabled,
           });
           return;
         }
@@ -617,6 +679,10 @@ export default function App() {
         if (typeof data.showLowStockCount === 'boolean') {
           setShowLowStockCount(data.showLowStockCount);
         }
+        if (typeof data.shrinkUploadsEnabled === 'boolean') {
+          setShrinkUploadsState(data.shrinkUploadsEnabled);
+          setShrinkUploadsEnabled(data.shrinkUploadsEnabled);
+        }
         if (Array.isArray(data.newsletterSubscribers)) {
           setNewsletterSubscribers(
             data.newsletterSubscribers as NewsletterSubscriber[]
@@ -637,6 +703,13 @@ export default function App() {
     };
   }, []);
 
+  // Scroll to top whenever route or selected category changes
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+  }, [currentRoute, selectedCategory]);
+
   // Navigation handler updating browser URL
   const handleNavigate = (route: RoutePath, categoryName?: string) => {
     window.history.pushState({}, '', route);
@@ -646,7 +719,9 @@ export default function App() {
     } else {
       setSelectedCategory('all');
     }
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
   };
 
   // Cart & Buy Now Handlers (validating per-size, per-color, and 2-piece Full Set stock)
@@ -1328,16 +1403,53 @@ export default function App() {
           orders: nextOrders,
           products: nextCatalog,
         });
+        try {
+          await setDoc(
+            doc(db, 'settings', 'store_config'),
+            { autoAcceptOrders: true, updatedAt: new Date().toISOString() },
+            { merge: true }
+          );
+        } catch {}
         return;
       }
     }
 
     await pushServerCatalogPatch({ autoAcceptOrders: nextEnabled });
+    try {
+      await setDoc(
+        doc(db, 'settings', 'store_config'),
+        { autoAcceptOrders: nextEnabled, updatedAt: new Date().toISOString() },
+        { merge: true }
+      );
+    } catch {}
   };
 
   const handleToggleShowLowStockCount = async (nextEnabled: boolean) => {
     setShowLowStockCount(nextEnabled);
     await pushServerCatalogPatch({ showLowStockCount: nextEnabled });
+    try {
+      await setDoc(
+        doc(db, 'settings', 'store_config'),
+        { showLowStockCount: nextEnabled, updatedAt: new Date().toISOString() },
+        { merge: true }
+      );
+    } catch {}
+  };
+
+  const handleToggleShrinkUploads = async (nextEnabled: boolean) => {
+    setShrinkUploadsState(nextEnabled);
+    setShrinkUploadsEnabled(nextEnabled);
+    await pushServerCatalogPatch({ shrinkUploadsEnabled: nextEnabled });
+    try {
+      await setDoc(
+        doc(db, 'settings', 'store_config'),
+        {
+          shrinkUploadsEnabled: nextEnabled,
+          updatedAt: new Date().toISOString(),
+        },
+        { merge: true }
+      );
+    } catch {}
   };
 
   const handleAddAdminByEmail = async (email: string) => {
@@ -1674,6 +1786,8 @@ export default function App() {
         onToggleAutoAcceptOrders={handleToggleAutoAcceptOrders}
         showLowStockCount={showLowStockCount}
         onToggleShowLowStockCount={handleToggleShowLowStockCount}
+        shrinkUploadsEnabled={shrinkUploadsEnabled}
+        onToggleShrinkUploads={handleToggleShrinkUploads}
         onUpdatePreorderStatus={handleUpdatePreorderStatus}
         onDeletePreorder={handleDeletePreorder}
         onAddAdminByEmail={handleAddAdminByEmail}

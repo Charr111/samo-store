@@ -32,6 +32,7 @@ interface PersistedCatalogState {
   siteBanners?: Record<string, unknown>;
   autoAcceptOrders?: boolean;
   showLowStockCount?: boolean;
+  shrinkUploadsEnabled?: boolean;
   newsletterSubscribers?: unknown[];
 }
 
@@ -300,6 +301,9 @@ async function startServer() {
         : {}),
       ...(typeof body.showLowStockCount === 'boolean'
         ? { showLowStockCount: body.showLowStockCount }
+        : {}),
+      ...(typeof body.shrinkUploadsEnabled === 'boolean'
+        ? { shrinkUploadsEnabled: body.shrinkUploadsEnabled }
         : {}),
       ...(Array.isArray(body.newsletterSubscribers)
         ? { newsletterSubscribers: body.newsletterSubscribers }

@@ -9,7 +9,6 @@ import {
   ChevronLeft,
   ChevronRight,
   BellRing,
-  Layers,
 } from 'lucide-react';
 import {
   ProductColorVariant,
@@ -71,10 +70,13 @@ export const ProductModal: React.FC<ProductModalProps> = ({
   const [openSetDrawers, setOpenSetDrawers] = useState<Record<number, boolean>>({
     0: true,
     1: true,
+    2: true,
   });
   const [activeImageIndex, setActiveImageIndex] = useState<number>(0);
   const [addedFeedback, setAddedFeedback] = useState<boolean>(false);
   const galleryScrollRef = useRef<HTMLDivElement | null>(null);
+  const modalOverlayRef = useRef<HTMLDivElement | null>(null);
+  const detailsScrollRef = useRef<HTMLDivElement | null>(null);
 
   // Preorder form state when an out-of-stock size is selected
   const [preorderContact, setPreorderContact] = useState<string>('');
@@ -149,6 +151,12 @@ export const ProductModal: React.FC<ProductModalProps> = ({
       setActiveImageIndex(0);
       if (galleryScrollRef.current) {
         galleryScrollRef.current.scrollTo({ left: 0, behavior: 'auto' });
+      }
+      if (modalOverlayRef.current) {
+        modalOverlayRef.current.scrollTop = 0;
+      }
+      if (detailsScrollRef.current) {
+        detailsScrollRef.current.scrollTop = 0;
       }
       setAddedFeedback(false);
       setPreorderContact('');
@@ -416,10 +424,11 @@ export const ProductModal: React.FC<ProductModalProps> = ({
 
   return (
     <div
+      ref={modalOverlayRef}
       role="dialog"
       aria-modal="true"
       aria-labelledby="sole-product-modal-title"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-3 md:p-6 overflow-y-auto"
+      className="fixed inset-0 z-50 flex items-start md:items-center justify-center bg-black/70 p-3 md:p-6 overflow-y-auto"
     >
       <div className="relative w-full max-w-4xl bg-white border border-zinc-950 grid grid-cols-1 md:grid-cols-12 overflow-hidden my-auto">
         {/* Close Button */}
@@ -465,12 +474,6 @@ export const ProductModal: React.FC<ProductModalProps> = ({
 
             {/* Top-Left Badges */}
             <div className="pointer-events-none absolute top-3.5 left-3.5 z-10 flex flex-wrap gap-1.5">
-              {isFullSetProduct && (
-                <span className="px-2.5 py-1 bg-zinc-950 text-white text-[10px] font-bold uppercase tracking-[0.14em] flex items-center gap-1">
-                  <Layers className="w-3 h-3" />
-                  <span>2-Piece Full Set</span>
-                </span>
-              )}
               {isSelectedConfigurationOut && (
                 <span className="px-2.5 py-1 bg-red-700 text-white text-[10px] font-bold uppercase tracking-[0.14em]">
                   Out of Stock
@@ -540,7 +543,10 @@ export const ProductModal: React.FC<ProductModalProps> = ({
         </div>
 
         {/* Right Column: Sole Item Purchase Module (5 cols) */}
-        <div className="md:col-span-5 p-6 md:p-8 flex flex-col justify-between bg-white max-h-[88vh] overflow-y-auto">
+        <div
+          ref={detailsScrollRef}
+          className="md:col-span-5 p-6 md:p-8 flex flex-col justify-between bg-white max-h-[88vh] overflow-y-auto"
+        >
           <div className="space-y-5">
             {/* Unboxed Clean Metadata Header */}
             <div>
@@ -704,7 +710,11 @@ export const ProductModal: React.FC<ProductModalProps> = ({
                         <div className="min-w-0">
                           <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-zinc-500">
                             {subItem.pieceLabel ||
-                              (idx === 0 ? 'Top / Shirt' : 'Trousers / Bottom')}
+                              (idx === 0
+                                ? 'Top / Shirt'
+                                : idx === 1
+                                ? 'Trousers / Bottom'
+                                : 'Third Piece')}
                           </div>
                           <div className="text-xs font-bold uppercase tracking-wider text-zinc-950 truncate mt-0.5">
                             {subItem.productName}
